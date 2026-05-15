@@ -1,0 +1,23 @@
+FROM python:3.11-slim AS runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    RESUME_INTEL_JSON_LOGS=1
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git build-essential curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt pyproject.toml README.md ./
+COPY src ./src
+COPY scripts ./scripts
+
+RUN pip install -r requirements.txt \
+    && pip install -e .
+
+EXPOSE 8010
+
+CMD ["uvicorn", "resume_intel.web:app", "--host", "0.0.0.0", "--port", "8010"]
+

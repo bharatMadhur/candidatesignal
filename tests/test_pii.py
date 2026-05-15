@@ -1,0 +1,70 @@
+from __future__ import annotations
+
+import sys
+import unittest
+from pathlib import Path
+
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from resume_intel.pii import enrich_record_pii
+from resume_intel.db_store import public_candidate_record
+
+
+class PiiExtractionTests(unittest.TestCase):
+    def test_extracts_linkedin_portfolio_github_email_and_phone(self) -> None:
+        record = {"contact": {"links": []}, "derived": {}}
+        raw_text = """
+        Pranjal Paliwal
+        pranjal@example.com | 774.253.7593
+        linkedin.com/in/pranjal-paliwal | github.com/pranjal
+        Portfolio: pranjal.ai
+        """
+
+        enriched = enrich_record_pii(record, raw_text)
+        pii = enriched["derived"]["pii_contact_intelligence"]
+
+        self.assertEqual(enriched["contact"]["email"], "pranjal@example.com")
+        self.assertEqual(enriched["contact"]["phone"], "774.253.7593")
+        self.assertEqual(pii["linkedin_urls"], ["https://linkedin.com/in/pranjal-paliwal"])
+        self.assertEqual(pii["github_urls"], ["https://github.com/pranjal"])
+        self.assertEqual(pii["portfolio_websites"], ["https://pranjal.ai"])
+        self.assertTrue(pii["coverage"]["has_linkedin"])
+        self.assertTrue(pii["coverage"]["has_portfolio"])
+
+    def test_public_candidate_record_redacts_contact_pii_when_role_disallowed(self) -> None:
+        record = {
+            "document_id": "doc-1",
+            "email": "person@example.com",
+            "phone": "555-111-2222",
+            "contact": {
+                "email": "person@example.com",
+                "phone": "555-111-2222",
+                "links": ["https://linkedin.com/in/person", "https://portfolio.example.com"],
+            },
+            "derived": {
+                "pii_contact_intelligence": {
+                    "emails": ["person@example.com"],
+                    "phones": ["555-111-2222"],
+                    "linkedin_urls": ["https://linkedin.com/in/person"],
+                    "portfolio_websites": ["https://portfolio.example.com"],
+                }
+            },
+        }
+
+        redacted = public_candidate_record(record, allow_pii=False)
+
+        self.assertEqual(redacted["email"], "[redacted]")
+        self.assertEqual(redacted["phone"], "[redacted]")
+        self.assertEqual(redacted["contact"]["email"], "[redacted]")
+        self.assertEqual(redacted["contact"]["phone"], "[redacted]")
+        self.assertEqual(redacted["contact"]["links"], [])
+        pii = redacted["derived"]["pii_contact_intelligence"]
+        self.assertEqual(pii["emails"], [])
+        self.assertEqual(pii["phones"], [])
+        self.assertEqual(pii["linkedin_urls"], [])
+        self.assertEqual(pii["portfolio_websites"], [])
+
+
+if __name__ == "__main__":
+    unittest.main()

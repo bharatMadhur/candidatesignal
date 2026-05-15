@@ -1,0 +1,40 @@
+from __future__ import annotations
+
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class DockerConfigTests(unittest.TestCase):
+    def test_api_healthcheck_uses_deep_health_endpoint(self) -> None:
+        compose = (ROOT / "docker-compose.yml").read_text()
+
+        self.assertIn("http://localhost:8010/healthz/deep", compose)
+        self.assertNotIn("http://localhost:8010/readyz", compose)
+
+    def test_better_auth_secret_has_no_insecure_compose_default(self) -> None:
+        compose = (ROOT / "docker-compose.yml").read_text()
+
+        self.assertNotIn("change-me-in-production", compose)
+        self.assertNotIn("BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET", compose)
+        self.assertIn("BETTER_AUTH_SECRET_FILE: /run/secrets/better_auth_secret", compose)
+        self.assertIn("better_auth_secret:", compose)
+
+    def test_litellm_api_key_is_mounted_as_secret_not_interpolated_environment(self) -> None:
+        compose = (ROOT / "docker-compose.yml").read_text()
+
+        self.assertNotIn("RESUME_INTEL_LITELLM_API_KEY: ${RESUME_INTEL_LITELLM_API_KEY", compose)
+        self.assertIn("RESUME_INTEL_LITELLM_API_KEY_FILE: /run/secrets/litellm_api_key", compose)
+        self.assertIn("litellm_api_key:", compose)
+
+    def test_docker_ocr_config_does_not_reuse_local_venv_command(self) -> None:
+        compose = (ROOT / "docker-compose.yml").read_text()
+
+        self.assertNotIn("OCR_COMMAND: ${OCR_COMMAND", compose)
+        self.assertIn("OCR_COMMAND: ${DOCKER_OCR_COMMAND:-}", compose)
+
+
+if __name__ == "__main__":
+    unittest.main()

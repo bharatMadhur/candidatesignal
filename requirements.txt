@@ -1,0 +1,18 @@
+pydantic==2.12.5
+python-dotenv==1.2.2
+httpx==0.28.1
+litellm>=1.79.0
+pypdf==6.10.2
+python-docx==1.2.0
+pypdfium2==5.7.1
+Pillow==11.3.0
+dateparser==1.2.2
+rich==13.9.4
+fastapi==0.124.2
+uvicorn==0.38.0
+python-multipart==0.0.20
+psycopg[binary]==3.2.13
+torch==2.8.0
+transformers @ git+https://github.com/huggingface/transformers
+accelerate==1.10.1
+huggingface_hub==1.8.0

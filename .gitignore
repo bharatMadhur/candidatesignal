@@ -1,0 +1,45 @@
+# Local secrets and machine-specific config
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Next.js
+web/node_modules/
+web/.next/
+web/out/
+web/.turbo/
+web/npm-debug.log*
+web/yarn-debug.log*
+web/yarn-error.log*
+
+# Local model/cache artifacts
+.cache/
+models/
+
+# Local runtime data. These can contain resumes, PII, parsed candidate data,
+# Postgres files, OCR pages, and debug artifacts.
+data/*
+!data/input/
+data/input/*
+!data/input/.gitkeep
+!data/output/
+data/output/*
+!data/output/.gitkeep
+!data/work/
+data/work/*
+!data/work/.gitkeep
+!data/sft/
+data/sft/*
+!data/sft/.gitkeep
+
+# OS/editor noise
+.DS_Store

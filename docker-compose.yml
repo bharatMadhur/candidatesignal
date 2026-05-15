@@ -1,0 +1,99 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-resume_intel}
+      POSTGRES_USER: ${POSTGRES_USER:-resume_intel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-resume_intel}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-resume_intel} -d ${POSTGRES_DB:-resume_intel}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-resume_intel}:${POSTGRES_PASSWORD:-resume_intel}@postgres:5432/${POSTGRES_DB:-resume_intel}
+      BETTER_AUTH_SECRET_FILE: /run/secrets/better_auth_secret
+      RESUME_INTEL_JSON_LOGS: "1"
+      RESUME_INTEL_STORAGE_BACKEND: local
+      RESUME_INTEL_ALERT_WEBHOOK_URL: ${RESUME_INTEL_ALERT_WEBHOOK_URL:-}
+      RESUME_INTEL_LITELLM_BASE_URL: ${RESUME_INTEL_LITELLM_BASE_URL:-}
+      RESUME_INTEL_LITELLM_API_KEY_FILE: /run/secrets/litellm_api_key
+      RESUME_INTEL_LITELLM_MODEL: ${RESUME_INTEL_LITELLM_MODEL:-openai/gpt-5-nano}
+      RESUME_INTEL_EMBEDDING_MODEL: ${RESUME_INTEL_EMBEDDING_MODEL:-openai/text-embedding-3-small}
+      OCR_MODE: ${DOCKER_OCR_MODE:-disabled}
+      OCR_COMMAND: ${DOCKER_OCR_COMMAND:-}
+    ports:
+      - "${API_PORT:-8010}:8010"
+    volumes:
+      - app_data:/app/data
+    secrets:
+      - better_auth_secret
+      - litellm_api_key
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8010/healthz/deep"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: ["python", "scripts/run_parse_worker.py", "--worker-id", "docker-worker"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-resume_intel}:${POSTGRES_PASSWORD:-resume_intel}@postgres:5432/${POSTGRES_DB:-resume_intel}
+      RESUME_INTEL_JSON_LOGS: "1"
+      RESUME_INTEL_STORAGE_BACKEND: local
+      RESUME_INTEL_ALERT_WEBHOOK_URL: ${RESUME_INTEL_ALERT_WEBHOOK_URL:-}
+      RESUME_INTEL_LITELLM_BASE_URL: ${RESUME_INTEL_LITELLM_BASE_URL:-}
+      RESUME_INTEL_LITELLM_API_KEY_FILE: /run/secrets/litellm_api_key
+      RESUME_INTEL_LITELLM_MODEL: ${RESUME_INTEL_LITELLM_MODEL:-openai/gpt-5-nano}
+      RESUME_INTEL_EMBEDDING_MODEL: ${RESUME_INTEL_EMBEDDING_MODEL:-openai/text-embedding-3-small}
+      OCR_MODE: ${DOCKER_OCR_MODE:-disabled}
+      OCR_COMMAND: ${DOCKER_OCR_COMMAND:-}
+    volumes:
+      - app_data:/app/data
+    secrets:
+      - litellm_api_key
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-resume_intel}:${POSTGRES_PASSWORD:-resume_intel}@postgres:5432/${POSTGRES_DB:-resume_intel}
+      NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://localhost:8010}
+      BETTER_AUTH_SECRET_FILE: /run/secrets/better_auth_secret
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3001}
+    secrets:
+      - better_auth_secret
+    ports:
+      - "${UI_PORT:-3001}:3001"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  app_data:
+
+secrets:
+  better_auth_secret:
+    environment: BETTER_AUTH_SECRET
+  litellm_api_key:
+    environment: RESUME_INTEL_LITELLM_API_KEY

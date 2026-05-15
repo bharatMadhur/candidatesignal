@@ -1,0 +1,17 @@
+.venv
+.cache
+.next
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.DS_Store
+data
+models
+web/node_modules
+web/.next
+web/out
+*.log
+.env
+.env.local
+
