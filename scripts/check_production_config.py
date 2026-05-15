@@ -41,8 +41,19 @@ def main() -> int:
         errors.append("RESUME_INTEL_ALLOW_HASH_EMBEDDING_FALLBACK must be disabled in production")
 
     storage_backend = os.getenv("RESUME_INTEL_STORAGE_BACKEND", "local")
-    if storage_backend not in {"local", "database"}:
-        errors.append("RESUME_INTEL_STORAGE_BACKEND must be local or database")
+    if storage_backend not in {"local", "database", "gcs"}:
+        errors.append("RESUME_INTEL_STORAGE_BACKEND must be local, database, or gcs")
+    if storage_backend == "gcs" and not os.getenv("RESUME_INTEL_GCS_BUCKET"):
+        errors.append("RESUME_INTEL_GCS_BUCKET is required when RESUME_INTEL_STORAGE_BACKEND=gcs")
+
+    ocr_mode = os.getenv("OCR_MODE", "none").lower()
+    if ocr_mode not in {"none", "disabled", "external", "remote"}:
+        errors.append("OCR_MODE must be none, disabled, external, or remote")
+    if ocr_mode == "remote" and not os.getenv("OCR_REMOTE_URL"):
+        errors.append("OCR_REMOTE_URL is required when OCR_MODE=remote")
+    ocr_remote_auth = os.getenv("OCR_REMOTE_AUTH", "bearer").lower()
+    if ocr_mode == "remote" and ocr_remote_auth not in {"none", "bearer", "google_id_token"}:
+        errors.append("OCR_REMOTE_AUTH must be none, bearer, or google_id_token")
 
     if not _secret_value("RESUME_INTEL_LITELLM_API_KEY", "RESUME_INTEL_LITELLM_API_KEY_FILE", "OPENAI_API_KEY", "OPENAI_API_KEY_FILE"):
         warnings.append("RESUME_INTEL_LITELLM_API_KEY is not set; deep LLM parsing/synthesis will fail unless another provider key is configured")

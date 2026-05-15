@@ -64,6 +64,18 @@ class ProductionConfigTests(unittest.TestCase):
         env = BASE_ENV | {"RESUME_INTEL_ALLOW_HASH_EMBEDDING_FALLBACK": "0", "RESUME_INTEL_LITELLM_API_KEY": "sk-test"}
         self.assertEqual(self.run_checker(env), 0)
 
+    def test_accepts_gcs_storage_with_bucket(self) -> None:
+        env = BASE_ENV | {
+            "RESUME_INTEL_STORAGE_BACKEND": "gcs",
+            "RESUME_INTEL_GCS_BUCKET": "candidatesignal-prod-documents",
+            "RESUME_INTEL_LITELLM_API_KEY": "sk-test",
+        }
+        self.assertEqual(self.run_checker(env), 0)
+
+    def test_rejects_remote_ocr_without_url(self) -> None:
+        env = BASE_ENV | {"OCR_MODE": "remote", "RESUME_INTEL_LITELLM_API_KEY": "sk-test"}
+        self.assertEqual(self.run_checker(env), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

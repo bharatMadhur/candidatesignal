@@ -18,6 +18,17 @@ class SettingsTests(unittest.TestCase):
 
         self.assertEqual(settings.llm_api_key, "sk-file-backed")
 
+    def test_remote_ocr_token_can_be_loaded_from_secret_file(self) -> None:
+        with NamedTemporaryFile("w") as secret_file:
+            secret_file.write("ocr-token")
+            secret_file.flush()
+            with patch.dict(os.environ, {"OCR_MODE": "remote", "OCR_REMOTE_URL": "https://ocr.example.com", "OCR_REMOTE_TOKEN_FILE": secret_file.name}, clear=True), patch("resume_intel.settings.load_dotenv"):
+                settings = load_settings()
+
+        self.assertEqual(settings.ocr_mode, "remote")
+        self.assertEqual(settings.ocr_remote_url, "https://ocr.example.com")
+        self.assertEqual(settings.ocr_remote_token, "ocr-token")
+
 
 if __name__ == "__main__":
     unittest.main()

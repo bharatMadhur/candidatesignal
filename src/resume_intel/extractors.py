@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import httpx
 from docx import Document
 from docx.oxml.ns import qn
 from PIL import Image, ImageOps
@@ -111,7 +112,7 @@ def _extract_pdf(path: Path, settings: Settings, work_dir: Path) -> ExtractedDoc
     if _looks_like_text_pdf(text, len(reader.pages)):
         return ExtractedDocument(file_hash(path), path, text, "pdf_text", len(reader.pages), pages, links)
 
-    if settings.ocr_mode == "external":
+    if settings.ocr_mode in {"external", "remote"}:
         return _extract_scanned_pdf(path, settings, work_dir, len(reader.pages), links)
 
     for page in pages:
@@ -120,29 +121,23 @@ def _extract_pdf(path: Path, settings: Settings, work_dir: Path) -> ExtractedDoc
 
 
 def _extract_image(path: Path, settings: Settings, work_dir: Path) -> ExtractedDocument:
-    if settings.ocr_mode != "external" or not settings.ocr_command:
-        raise ValueError("Image resumes require OCR_MODE=external and OCR_COMMAND to be set")
+    if settings.ocr_mode not in {"external", "remote"}:
+        raise ValueError("Image resumes require OCR_MODE=external or OCR_MODE=remote")
 
     normalized_path = _normalize_image_for_ocr(path, work_dir)
-    command = [*shlex.split(settings.ocr_command), str(normalized_path)]
-    completed = subprocess.run(
-        command,
-        check=True,
-        text=True,
-        capture_output=True,
-    )
-    ocr_text = completed.stdout.strip()
+    method = "image_remote_ocr" if settings.ocr_mode == "remote" else "image_external_ocr"
+    ocr_text = _run_ocr_pages(settings, [normalized_path]).strip()
     links = _extract_inline_links(ocr_text, "image_ocr", 1)
     text = _append_extracted_links(ocr_text, links)
-    quality_flags = _quality_flags(ocr_text, "image_external_ocr", 1)
+    quality_flags = _quality_flags(ocr_text, method, 1)
     quality_flags = sorted(set([*quality_flags, "normalized_image_for_ocr"]))
     return ExtractedDocument(
         file_hash(path),
         path,
         text,
-        "image_external_ocr",
+        method,
         1,
-        [{"page_number": 1, "text": text, "method": "image_external_ocr", "quality_flags": quality_flags, "links": links}],
+        [{"page_number": 1, "text": text, "method": method, "quality_flags": quality_flags, "links": links}],
         links,
     )
 
@@ -167,9 +162,6 @@ def _looks_like_text_pdf(text: str, page_count: int) -> bool:
 def _extract_scanned_pdf(
     path: Path, settings: Settings, work_dir: Path, page_count: int, links: list[dict] | None = None
 ) -> ExtractedDocument:
-    if not settings.ocr_command:
-        raise ValueError("OCR_MODE=external requires OCR_COMMAND to be set")
-
     image_dir = work_dir / file_hash(path) / "pages"
     image_dir.mkdir(parents=True, exist_ok=True)
     pdf = pdfium.PdfDocument(str(path))
@@ -181,28 +173,23 @@ def _extract_scanned_pdf(
         image.save(image_path)
         image_paths.append(str(image_path))
 
-    command = [*shlex.split(settings.ocr_command), *image_paths]
-    completed = subprocess.run(
-        command,
-        check=True,
-        text=True,
-        capture_output=True,
-    )
+    method = "pdf_remote_ocr" if settings.ocr_mode == "remote" else "pdf_external_ocr"
+    ocr_output = _run_ocr_pages(settings, [Path(item) for item in image_paths])
     links = links or []
-    text = _append_extracted_links(completed.stdout.strip(), links)
-    page_chunks = _split_ocr_pages(completed.stdout.strip())
+    text = _append_extracted_links(ocr_output.strip(), links)
+    page_chunks = _split_ocr_pages(ocr_output.strip())
     pages: list[dict] = []
     for index, chunk in enumerate(page_chunks):
         page_number = index + 1
         page_links = [link for link in links if link.get("page_number") == page_number]
-        quality_flags = _quality_flags(chunk, "pdf_external_ocr", page_count)
+        quality_flags = _quality_flags(chunk, method, page_count)
         if page_links:
             quality_flags = sorted(set([*quality_flags, "pdf_annotation_links_found"]))
         pages.append(
             {
                 "page_number": page_number,
                 "text": _append_extracted_links(chunk, page_links),
-                "method": "pdf_external_ocr",
+                "method": method,
                 "quality_flags": quality_flags,
                 "links": page_links,
             }
@@ -211,15 +198,80 @@ def _extract_scanned_pdf(
         file_hash(path),
         path,
         text,
-        "pdf_external_ocr",
+        method,
         page_count,
         pages,
         links,
     )
 
 
+def _run_ocr_pages(settings: Settings, image_paths: list[Path]) -> str:
+    if settings.ocr_mode == "remote":
+        return _run_remote_ocr_pages(settings, image_paths)
+    if not settings.ocr_command:
+        raise ValueError("OCR_MODE=external requires OCR_COMMAND to be set")
+    command = [*shlex.split(settings.ocr_command), *[str(path) for path in image_paths]]
+    completed = subprocess.run(
+        command,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    return completed.stdout
+
+
+def _run_remote_ocr_pages(settings: Settings, image_paths: list[Path]) -> str:
+    if not settings.ocr_remote_url:
+        raise ValueError("OCR_MODE=remote requires OCR_REMOTE_URL to be set")
+    endpoint = settings.ocr_remote_url.rstrip("/")
+    if not endpoint.endswith("/ocr/pages"):
+        endpoint = f"{endpoint}/ocr/pages"
+    headers = {}
+    if settings.ocr_remote_auth == "google_id_token":
+        headers["Authorization"] = f"Bearer {_google_identity_token(settings.ocr_remote_audience or settings.ocr_remote_url)}"
+        if settings.ocr_remote_token:
+            headers["X-OCR-Token"] = settings.ocr_remote_token
+    elif settings.ocr_remote_token:
+        headers["Authorization"] = f"Bearer {settings.ocr_remote_token}"
+    files = []
+    handles = []
+    try:
+        for path in image_paths:
+            handle = path.open("rb")
+            handles.append(handle)
+            files.append(("files", (path.name, handle, "image/png")))
+        response = httpx.post(endpoint, headers=headers, files=files, timeout=settings.ocr_remote_timeout_seconds)
+        response.raise_for_status()
+    finally:
+        for handle in handles:
+            handle.close()
+    payload = response.json()
+    pages = payload.get("pages") or []
+    chunks: list[str] = []
+    for index, page in enumerate(pages, start=1):
+        text = str(page.get("text") or "").strip()
+        if text:
+            page_number = int(page.get("page_number") or index)
+            chunks.append(f"[PAGE {page_number}]\n{text}")
+    return "\n\n".join(chunks)
+
+
+def _google_identity_token(audience: str | None) -> str:
+    if not audience:
+        raise ValueError("OCR_REMOTE_AUTH=google_id_token requires OCR_REMOTE_AUDIENCE or OCR_REMOTE_URL")
+    try:
+        import google.auth.transport.requests
+        import google.oauth2.id_token
+    except ImportError as exc:  # pragma: no cover - depends on GCP deployment dependency
+        raise RuntimeError("Google identity-token OCR auth requires google-auth") from exc
+    request = google.auth.transport.requests.Request()
+    return google.oauth2.id_token.fetch_id_token(request, audience.rstrip("/"))
+
+
 def _split_ocr_pages(text: str) -> list[str]:
     chunks = [chunk.strip() for chunk in text.split("\f") if chunk.strip()]
+    if len(chunks) <= 1 and "[PAGE " in text:
+        chunks = [chunk.strip() for chunk in re.split(r"(?=\[PAGE\s+\d+\])", text) if chunk.strip()]
     return chunks or ([text] if text else [])
 
 
@@ -227,11 +279,11 @@ def _quality_flags(text: str, method: str, page_count: int | None = None) -> lis
     flags: list[str] = []
     if method.startswith("pdf") and len((text or "").strip()) < 120:
         flags.append("low_text_density")
-    if method == "pdf_external_ocr" and not (text or "").strip():
+    if method in {"pdf_external_ocr", "pdf_remote_ocr"} and not (text or "").strip():
         flags.append("ocr_empty")
-    if method == "image_external_ocr" and not (text or "").strip():
+    if method in {"image_external_ocr", "image_remote_ocr"} and not (text or "").strip():
         flags.append("ocr_empty")
-    if method == "image_external_ocr":
+    if method in {"image_external_ocr", "image_remote_ocr"}:
         flags.append("image_ocr")
     if method == "pdf_text" and page_count and len((text or "").strip()) < max(120, page_count * 80):
         flags.append("possible_layout_loss")

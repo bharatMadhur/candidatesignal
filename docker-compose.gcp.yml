@@ -1,0 +1,86 @@
+services:
+  cloudsql-proxy:
+    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.18.3
+    command:
+      - "--structured-logs"
+      - "--port=5432"
+      - "${CLOUDSQL_INSTANCE_CONNECTION_NAME}"
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      DATABASE_URL: postgresql://${SQL_USER}:${DATABASE_PASSWORD}@cloudsql-proxy:5432/${SQL_DATABASE}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      RESUME_INTEL_BOOTSTRAP_TOKEN: ${RESUME_INTEL_BOOTSTRAP_TOKEN}
+      RESUME_INTEL_ENABLE_LEGACY_AUTH: "0"
+      RESUME_INTEL_ALLOW_UNSIGNED_BETTER_AUTH_BEARER: "0"
+      RESUME_INTEL_JSON_LOGS: "1"
+      RESUME_INTEL_STORAGE_BACKEND: gcs
+      RESUME_INTEL_GCS_BUCKET: ${RESUME_INTEL_GCS_BUCKET}
+      RESUME_INTEL_LITELLM_BASE_URL: ${RESUME_INTEL_LITELLM_BASE_URL:-https://api.openai.com/v1}
+      RESUME_INTEL_LITELLM_API_KEY: ${RESUME_INTEL_LITELLM_API_KEY}
+      RESUME_INTEL_LITELLM_MODEL: ${RESUME_INTEL_LITELLM_MODEL:-openai/gpt-5-nano}
+      RESUME_INTEL_EMBEDDING_MODEL: ${RESUME_INTEL_EMBEDDING_MODEL:-openai/text-embedding-3-small}
+      RESUME_INTEL_ALLOW_HASH_EMBEDDING_FALLBACK: "0"
+      OCR_MODE: remote
+      OCR_REMOTE_URL: ${OCR_REMOTE_URL}
+      OCR_REMOTE_AUTH: google_id_token
+      OCR_REMOTE_AUDIENCE: ${OCR_REMOTE_AUDIENCE}
+      OCR_REMOTE_TOKEN: ${OCR_INTERNAL_TOKEN}
+      OCR_REMOTE_TIMEOUT_SECONDS: ${OCR_REMOTE_TIMEOUT_SECONDS:-1800}
+    ports:
+      - "${API_PORT:-8010}:8010"
+    volumes:
+      - app_data:/app/data
+    depends_on:
+      - cloudsql-proxy
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: ["python", "scripts/run_parse_worker.py", "--worker-id", "gcp-vm-worker"]
+    environment:
+      DATABASE_URL: postgresql://${SQL_USER}:${DATABASE_PASSWORD}@cloudsql-proxy:5432/${SQL_DATABASE}
+      RESUME_INTEL_JSON_LOGS: "1"
+      RESUME_INTEL_STORAGE_BACKEND: gcs
+      RESUME_INTEL_GCS_BUCKET: ${RESUME_INTEL_GCS_BUCKET}
+      RESUME_INTEL_LITELLM_BASE_URL: ${RESUME_INTEL_LITELLM_BASE_URL:-https://api.openai.com/v1}
+      RESUME_INTEL_LITELLM_API_KEY: ${RESUME_INTEL_LITELLM_API_KEY}
+      RESUME_INTEL_LITELLM_MODEL: ${RESUME_INTEL_LITELLM_MODEL:-openai/gpt-5-nano}
+      RESUME_INTEL_EMBEDDING_MODEL: ${RESUME_INTEL_EMBEDDING_MODEL:-openai/text-embedding-3-small}
+      RESUME_INTEL_ALLOW_HASH_EMBEDDING_FALLBACK: "0"
+      OCR_MODE: remote
+      OCR_REMOTE_URL: ${OCR_REMOTE_URL}
+      OCR_REMOTE_AUTH: google_id_token
+      OCR_REMOTE_AUDIENCE: ${OCR_REMOTE_AUDIENCE}
+      OCR_REMOTE_TOKEN: ${OCR_INTERNAL_TOKEN}
+      OCR_REMOTE_TIMEOUT_SECONDS: ${OCR_REMOTE_TIMEOUT_SECONDS:-1800}
+    volumes:
+      - app_data:/app/data
+    depends_on:
+      - cloudsql-proxy
+    restart: unless-stopped
+
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    environment:
+      DATABASE_URL: postgresql://${SQL_USER}:${DATABASE_PASSWORD}@cloudsql-proxy:5432/${SQL_DATABASE}
+      NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+    ports:
+      - "${UI_PORT:-3001}:3001"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  app_data:

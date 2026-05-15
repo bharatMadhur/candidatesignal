@@ -11,7 +11,7 @@ from typing import BinaryIO
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "data"
-SUPPORTED_STORAGE_BACKENDS = {"local", "database"}
+SUPPORTED_STORAGE_BACKENDS = {"local", "database", "gcs"}
 
 
 @dataclass(frozen=True)
@@ -233,10 +233,113 @@ class DatabaseDocumentStorage(DocumentStorage):
         return (self.cache_root / safe_key).resolve()
 
 
+class GcsDocumentStorage(DocumentStorage):
+    backend = "gcs"
+
+    def __init__(self, bucket_name: str | None = None, cache_root: Path | None = None) -> None:
+        self.bucket_name = bucket_name or os.getenv("RESUME_INTEL_GCS_BUCKET")
+        if not self.bucket_name:
+            raise ValueError("RESUME_INTEL_STORAGE_BACKEND=gcs requires RESUME_INTEL_GCS_BUCKET")
+        try:
+            from google.cloud import storage as gcs_storage
+        except ImportError as exc:  # pragma: no cover - exercised only without optional dependency
+            raise RuntimeError("GCS storage requires google-cloud-storage. Run: pip install google-cloud-storage") from exc
+
+        self.client = gcs_storage.Client()
+        self.bucket = self.client.bucket(self.bucket_name)
+        self.cache_root = (cache_root or DATA_DIR / "document-cache" / "gcs").resolve()
+
+    def save_upload(
+        self,
+        *,
+        tenant_id: str,
+        namespace: str,
+        filename: str,
+        file_obj: BinaryIO,
+        content_type: str | None = None,
+    ) -> StoredDocument:
+        safe_name = Path(filename or "document").name
+        suffix = Path(safe_name).suffix.lower()
+        staging_dir = self.cache_root / tenant_id / namespace / "_staging"
+        staging_dir.mkdir(parents=True, exist_ok=True)
+        staging_path = staging_dir / safe_name
+        with staging_path.open("wb") as handle:
+            shutil.copyfileobj(file_obj, handle)
+        digest = _sha256_file(staging_path)
+        key = f"{tenant_id}/{namespace}/{digest[:16]}{suffix}"
+        blob = self.bucket.blob(key)
+        if not blob.exists():
+            blob.upload_from_filename(str(staging_path), content_type=content_type)
+            blob.metadata = {
+                "tenant_id": tenant_id,
+                "namespace": namespace,
+                "original_filename": safe_name,
+                "sha256": digest,
+            }
+            blob.patch()
+        final_path = self._cache_path(key)
+        final_path.parent.mkdir(parents=True, exist_ok=True)
+        if not final_path.exists():
+            staging_path.replace(final_path)
+        else:
+            staging_path.unlink(missing_ok=True)
+        return StoredDocument(
+            backend=self.backend,
+            key=key,
+            original_filename=safe_name,
+            content_type=content_type,
+            size_bytes=final_path.stat().st_size,
+            sha256=digest,
+            local_path=final_path,
+        )
+
+    def open_for_processing(self, key: str) -> Path:
+        return self._materialize(key)
+
+    def open_for_preview(self, key: str) -> Path:
+        return self._materialize(key)
+
+    def delete(self, key: str) -> None:
+        self.bucket.blob(key).delete()
+        self._cache_path(key).unlink(missing_ok=True)
+
+    def exists(self, key: str) -> bool:
+        return self.bucket.blob(key).exists()
+
+    def metadata(self, key: str) -> dict:
+        blob = self.bucket.blob(key)
+        blob.reload()
+        metadata = blob.metadata or {}
+        return {
+            "backend": self.backend,
+            "key": key,
+            "bucket": self.bucket_name,
+            "original_filename": metadata.get("original_filename") or Path(key).name,
+            "content_type": blob.content_type,
+            "size_bytes": int(blob.size or 0),
+            "sha256": metadata.get("sha256"),
+            "local_path": str(self._cache_path(key)),
+        }
+
+    def _materialize(self, key: str) -> Path:
+        path = self._cache_path(key)
+        if path.exists():
+            return path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self.bucket.blob(key).download_to_filename(str(path))
+        return path
+
+    def _cache_path(self, key: str) -> Path:
+        safe_key = Path(key).as_posix().replace("../", "").lstrip("/")
+        return (self.cache_root / safe_key).resolve()
+
+
 def document_storage(backend: str | None = None) -> DocumentStorage:
     backend = backend or os.getenv("RESUME_INTEL_STORAGE_BACKEND", "local")
     if backend not in SUPPORTED_STORAGE_BACKENDS:
         raise ValueError(f"unsupported document storage backend: {backend}")
+    if backend == "gcs":
+        return GcsDocumentStorage()
     if backend == "database":
         return DatabaseDocumentStorage()
     return LocalDocumentStorage()

@@ -23,6 +23,11 @@ class Settings:
     allow_hash_embedding_fallback: bool
     ocr_mode: str
     ocr_command: str | None
+    ocr_remote_url: str | None
+    ocr_remote_token: str
+    ocr_remote_auth: str
+    ocr_remote_audience: str | None
+    ocr_remote_timeout_seconds: int
     pdf_render_dpi: int
 
 
@@ -141,5 +146,13 @@ def load_settings() -> Settings:
         allow_hash_embedding_fallback=_env_bool("RESUME_INTEL_ALLOW_HASH_EMBEDDING_FALLBACK", False),
         ocr_mode=os.getenv("OCR_MODE", "none").lower(),
         ocr_command=os.getenv("OCR_COMMAND") or None,
+        ocr_remote_url=_env_first("OCR_REMOTE_URL", "RESUME_INTEL_OCR_REMOTE_URL"),
+        ocr_remote_token=_usable_secret(
+            _env_first("OCR_REMOTE_TOKEN", "RESUME_INTEL_OCR_REMOTE_TOKEN")
+            or _secret_file_first("OCR_REMOTE_TOKEN_FILE", "RESUME_INTEL_OCR_REMOTE_TOKEN_FILE")
+        ),
+        ocr_remote_auth=os.getenv("OCR_REMOTE_AUTH", "bearer").strip().lower(),
+        ocr_remote_audience=_env_first("OCR_REMOTE_AUDIENCE", "RESUME_INTEL_OCR_REMOTE_AUDIENCE"),
+        ocr_remote_timeout_seconds=int(os.getenv("OCR_REMOTE_TIMEOUT_SECONDS", "1800")),
         pdf_render_dpi=int(os.getenv("PDF_RENDER_DPI", "200")),
     )

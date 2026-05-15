@@ -30,6 +30,11 @@ def _settings(*, ocr_mode: str = "external", ocr_command: str | None = "lighton-
         allow_hash_embedding_fallback=True,
         ocr_mode=ocr_mode,
         ocr_command=ocr_command,
+        ocr_remote_url=None,
+        ocr_remote_token="",
+        ocr_remote_auth="bearer",
+        ocr_remote_audience=None,
+        ocr_remote_timeout_seconds=30,
         pdf_render_dpi=200,
     )
 
@@ -87,8 +92,25 @@ class ImageExtractionTests(unittest.TestCase):
             image_path = Path(tmp) / "resume.png"
             Image.new("RGB", (40, 40), "white").save(image_path, "PNG")
 
-            with self.assertRaisesRegex(ValueError, "Image resumes require OCR_MODE=external"):
+            with self.assertRaisesRegex(ValueError, "Image resumes require OCR_MODE=external or OCR_MODE=remote"):
                 extract_document(image_path, _settings(ocr_mode="none", ocr_command=None), Path(tmp) / "work")
+
+    def test_image_resume_can_use_remote_ocr(self) -> None:
+        with TemporaryDirectory() as tmp:
+            image_path = Path(tmp) / "resume.png"
+            Image.new("RGB", (40, 40), "white").save(image_path, "PNG")
+            settings = _settings(ocr_mode="remote", ocr_command=None)
+            settings = Settings(**{**settings.__dict__, "ocr_remote_url": "https://ocr.example.com", "ocr_remote_token": "secret"})
+
+            with patch("src.resume_intel.extractors.httpx.post") as post:
+                post.return_value.json.return_value = {"pages": [{"page_number": 1, "text": "Remote Candidate"}]}
+                post.return_value.raise_for_status.return_value = None
+                extracted = extract_document(image_path, settings, Path(tmp) / "work")
+
+        self.assertEqual(extracted.method, "image_remote_ocr")
+        self.assertIn("Remote Candidate", extracted.text)
+        post.assert_called_once()
+        self.assertEqual(post.call_args.kwargs["headers"]["Authorization"], "Bearer secret")
 
 
 if __name__ == "__main__":

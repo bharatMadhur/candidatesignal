@@ -16,3 +16,4 @@ torch==2.8.0
 transformers @ git+https://github.com/huggingface/transformers
 accelerate==1.10.1
 huggingface_hub==1.8.0
+google-cloud-storage==2.19.0
