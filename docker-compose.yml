@@ -32,7 +32,7 @@ services:
       OCR_MODE: ${DOCKER_OCR_MODE:-disabled}
       OCR_COMMAND: ${DOCKER_OCR_COMMAND:-}
       OCR_REMOTE_URL: ${OCR_REMOTE_URL:-}
-      OCR_REMOTE_TOKEN_FILE: /run/secrets/ocr_internal_token
+      OCR_REMOTE_TOKEN: ${OCR_REMOTE_TOKEN:-}
       OCR_REMOTE_TIMEOUT_SECONDS: ${OCR_REMOTE_TIMEOUT_SECONDS:-1800}
     ports:
       - "${API_PORT:-8010}:8010"
@@ -41,7 +41,6 @@ services:
     secrets:
       - better_auth_secret
       - litellm_api_key
-      - ocr_internal_token
     depends_on:
       postgres:
         condition: service_healthy
@@ -68,13 +67,12 @@ services:
       OCR_MODE: ${DOCKER_OCR_MODE:-disabled}
       OCR_COMMAND: ${DOCKER_OCR_COMMAND:-}
       OCR_REMOTE_URL: ${OCR_REMOTE_URL:-}
-      OCR_REMOTE_TOKEN_FILE: /run/secrets/ocr_internal_token
+      OCR_REMOTE_TOKEN: ${OCR_REMOTE_TOKEN:-}
       OCR_REMOTE_TIMEOUT_SECONDS: ${OCR_REMOTE_TIMEOUT_SECONDS:-1800}
     volumes:
       - app_data:/app/data
     secrets:
       - litellm_api_key
-      - ocr_internal_token
     depends_on:
       postgres:
         condition: service_healthy
@@ -105,5 +103,3 @@ secrets:
     environment: BETTER_AUTH_SECRET
   litellm_api_key:
     environment: RESUME_INTEL_LITELLM_API_KEY
-  ocr_internal_token:
-    environment: OCR_INTERNAL_TOKEN
