@@ -38,6 +38,7 @@ def parse_file(path: Path, output_dir: Path, work_dir: Path, settings: Settings,
     )
     model_json["document_id"] = extracted.document_id
     model_json["source_file"] = str(path)
+    _merge_extracted_links_into_model_json(model_json, extracted.links or [])
     model_json = nest_same_company_workstreams(model_json)
     model_path.write_text(json.dumps(model_json, indent=2, ensure_ascii=False))
 
@@ -126,6 +127,27 @@ def _backfill_skills_from_intelligence(record: dict, intelligence: dict) -> None
             seen.add(key)
             skills.append(value)
     record["skills"] = skills[:80]
+
+
+def _merge_extracted_links_into_model_json(model_json: dict, links: list[dict]) -> None:
+    urls = [str(link.get("url") or "").strip() for link in links if str(link.get("url") or "").strip()]
+    if not urls:
+        return
+    contact = model_json.setdefault("contact", {})
+    existing = contact.get("links") or []
+    merged: list[str] = []
+    seen: set[str] = set()
+    for value in [*existing, *urls]:
+        text = str(value).strip()
+        if not text:
+            continue
+        key = text.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(text)
+    contact["links"] = merged
+    model_json.setdefault("derived", {})["document_links"] = links
 
 
 def iter_resume_files(input_dir: Path) -> list[Path]:

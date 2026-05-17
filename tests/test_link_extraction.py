@@ -10,7 +10,10 @@ from src.resume_intel.extractors import (
     _extract_pdf_annotation_links,
     _extract_inline_links,
     _pdf_annotation_link,
+    _should_prefer_pdfium_text,
 )
+from src.resume_intel.pipeline import _merge_extracted_links_into_model_json
+from src.resume_intel.validate import validate_resume
 
 
 class LinkExtractionTests(unittest.TestCase):
@@ -70,6 +73,45 @@ class LinkExtractionTests(unittest.TestCase):
                 }
             ],
         )
+
+    def test_prefers_pdfium_when_pypdf_text_has_font_encoding_artifacts(self) -> None:
+        pypdf_pages = [
+            (
+                "Founding SoHware Engineer with experience designing plaTorms and integraRng systems. "
+                "Automated retraining workflows and reduced operaRonal costs. "
+            )
+            * 4
+        ]
+        pdfium_pages = [
+            (
+                "Founding Software Engineer with experience designing platforms and integrating systems. "
+                "Automated retraining workflows and reduced operational costs. "
+            )
+            * 4
+        ]
+
+        self.assertTrue(_should_prefer_pdfium_text(pypdf_pages, pdfium_pages))
+
+    def test_pipeline_merges_extracted_annotation_links_before_validation(self) -> None:
+        model_json = {
+            "document_id": "doc-1",
+            "source_file": "resume.pdf",
+            "name": "Example Candidate",
+            "contact": {"links": []},
+            "skills": ["Python"],
+            "experience": [{"company": "Example", "title": "Engineer", "start_date": "2022-01", "end_date": "2024-01"}],
+            "education": [{"school": "Example University"}],
+        }
+        links = [{"url": "https://www.linkedin.com/in/example", "label": "LinkedIn", "page_number": 1, "source": "pdf_annotation"}]
+
+        _merge_extracted_links_into_model_json(model_json, links)
+        record, report = validate_resume(
+            model_json,
+            _append_extracted_links("Resume visible text says LinkedIn Profile", links),
+        )
+
+        self.assertEqual(record.contact.links, ["https://www.linkedin.com/in/example"])
+        self.assertNotIn("links_may_be_missing", report["warnings"])
 
 
 if __name__ == "__main__":

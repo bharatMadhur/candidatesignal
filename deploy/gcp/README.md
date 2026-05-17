@@ -5,6 +5,7 @@ This deployment keeps GPU out of v1.
 Runtime shape:
 
 - Compute Engine VM: Next.js, FastAPI, parser worker.
+- Caddy on the VM: HTTPS, apex-to-www redirect, `/api/*` reverse proxy to FastAPI.
 - Cloud SQL PostgreSQL: tenant data, candidates, jobs, matches, embeddings.
 - GCS: uploaded resumes, requirement files, document artifacts.
 - Cloud Run CPU OCR: LightOnOCR service, min instances `0`, max instances `1`, concurrency `1`.
@@ -50,6 +51,18 @@ cp deploy/gcp/env.example deploy/gcp/env.local
 
 Review `deploy/gcp/env.local`.
 
+Default domain routing:
+
+```bash
+APEX_DOMAIN=candidatesignal.ai
+WWW_DOMAIN=www.candidatesignal.ai
+APP_DOMAIN=app.candidatesignal.ai
+```
+
+The app is served at `https://app.candidatesignal.ai`; `https://candidatesignal.ai` and
+`https://www.candidatesignal.ai` redirect to the app until a separate marketing site exists.
+The browser calls FastAPI through `https://app.candidatesignal.ai/api`.
+
 The scripts that create resources require:
 
 ```bash
@@ -60,7 +73,14 @@ This is intentional to avoid accidental Cloud SQL/VM/Cloud Run billing.
 
 ## Secrets
 
-Set only the key you already have locally:
+Set the key you already have locally, or keep it in the project root `.env`.
+The secrets script reads these `.env` names automatically, in order:
+
+- `RESUME_INTEL_LITELLM_API_KEY`
+- `MINION_LITELLM_API_KEY`
+- `LITELLM_API_KEY`
+- `OPENAI_API_KEY`
+- `LLM_API_KEY`
 
 ```bash
 export RESUME_INTEL_LITELLM_API_KEY="..."
@@ -136,11 +156,13 @@ docker compose -f docker-compose.gcp.yml --env-file .env exec api python scripts
 ## Cheapest Defaults
 
 - `SQL_TIER=db-f1-micro`
+- `SQL_EDITION=enterprise`
 - `VM_MACHINE_TYPE=e2-medium`
 - `OCR_MIN_INSTANCES=0`
 - `OCR_MAX_INSTANCES=1`
 - `OCR_CPU=4`
 - `OCR_MEMORY=16Gi`
+- OCR Cloud Run uses request CPU throttling for cheaper idle behavior.
 - No GPU.
 - No Cloud SQL HA.
 
@@ -154,3 +176,29 @@ Before real production traffic, turn on Cloud SQL backups and consider upgrading
 - Optional app-level OCR token is still passed as `X-OCR-Token`.
 - Resume files are stored in private GCS.
 - Raw CV preview must continue going through authenticated API routes.
+
+## DNS
+
+After the VM is created, get the public IP:
+
+```bash
+gcloud compute instances describe candidatesignal-app-1 \
+  --zone=us-central1-a \
+  --format="get(networkInterfaces[0].accessConfigs[0].natIP)"
+```
+
+Create DNS records at your domain provider:
+
+```text
+Type: A
+Name: @
+Value: <VM_PUBLIC_IP>
+
+Type: A
+Name: www
+Value: <VM_PUBLIC_IP>
+
+Type: A
+Name: app
+Value: <VM_PUBLIC_IP>
+```

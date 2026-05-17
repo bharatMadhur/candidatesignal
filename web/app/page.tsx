@@ -11,7 +11,6 @@ import {
   Loader2,
   LogIn,
   LogOut,
-  Menu,
   MessageSquare,
   Plus,
   Rocket,
@@ -152,6 +151,7 @@ type CopilotQueryIntent = {
 type HomeAppProps = {
   initialLoginMode?: "company" | "admin";
   lockedLoginMode?: boolean;
+  showPublicHome?: boolean;
 };
 
 const LOCAL_LOGIN_ALIASES: Record<string, string> = {
@@ -162,6 +162,10 @@ const LOCAL_LOGIN_ALIASES: Record<string, string> = {
   company: "recruiter@example.com",
   tenant: "recruiter@example.com",
 };
+
+function BrandMark({ className = "" }: { className?: string }) {
+  return <span className={["brandMark", className].filter(Boolean).join(" ")} aria-hidden="true"><i /><i /><i /></span>;
+}
 
 const DOCUMENT_FILE_ACCEPT = ".pdf,.docx,.txt,.md,.jpg,.jpeg,.png,.webp,.tif,.tiff,.bmp";
 const DOCUMENT_FORMAT_LABEL = "PDF, DOCX, TXT, MD, JPG, PNG, WEBP, TIFF, BMP";
@@ -177,7 +181,7 @@ function resolveLoginIdentifier(value: string, mode: "company" | "admin") {
 }
 
 export default function Home() {
-  return <LandingPage />;
+  return <HomeApp showPublicHome />;
 }
 
 function LandingPage() {
@@ -185,7 +189,7 @@ function LandingPage() {
     <main className="publicHome">
       <header className="publicNav">
         <a className="publicBrand" href="/">
-          <span className="brandMark" aria-hidden="true"><i /><i /><i /></span>
+          <BrandMark />
           <strong>candidatSignal.ai</strong>
         </a>
         <nav>
@@ -253,7 +257,7 @@ function LandingPage() {
   );
 }
 
-export function HomeApp({ initialLoginMode, lockedLoginMode = false }: HomeAppProps = {}) {
+export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicHome = false }: HomeAppProps = {}) {
   const [token, setToken] = useState<string>("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -1072,52 +1076,80 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false }: HomeAppPr
   if (!token) {
     const showBootstrap = process.env.NODE_ENV !== "production";
     const showLocalDevHelp = process.env.NODE_ENV !== "production";
-    const showLoginChoice = !inviteMode && !lockedLoginMode;
+    const canSwitchLoginMode = !inviteMode && !lockedLoginMode;
     const isAdminLogin = loginMode === "admin";
+    const showMergedHome = showPublicHome && !lockedLoginMode && !inviteMode;
     return (
-      <main className="loginShell">
-        <section className="landingIntro loginIntroCompact">
-          <span className="eyebrow">candidatSignal.ai</span>
-          <h1>{showLoginChoice ? "Choose your workspace." : isAdminLogin ? "Platform admin login." : "Company workspace login."}</h1>
-          <p>
-            {showLoginChoice
-              ? "Admin and recruiter workspaces are separate so company candidate data stays tenant-isolated."
-              : isAdminLogin
-                ? "Use this only to create companies, manage seats, and review platform audit data."
-                : "Use this for resumes, candidates, campaigns, requirements, matching, and Team Settings."}
-          </p>
-          <div className="loginBoundaryCard">
-            <strong>{isAdminLogin ? "Admin system" : showLoginChoice ? "Separate systems" : "Company workspace"}</strong>
-            <span>
-              {isAdminLogin
-                ? "No candidate database access from this side."
-                : showLoginChoice
-                  ? "Admin manages companies. Company users work with resumes."
+      <main className={showMergedHome ? "loginShell mergedHomeLoginShell" : "loginShell"}>
+        {showMergedHome ? (
+          <section className="mergedHomeContent">
+            <a className="publicBrand mergedHomeBrand" href="/">
+              <BrandMark />
+              <strong>candidatSignal.ai</strong>
+            </a>
+            <div className="mergedHomeHero">
+              <h1>
+                <span>Upload resumes.</span>
+                <span>Understand candidates.</span>
+                <em>Find the right fit faster.</em>
+              </h1>
+              <p>candidatSignal.ai turns resumes, notes, raw CV text, and job campaigns into evidence-backed recruiter decisions without mixing company data.</p>
+            </div>
+            <div className="mergedHomeFeatureGrid" id="platform">
+              <article>
+                <FileSearch size={26} />
+                <strong>Intelligence-first parsing</strong>
+                <span>Extract skills, experience, location signals, PII links, and candidate evidence from resumes without rigid templates.</span>
+              </article>
+              <article>
+                <CheckCircle2 size={26} />
+                <strong>Evidence-backed matching</strong>
+                <span>Every recommendation shows source-linked reasons, gaps, and next steps for recruiters.</span>
+              </article>
+              <article>
+                <Search size={26} />
+                <strong>Search Copilot</strong>
+                <span>Ask natural-language hiring questions across the company talent pool and get ranked candidates.</span>
+              </article>
+              <article>
+                <ShieldCheck size={26} />
+                <strong>Tenant-safe privacy</strong>
+                <span>Company data stays isolated. Platform admins manage companies and seats, not candidate databases.</span>
+              </article>
+            </div>
+            <div className="loginBoundaryCard mergedHomeBoundary">
+              <strong>{isAdminLogin ? "Admin system selected" : "Company workspace selected"}</strong>
+              <span>
+                {isAdminLogin
+                  ? "Use Admin only for companies, seats, invites, and platform governance."
+                  : "Use Company for resumes, candidates, campaigns, matching, and team settings."}
+              </span>
+            </div>
+          </section>
+        ) : (
+          <section className="landingIntro loginIntroCompact">
+            <span className="eyebrow">candidatSignal.ai</span>
+            <h1>{inviteMode ? "Accept company invite." : isAdminLogin ? "Platform admin login." : "Company workspace login."}</h1>
+            <p>
+              {inviteMode
+                ? "Use the invite token from your company admin to create a tenant-scoped account."
+                : isAdminLogin
+                  ? "Use this only to create companies, manage seats, and review platform audit data."
+                  : "Use this for resumes, candidates, campaigns, requirements, matching, and Team Settings."}
+            </p>
+            <div className="loginBoundaryCard">
+              <strong>{isAdminLogin ? "Admin system" : "Company workspace"}</strong>
+              <span>
+                {isAdminLogin
+                  ? "No candidate database access from this side."
                   : "Your candidate database is isolated to your company."}
-            </span>
-          </div>
-        </section>
-        <section className="loginPanel">
+              </span>
+            </div>
+          </section>
+        )}
+        <section className={showMergedHome ? "loginPanel mergedLoginPanel" : "loginPanel"}>
           <ShieldCheck size={28} />
-          {showLoginChoice ? (
-            <>
-              <h1>Sign in</h1>
-              <p>Pick the correct entry point. Admin users cannot enter the recruiter app.</p>
-              <div className="loginChoiceStack">
-                <a className="primary actionLink loginChoice" href="/login">
-                  <strong>Company Login</strong>
-                  <span>Recruiters, tenant admins, resume database, matching, campaigns.</span>
-                </a>
-                <a className="secondary actionLink loginChoice" href="/admin/login">
-                  <strong>Admin Login</strong>
-                  <span>Platform owner only: create companies, seats, invitations.</span>
-                </a>
-              </div>
-              <button className="plain" onClick={() => setInviteMode(true)} disabled={busy}>
-                Accept company invite
-              </button>
-            </>
-          ) : inviteMode ? (
+          {inviteMode ? (
             <>
               <h1>Accept Company Invite</h1>
               <p>Create your account for the company workspace.</p>
@@ -1133,10 +1165,45 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false }: HomeAppPr
             <>
               <h1>{isAdminLogin ? "Admin Login" : "Company Login"}</h1>
               <p>{isAdminLogin ? "Platform owners only. This opens the admin system, not the recruiter app." : "Company users only. This opens the recruiter workspace for one tenant."}</p>
-              <div className="loginModeLocked">
-                <strong>{isAdminLogin ? "Admin System" : "Company Workspace"}</strong>
-                <span>{isAdminLogin ? "Create companies, allocate seats, invite company owners." : "Upload resumes, search candidates, run campaigns and matching."}</span>
-              </div>
+              {canSwitchLoginMode ? (
+                <div className="loginModeTabs" role="tablist" aria-label="Choose login type">
+                  <button
+                    className={!isAdminLogin ? "active" : ""}
+                    type="button"
+                    role="tab"
+                    aria-selected={!isAdminLogin}
+                    onClick={() => {
+                      setLoginMode("company");
+                      setEmail("");
+                      setLoginError("");
+                    }}
+                    disabled={busy}
+                  >
+                    <strong>Company</strong>
+                    <span>Recruiters, candidates, campaigns, matching.</span>
+                  </button>
+                  <button
+                    className={isAdminLogin ? "active" : ""}
+                    type="button"
+                    role="tab"
+                    aria-selected={isAdminLogin}
+                    onClick={() => {
+                      setLoginMode("admin");
+                      setEmail("");
+                      setLoginError("");
+                    }}
+                    disabled={busy}
+                  >
+                    <strong>Admin</strong>
+                    <span>Platform owner: companies, seats, invites.</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="loginModeLocked">
+                  <strong>{isAdminLogin ? "Admin System" : "Company Workspace"}</strong>
+                  <span>{isAdminLogin ? "Create companies, allocate seats, invite company owners." : "Upload resumes, search candidates, run campaigns and matching."}</span>
+                </div>
+              )}
               <input
                 value={email}
                 onChange={(event) => {
@@ -1168,9 +1235,11 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false }: HomeAppPr
                 <strong>Local dev login</strong>
                 <span>{isAdminLogin ? "admin or admin@example.com / resume-intel" : "recruiter or recruiter@example.com / resume-intel"}</span>
               </div> : null}
-              <a className="plain actionLink" href={isAdminLogin ? "/login" : "/admin/login"}>
-                {isAdminLogin ? "Go to Company Login" : "Go to Admin Login"}
-              </a>
+              {lockedLoginMode ? (
+                <a className="plain actionLink" href={isAdminLogin ? "/login" : "/admin/login"}>
+                  {isAdminLogin ? "Go to Company Login" : "Go to Admin Login"}
+                </a>
+              ) : null}
               {isAdminLogin && showBootstrap ? <button className="plain" onClick={handleBootstrap} disabled={busy || !email.trim() || !password.trim()}>
                 Create local platform admin
               </button> : null}
@@ -1425,6 +1494,7 @@ function AdminShellTopBar({ user, status, busy, logout }: { user: CurrentUser | 
   return (
     <header className="shellTopBar adminShellTopBar">
       <div>
+        <BrandMark />
         <strong>candidatSignal.ai</strong>
       </div>
       <div className="topNavActions">
@@ -1459,7 +1529,9 @@ function WorkspaceTopNav({
   return (
     <header className="workspaceTopNav">
       <div className="workspaceTopBrand">
-        <button className="shellIconButton" type="button" aria-label="Open workspace home" onClick={() => setView("dashboard")}><Menu size={24} /></button>
+        <button className="workspaceBrandButton" type="button" aria-label="Open workspace home" onClick={() => setView("dashboard")}>
+          <BrandMark />
+        </button>
         <strong>candidatSignal.ai</strong>
       </div>
       <nav>

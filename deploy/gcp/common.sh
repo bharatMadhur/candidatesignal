@@ -3,6 +3,33 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
+dotenv_get() {
+  local file="$1"
+  local key="$2"
+  [[ -f "${file}" ]] || return 0
+  awk -v target="${key}" '
+    /^[[:space:]]*#/ { next }
+    /^[[:space:]]*$/ { next }
+    {
+      line=$0
+      sub(/^[[:space:]]*export[[:space:]]+/, "", line)
+      split(line, parts, "=")
+      k=parts[1]
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", k)
+      if (k != target) next
+      value=line
+      sub(/^[^=]*=/, "", value)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+      if ((substr(value, 1, 1) == "\"" && substr(value, length(value), 1) == "\"") ||
+          (substr(value, 1, 1) == "'"'"'" && substr(value, length(value), 1) == "'"'"'")) {
+        value=substr(value, 2, length(value)-2)
+      }
+      print value
+      exit
+    }
+  ' "${file}"
+}
+
 if [[ -f "${ROOT_DIR}/deploy/gcp/env.local" ]]; then
   # shellcheck disable=SC1091
   source "${ROOT_DIR}/deploy/gcp/env.local"
@@ -14,9 +41,13 @@ fi
 PROJECT_ID="${PROJECT_ID:-candidatesignal}"
 REGION="${REGION:-us-central1}"
 ZONE="${ZONE:-us-central1-a}"
+APEX_DOMAIN="${APEX_DOMAIN:-candidatesignal.ai}"
+WWW_DOMAIN="${WWW_DOMAIN:-www.candidatesignal.ai}"
+APP_DOMAIN="${APP_DOMAIN:-app.candidatesignal.ai}"
 ARTIFACT_REPOSITORY="${ARTIFACT_REPOSITORY:-candidatesignal}"
 DOCUMENT_BUCKET="${DOCUMENT_BUCKET:-candidatesignal-prod-documents}"
 SQL_INSTANCE="${SQL_INSTANCE:-candidatesignal-postgres}"
+SQL_EDITION="${SQL_EDITION:-enterprise}"
 SQL_DATABASE="${SQL_DATABASE:-resume_intel}"
 SQL_USER="${SQL_USER:-resume_intel}"
 SQL_TIER="${SQL_TIER:-db-f1-micro}"
@@ -32,6 +63,25 @@ VM_MACHINE_TYPE="${VM_MACHINE_TYPE:-e2-medium}"
 VM_BOOT_DISK_SIZE="${VM_BOOT_DISK_SIZE:-30GB}"
 VM_SERVICE_ACCOUNT="${VM_SERVICE_ACCOUNT:-cs-vm-sa}"
 OCR_SERVICE_ACCOUNT="${OCR_SERVICE_ACCOUNT:-cs-ocr-sa}"
+BUILD_SERVICE_ACCOUNT="${BUILD_SERVICE_ACCOUNT:-cs-build-sa}"
+
+if [[ -z "${RESUME_INTEL_LITELLM_API_KEY:-}" ]]; then
+  for key_name in RESUME_INTEL_LITELLM_API_KEY MINION_LITELLM_API_KEY LITELLM_API_KEY OPENAI_API_KEY LLM_API_KEY; do
+    value="$(dotenv_get "${ROOT_DIR}/.env" "${key_name}")"
+    if [[ -n "${value}" ]]; then
+      RESUME_INTEL_LITELLM_API_KEY="${value}"
+      RESUME_INTEL_LITELLM_API_KEY_SOURCE="${key_name} in .env"
+      break
+    fi
+  done
+fi
+
+RESUME_INTEL_LITELLM_BASE_URL="${RESUME_INTEL_LITELLM_BASE_URL:-$(dotenv_get "${ROOT_DIR}/.env" RESUME_INTEL_LITELLM_BASE_URL)}"
+RESUME_INTEL_LITELLM_BASE_URL="${RESUME_INTEL_LITELLM_BASE_URL:-https://api.openai.com/v1}"
+RESUME_INTEL_LITELLM_MODEL="${RESUME_INTEL_LITELLM_MODEL:-$(dotenv_get "${ROOT_DIR}/.env" RESUME_INTEL_LITELLM_MODEL)}"
+RESUME_INTEL_LITELLM_MODEL="${RESUME_INTEL_LITELLM_MODEL:-openai/gpt-5-nano}"
+RESUME_INTEL_EMBEDDING_MODEL="${RESUME_INTEL_EMBEDDING_MODEL:-$(dotenv_get "${ROOT_DIR}/.env" RESUME_INTEL_EMBEDDING_MODEL)}"
+RESUME_INTEL_EMBEDDING_MODEL="${RESUME_INTEL_EMBEDDING_MODEL:-openai/text-embedding-3-small}"
 
 require_confirmation() {
   if [[ "${CONFIRM_CREATE_RESOURCES:-}" != "1" ]]; then

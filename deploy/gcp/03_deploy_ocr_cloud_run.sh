@@ -8,9 +8,11 @@ source "${SCRIPT_DIR}/common.sh"
 require_confirmation
 
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPOSITORY}/ocr:latest"
+BUILD_SA="$(service_account_email "${BUILD_SERVICE_ACCOUNT}")"
 
 gcloud builds submit "${ROOT_DIR}" \
   --config="${ROOT_DIR}/deploy/gcp/cloudbuild.ocr.yaml" \
+  --service-account="projects/${PROJECT_ID}/serviceAccounts/${BUILD_SA}" \
   --substitutions="_IMAGE=${IMAGE}"
 
 gcloud run deploy "${OCR_SERVICE}" \
@@ -23,7 +25,7 @@ gcloud run deploy "${OCR_SERVICE}" \
   --concurrency=1 \
   --min-instances="${OCR_MIN_INSTANCES}" \
   --max-instances="${OCR_MAX_INSTANCES}" \
-  --no-cpu-throttling \
+  --cpu-throttling \
   --no-allow-unauthenticated \
   --set-secrets="OCR_INTERNAL_TOKEN=ocr-internal-token:latest" \
   --set-env-vars="LIGHTONOCR_MODEL=lightonai/LightOnOCR-2-1B-base,OCR_MAX_NEW_TOKENS=4096"

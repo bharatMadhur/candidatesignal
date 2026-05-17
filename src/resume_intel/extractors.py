@@ -86,31 +86,38 @@ def _extract_docx(path: Path) -> ExtractedDocument:
 
 def _extract_pdf(path: Path, settings: Settings, work_dir: Path) -> ExtractedDocument:
     reader = PdfReader(str(path))
-    links = _extract_pdf_annotation_links(reader)
+    annotation_links = _extract_pdf_annotation_links(reader)
+    native_page_texts, native_method = _best_pdf_native_text_pages(path, reader)
     page_texts: list[str] = []
     pages: list[dict] = []
-    for page_number, page in enumerate(reader.pages, start=1):
-        text = page.extract_text() or ""
-        page_links = [link for link in links if link.get("page_number") == page_number]
+    all_links: list[dict] = []
+    for page_number, text in enumerate(native_page_texts, start=1):
+        page_annotation_links = [link for link in annotation_links if link.get("page_number") == page_number]
+        page_inline_links = _extract_inline_links(text, native_method, page_number)
+        page_links = _dedupe_links([*page_annotation_links, *page_inline_links])
+        all_links.extend(page_links)
         page_text = _append_extracted_links(text.strip(), page_links)
         if page_text:
             page_texts.append(f"[PAGE {page_number}]\n{page_text}")
-        quality_flags = _quality_flags(text, "pdf_text", len(reader.pages))
-        if page_links:
+        quality_flags = _quality_flags(text, native_method, len(reader.pages))
+        if page_annotation_links:
             quality_flags = sorted(set([*quality_flags, "pdf_annotation_links_found"]))
+        if native_method == "pdf_text_pdfium":
+            quality_flags = sorted(set([*quality_flags, "pdfium_text_selected"]))
         pages.append(
             {
                 "page_number": page_number,
                 "text": page_text,
-                "method": "pdf_text" if text.strip() else "pdf_empty",
+                "method": native_method if text.strip() else "pdf_empty",
                 "quality_flags": quality_flags,
                 "links": page_links,
             }
         )
 
     text = "\n\n".join(page_texts).strip()
+    links = _dedupe_links(all_links)
     if _looks_like_text_pdf(text, len(reader.pages)):
-        return ExtractedDocument(file_hash(path), path, text, "pdf_text", len(reader.pages), pages, links)
+        return ExtractedDocument(file_hash(path), path, text, native_method, len(reader.pages), pages, links)
 
     if settings.ocr_mode in {"external", "remote"}:
         return _extract_scanned_pdf(path, settings, work_dir, len(reader.pages), links)
@@ -118,6 +125,65 @@ def _extract_pdf(path: Path, settings: Settings, work_dir: Path) -> ExtractedDoc
     for page in pages:
         page["quality_flags"] = sorted(set([*page["quality_flags"], "scanned_or_low_text"]))
     return ExtractedDocument(file_hash(path), path, text, "pdf_empty_or_scanned", len(reader.pages), pages, links)
+
+
+def _best_pdf_native_text_pages(path: Path, reader: PdfReader) -> tuple[list[str], str]:
+    pypdf_pages = [page.extract_text() or "" for page in reader.pages]
+    pdfium_pages = _extract_pdfium_text_pages(path, len(pypdf_pages))
+    if _should_prefer_pdfium_text(pypdf_pages, pdfium_pages):
+        return pdfium_pages, "pdf_text_pdfium"
+    return pypdf_pages, "pdf_text"
+
+
+def _extract_pdfium_text_pages(path: Path, expected_pages: int) -> list[str]:
+    try:
+        pdf = pdfium.PdfDocument(str(path))
+    except Exception:
+        return []
+    pages: list[str] = []
+    try:
+        for index, page in enumerate(pdf):
+            if expected_pages and index >= expected_pages:
+                break
+            try:
+                text_page = page.get_textpage()
+                pages.append(text_page.get_text_range() or "")
+            except Exception:
+                pages.append("")
+    finally:
+        try:
+            pdf.close()
+        except Exception:
+            pass
+    return pages
+
+
+def _should_prefer_pdfium_text(pypdf_pages: list[str], pdfium_pages: list[str]) -> bool:
+    if not pdfium_pages:
+        return False
+    pypdf_text = "\n".join(pypdf_pages)
+    pdfium_text = "\n".join(pdfium_pages)
+    if len(pdfium_text.strip()) < 120:
+        return False
+    if len(pypdf_text.strip()) < 120:
+        return True
+    return _native_text_quality_score(pdfium_text) > _native_text_quality_score(pypdf_text) + 50
+
+
+def _native_text_quality_score(text: str) -> float:
+    clean = text or ""
+    alpha_count = sum(1 for char in clean if char.isalpha())
+    replacement_count = clean.count("\ufffd")
+    artifact_count = _font_encoding_artifact_count(clean)
+    return len(clean.strip()) + (alpha_count * 0.15) - (replacement_count * 200) - (artifact_count * 80)
+
+
+def _font_encoding_artifact_count(text: str) -> int:
+    count = 0
+    for word in re.findall(r"\b[A-Za-z]{5,}\b", text or ""):
+        if re.search(r"[a-z]{2,}[A-Z][a-z]{2,}", word):
+            count += 1
+    return count
 
 
 def _extract_image(path: Path, settings: Settings, work_dir: Path) -> ExtractedDocument:
@@ -279,13 +345,15 @@ def _quality_flags(text: str, method: str, page_count: int | None = None) -> lis
     flags: list[str] = []
     if method.startswith("pdf") and len((text or "").strip()) < 120:
         flags.append("low_text_density")
+    if method.startswith("pdf_text") and _font_encoding_artifact_count(text or "") >= 4:
+        flags.append("font_encoding_artifacts_detected")
     if method in {"pdf_external_ocr", "pdf_remote_ocr"} and not (text or "").strip():
         flags.append("ocr_empty")
     if method in {"image_external_ocr", "image_remote_ocr"} and not (text or "").strip():
         flags.append("ocr_empty")
     if method in {"image_external_ocr", "image_remote_ocr"}:
         flags.append("image_ocr")
-    if method == "pdf_text" and page_count and len((text or "").strip()) < max(120, page_count * 80):
+    if method in {"pdf_text", "pdf_text_pdfium"} and page_count and len((text or "").strip()) < max(120, page_count * 80):
         flags.append("possible_layout_loss")
     return flags
 

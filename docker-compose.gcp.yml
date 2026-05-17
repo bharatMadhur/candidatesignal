@@ -1,8 +1,27 @@
 services:
+  caddy:
+    image: caddy:2.8-alpine
+    environment:
+      APEX_DOMAIN: ${APEX_DOMAIN:-candidatesignal.ai}
+      WWW_DOMAIN: ${WWW_DOMAIN:-www.candidatesignal.ai}
+      APP_DOMAIN: ${APP_DOMAIN:-app.candidatesignal.ai}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - ui
+    restart: unless-stopped
+
   cloudsql-proxy:
     image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.18.3
     command:
       - "--structured-logs"
+      - "--address=0.0.0.0"
       - "--port=5432"
       - "${CLOUDSQL_INSTANCE_CONNECTION_NAME}"
     restart: unless-stopped
@@ -33,7 +52,7 @@ services:
       OCR_REMOTE_TOKEN: ${OCR_INTERNAL_TOKEN}
       OCR_REMOTE_TIMEOUT_SECONDS: ${OCR_REMOTE_TIMEOUT_SECONDS:-1800}
     ports:
-      - "${API_PORT:-8010}:8010"
+      - "127.0.0.1:${API_PORT:-8010}:8010"
     volumes:
       - app_data:/app/data
     depends_on:
@@ -77,10 +96,12 @@ services:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
     ports:
-      - "${UI_PORT:-3001}:3001"
+      - "127.0.0.1:${UI_PORT:-3001}:3001"
     depends_on:
       - api
     restart: unless-stopped
 
 volumes:
   app_data:
+  caddy_data:
+  caddy_config:

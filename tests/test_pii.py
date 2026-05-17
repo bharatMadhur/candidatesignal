@@ -32,6 +32,23 @@ class PiiExtractionTests(unittest.TestCase):
         self.assertTrue(pii["coverage"]["has_linkedin"])
         self.assertTrue(pii["coverage"]["has_portfolio"])
 
+    def test_extracts_hidden_annotation_links_appended_to_raw_text(self) -> None:
+        record = {"contact": {"links": []}, "derived": {}}
+        raw_text = """
+        Visible text only says LinkedIn Profile and Github.
+
+        [EXTRACTED DOCUMENT LINKS]
+        [PAGE 1 PDF_ANNOTATION] LinkedIn: https://www.linkedin.com/in/pranjal-paliwal-490/
+        [PAGE 1 PDF_ANNOTATION] GitHub: https://github.com/Cranial490
+        """
+
+        enriched = enrich_record_pii(record, raw_text)
+        pii = enriched["derived"]["pii_contact_intelligence"]
+
+        self.assertEqual(pii["linkedin_urls"], ["https://www.linkedin.com/in/pranjal-paliwal-490/"])
+        self.assertEqual(pii["github_urls"], ["https://github.com/Cranial490"])
+        self.assertIn("https://www.linkedin.com/in/pranjal-paliwal-490/", enriched["contact"]["links"])
+
     def test_public_candidate_record_redacts_contact_pii_when_role_disallowed(self) -> None:
         record = {
             "document_id": "doc-1",

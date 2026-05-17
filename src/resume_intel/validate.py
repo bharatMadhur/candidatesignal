@@ -9,7 +9,12 @@ from .schema import ResumeRecord
 
 EMAIL_RE = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.I)
 PHONE_RE = re.compile(r"(?:\+?\d[\d .()/-]{7,}\d)")
-URL_RE = re.compile(r"https?://\S+|(?:linkedin|github)\.com/\S+", re.I)
+URL_RE = re.compile(
+    r"(?:https?://|www\.)[^\s<>()]+|(?:linkedin|github)\.com/[^\s<>()]+|"
+    r"(?<!@)\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+"
+    r"(?:com|ai|io|dev|co|net|org|me|app|xyz|in|us|edu)(?:/[^\s<>()]*)?",
+    re.I,
+)
 
 
 def validate_resume(raw: dict[str, Any], source_text: str) -> tuple[ResumeRecord, dict[str, Any]]:
@@ -30,8 +35,10 @@ def validate_resume(raw: dict[str, Any], source_text: str) -> tuple[ResumeRecord
     if source_phones and not record.contact.phone:
         warnings.append("phone_missing")
 
-    source_urls = set(match.group(0).rstrip(".,)") for match in URL_RE.finditer(source_text))
-    if source_urls and not set(record.contact.links).intersection(source_urls):
+    source_urls = {_normalize_url(match.group(0)) for match in URL_RE.finditer(source_text)}
+    source_urls = {item for item in source_urls if item}
+    record_urls = {_normalize_url(item) for item in record.contact.links}
+    if source_urls and not record_urls.intersection(source_urls):
         warnings.append("links_may_be_missing")
 
     if not record.experience:
@@ -87,6 +94,19 @@ def _minimal_repair(raw: dict[str, Any]) -> dict[str, Any]:
     repaired.setdefault("other_sections", {})
     repaired.setdefault("derived", {})
     return repaired
+
+
+def _normalize_url(value: Any) -> str:
+    text = str(value or "").strip().strip(".,;:()[]{}<>\"'")
+    if not text:
+        return ""
+    if text.lower().startswith("www."):
+        text = "https://" + text
+    if re.match(r"^(linkedin|github)\.com/", text, re.I):
+        text = "https://" + text
+    if "@" not in text and not re.match(r"^[a-z]+:", text, re.I) and re.match(r"^[a-z0-9][a-z0-9.-]+\.[a-z]{2,}", text, re.I):
+        text = "https://" + text
+    return text
 
 
 def _coerce_list_of_dicts(value: Any) -> list[dict[str, Any]]:

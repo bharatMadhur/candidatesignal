@@ -19,17 +19,43 @@ upsert_secret() {
   printf "%s" "${value}" | gcloud secrets versions add "${name}" --data-file=- >/dev/null
 }
 
+secret_exists() {
+  local name="$1"
+  gcloud secrets describe "${name}" >/dev/null 2>&1
+}
+
+read_secret() {
+  local name="$1"
+  gcloud secrets versions access latest --secret="${name}"
+}
+
 if [[ -z "${DATABASE_PASSWORD:-}" ]]; then
-  DATABASE_PASSWORD="$(openssl rand -base64 32)"
+  if secret_exists "database-password"; then
+    DATABASE_PASSWORD="$(read_secret "database-password")"
+  else
+    DATABASE_PASSWORD="$(openssl rand -base64 32)"
+  fi
 fi
 if [[ -z "${BETTER_AUTH_SECRET:-}" ]]; then
-  BETTER_AUTH_SECRET="$(openssl rand -base64 48)"
+  if secret_exists "better-auth-secret"; then
+    BETTER_AUTH_SECRET="$(read_secret "better-auth-secret")"
+  else
+    BETTER_AUTH_SECRET="$(openssl rand -base64 48)"
+  fi
 fi
 if [[ -z "${OCR_INTERNAL_TOKEN:-}" ]]; then
-  OCR_INTERNAL_TOKEN="$(openssl rand -base64 48)"
+  if secret_exists "ocr-internal-token"; then
+    OCR_INTERNAL_TOKEN="$(read_secret "ocr-internal-token")"
+  else
+    OCR_INTERNAL_TOKEN="$(openssl rand -base64 48)"
+  fi
 fi
 if [[ -z "${RESUME_INTEL_BOOTSTRAP_TOKEN:-}" ]]; then
-  RESUME_INTEL_BOOTSTRAP_TOKEN="$(openssl rand -base64 32)"
+  if secret_exists "resume-intel-bootstrap-token"; then
+    RESUME_INTEL_BOOTSTRAP_TOKEN="$(read_secret "resume-intel-bootstrap-token")"
+  else
+    RESUME_INTEL_BOOTSTRAP_TOKEN="$(openssl rand -base64 32)"
+  fi
 fi
 
 upsert_secret "database-password" "${DATABASE_PASSWORD}"
@@ -37,10 +63,20 @@ upsert_secret "better-auth-secret" "${BETTER_AUTH_SECRET}"
 upsert_secret "ocr-internal-token" "${OCR_INTERNAL_TOKEN}"
 upsert_secret "resume-intel-bootstrap-token" "${RESUME_INTEL_BOOTSTRAP_TOKEN}"
 
-if [[ -n "${RESUME_INTEL_LITELLM_API_KEY:-}" ]]; then
-  upsert_secret "litellm-api-key" "${RESUME_INTEL_LITELLM_API_KEY}"
+if [[ -z "${RESUME_INTEL_LITELLM_API_KEY:-}" ]]; then
+  if secret_exists "litellm-api-key"; then
+    echo "Keeping existing litellm-api-key secret. No local LLM key was provided."
+  else
+    echo "Missing RESUME_INTEL_LITELLM_API_KEY. Add it to .env or export it before creating secrets." >&2
+    exit 1
+  fi
 else
-  echo "Skipping litellm-api-key because RESUME_INTEL_LITELLM_API_KEY is not set."
+  upsert_secret "litellm-api-key" "${RESUME_INTEL_LITELLM_API_KEY}"
+  if [[ -n "${RESUME_INTEL_LITELLM_API_KEY_SOURCE:-}" ]]; then
+    echo "Loaded LLM API key from ${RESUME_INTEL_LITELLM_API_KEY_SOURCE}."
+  else
+    echo "Loaded LLM API key from environment."
+  fi
 fi
 
 for account in "${VM_SERVICE_ACCOUNT}" "${OCR_SERVICE_ACCOUNT}"; do
