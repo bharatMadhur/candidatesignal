@@ -1,5 +1,19 @@
 {$APEX_DOMAIN}, {$WWW_DOMAIN} {
-	redir https://{$APP_DOMAIN}{uri} permanent
+	encode zstd gzip
+
+	handle /api/auth/* {
+		reverse_proxy ui:3001
+	}
+
+	handle_path /api/* {
+		reverse_proxy api:8010
+	}
+
+	handle /healthz* {
+		reverse_proxy api:8010
+	}
+
+	reverse_proxy ui:3001
 }
 
 {$APP_DOMAIN} {

@@ -22,7 +22,8 @@ SQL_USER=${SQL_USER}
 DATABASE_PASSWORD=$(gcloud secrets versions access latest --secret=database-password)
 BETTER_AUTH_SECRET=$(gcloud secrets versions access latest --secret=better-auth-secret)
 BETTER_AUTH_URL=${BETTER_AUTH_URL:-${APP_ORIGIN}}
-NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE:-${APP_ORIGIN}/api}
+BETTER_AUTH_TRUSTED_ORIGINS=${BETTER_AUTH_TRUSTED_ORIGINS:-https://${APP_DOMAIN},https://${APEX_DOMAIN},https://${WWW_DOMAIN}}
+NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE:-/api}
 RESUME_INTEL_BOOTSTRAP_TOKEN=$(gcloud secrets versions access latest --secret=resume-intel-bootstrap-token)
 RESUME_INTEL_GCS_BUCKET=${DOCUMENT_BUCKET}
 RESUME_INTEL_LITELLM_BASE_URL=${RESUME_INTEL_LITELLM_BASE_URL}

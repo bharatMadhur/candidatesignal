@@ -90,11 +90,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.ui
+      args:
+        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-/api}
     environment:
       DATABASE_URL: postgresql://${SQL_USER}:${DATABASE_PASSWORD}@cloudsql-proxy:5432/${SQL_DATABASE}
       NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      BETTER_AUTH_TRUSTED_ORIGINS: ${BETTER_AUTH_TRUSTED_ORIGINS}
     ports:
       - "127.0.0.1:${UI_PORT:-3001}:3001"
     depends_on:
