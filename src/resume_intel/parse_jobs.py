@@ -7,7 +7,7 @@ from typing import Any, BinaryIO
 from psycopg.types.json import Jsonb
 
 from .db import db
-from .db_store import add_note_db, save_candidate_db
+from .db_store import add_note_db, llm_usage_cost_for_document, save_candidate_db
 from .entity_resolution import find_matches_for_record, persist_matches
 from .pipeline import SUPPORTED_EXTENSIONS, parse_file
 from .settings import load_settings
@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 TENANT_DATA_DIR = ROOT / "data" / "tenants"
 
 TERMINAL_JOB_STATUSES = {"succeeded", "completed", "failed", "cancelled"}
+TERMINAL_CAMPAIGN_STATUSES = {"shortlisted", "contacted", "replied", "screened", "submitted", "interviewing", "offer", "placed", "rejected", "archived"}
 STAGE_PROGRESS = {
     "queued": (5, "Queued"),
     "extracting_text": (15, "Extracting text / OCR"),
@@ -42,6 +43,7 @@ def create_parse_batch(
     initial_note_name: str | None = None,
     initial_note_content: str | None = None,
     campaign_id: str | None = None,
+    context_note: str | None = None,
 ) -> dict[str, Any]:
     if not files:
         raise ValueError("no files provided")
@@ -49,11 +51,11 @@ def create_parse_batch(
     with db() as conn:
         batch = conn.execute(
             """
-            insert into parse_batches (tenant_id, campaign_id, created_by_user_id, name, source_type, total_files, queued_count, status)
-            values (%s, %s, %s, %s, %s, %s, %s, 'queued')
+            insert into parse_batches (tenant_id, campaign_id, created_by_user_id, name, source_type, total_files, queued_count, status, context_note)
+            values (%s, %s, %s, %s, %s, %s, %s, 'queued', %s)
             returning *
             """,
-            (tenant_id, campaign_id, user_id, batch_name, "campaign_upload" if campaign_id else "bulk_upload", len(files), len(files)),
+            (tenant_id, campaign_id, user_id, batch_name, "campaign_upload" if campaign_id else "bulk_upload", len(files), len(files), (context_note or "").strip() or None),
         ).fetchone()
         conn.commit()
 
@@ -736,15 +738,17 @@ def _complete_job(
     total_tokens: int,
 ) -> None:
     with db() as conn:
+        estimated_cost = llm_usage_cost_for_document(document_id, tenant_id)
         conn.execute(
             """
             update parse_jobs
             set status='succeeded', stage='succeeded', document_id=%s, ocr_used=%s,
                 input_tokens=%s, output_tokens=%s, total_tokens=%s,
+                estimated_cost=%s,
                 completed_at=now(), updated_at=now()
             where id=%s and tenant_id=%s
             """,
-            (document_id, ocr_used, input_tokens, output_tokens, total_tokens, job_id, tenant_id),
+            (document_id, ocr_used, input_tokens, output_tokens, total_tokens, estimated_cost, job_id, tenant_id),
         )
         conn.commit()
     _record_job_event(
@@ -760,6 +764,7 @@ def _complete_job(
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
             "total_tokens": total_tokens,
+            "estimated_cost": estimated_cost,
         },
     )
 
@@ -818,7 +823,8 @@ def _refresh_batch_counts(batch_id: str | None, tenant_id: str) -> None:
               count(*) filter (where status in ('processing', 'running')) as processing_count,
               count(*) filter (where status in ('completed', 'succeeded')) as completed_count,
               count(*) filter (where status='failed') as failed_count,
-              count(*) as total_files
+              count(*) as total_files,
+              coalesce(sum(estimated_cost), 0) as estimated_cost
             from parse_jobs where batch_id=%s and tenant_id=%s
             """,
             (batch_id, tenant_id),
@@ -833,6 +839,7 @@ def _refresh_batch_counts(batch_id: str | None, tenant_id: str) -> None:
             (batch_id, tenant_id),
         ).fetchone()
         cancelled_count = int(cancelled["cancelled_count"] or 0)
+        estimated_cost = float(counts["estimated_cost"] or 0)
         if cancelled_count == total and total:
             status = "cancelled"
         elif completed + failed + cancelled_count == total:
@@ -848,10 +855,11 @@ def _refresh_batch_counts(batch_id: str | None, tenant_id: str) -> None:
             update parse_batches
             set total_files=%s, queued_count=%s, processing_count=%s, completed_count=%s,
                 failed_count=%s, status=%s, completed_at=case when %s then coalesce(completed_at, now()) else completed_at end,
+                estimated_cost=%s,
                 updated_at=now()
             where id=%s and tenant_id=%s
             """,
-            (total, queued, processing, completed, failed, status, completed + failed + cancelled_count == total, batch_id, tenant_id),
+            (total, queued, processing, completed, failed, status, completed + failed + cancelled_count == total, estimated_cost, batch_id, tenant_id),
         )
         conn.commit()
 
@@ -875,6 +883,8 @@ def _batch_row(row: Any) -> dict[str, Any]:
         "completed_count": completed,
         "failed_count": failed,
         "progress_percent": progress_percent,
+        "context_note": row.get("context_note"),
+        "estimated_cost": float(row.get("estimated_cost") or 0),
         "status": row["status"],
         "created_at": row["created_at"].isoformat() if row["created_at"] else None,
         "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
@@ -942,12 +952,12 @@ def _attach_campaign_candidate(
             values (%s, %s, %s, %s, %s, %s, %s)
             on conflict (campaign_id, candidate_id) do update set
               source=excluded.source,
-              status=case when campaign_candidates.status in ('shortlisted', 'rejected') then campaign_candidates.status else excluded.status end,
+              status=case when campaign_candidates.status = any(%s) then campaign_candidates.status else excluded.status end,
               score=greatest(campaign_candidates.score, excluded.score),
               evidence=excluded.evidence,
               updated_at=now()
             """,
-            (tenant_id, campaign_id, candidate_id, source, status, score, Jsonb(evidence)),
+            (tenant_id, campaign_id, candidate_id, source, status, score, Jsonb(evidence), list(TERMINAL_CAMPAIGN_STATUSES)),
         )
         conn.commit()
 

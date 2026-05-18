@@ -202,7 +202,7 @@ def match_requirement(requirement_id: str, tenant_id: str | None = None) -> list
     profile = req.get("final_requirement_profile") or req["extracted_requirement_json"]
     semantic_scores = semantic_candidate_scores(_requirement_text(profile, req["original_text"]), tenant_id=tenant_id)
     with db() as conn:
-        candidates = conn.execute("select document_id, record_json, raw_text from candidates where tenant_id=%s", (tenant_id,)).fetchall()
+        candidates = conn.execute("select document_id, record_json, raw_text from candidates where tenant_id=%s and deleted_at is null", (tenant_id,)).fetchall()
     matches = []
     for row in candidates:
         candidate = row["record_json"]
@@ -288,6 +288,7 @@ def get_matches(requirement_id: str, tenant_id: str | None = None) -> list[dict[
             select requirement_matches.*, candidates.record_json
             from requirement_matches
             join candidates on candidates.document_id=requirement_matches.candidate_id
+              and candidates.deleted_at is null
             where requirement_id=%s and (%s::uuid is null or requirement_matches.tenant_id=%s)
             order by total_score desc
             """,

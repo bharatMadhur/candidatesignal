@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import {
   Candidate,
+  CampaignPipelineStatus,
   CandidateMaintenanceJob,
   CandidateSummary,
   AuditEvent,
@@ -64,6 +65,7 @@ import {
   createRequirement,
   createRequirementFromCopilotThread,
   decideCandidateVersion,
+  deleteCandidate,
   getTeam,
   getCampaign,
   getCandidateDocumentHtml,
@@ -115,7 +117,7 @@ import {
   disableTenant,
   disableMember,
 } from "../lib/api";
-import { authClient } from "../lib/auth-client";
+import { authClient, signInWithBetterAuth } from "../lib/auth-client";
 
 type View = "dashboard" | "copilot" | "database" | "upload" | "operations" | "candidate" | "requirement" | "matches" | "campaigns" | "versions" | "team" | "admin";
 
@@ -190,7 +192,7 @@ function LandingPage() {
       <header className="publicNav">
         <a className="publicBrand" href="/">
           <BrandMark />
-          <strong>candidatSignal.ai</strong>
+          <strong>candidateSignal.ai</strong>
         </a>
         <nav>
           <a href="#platform">Solutions</a>
@@ -198,8 +200,8 @@ function LandingPage() {
           <a href="#security">Security</a>
         </nav>
         <div>
-          <a className="adminNavLink" href="/admin/login">Platform Admin</a>
-          <a className="plainLink" href="/login">Company Login</a>
+          <a className="adminNavLink" href="/?login=admin">Platform Admin</a>
+          <a className="plainLink" href="/?login=company">Company Login</a>
         </div>
       </header>
       <section className="homeHero">
@@ -209,12 +211,12 @@ function LandingPage() {
             <span>Understand candidates.</span>
             <em>Find the right fit faster.</em>
           </h1>
-          <p>candidatSignal.ai turns resumes, notes, raw CV text, and job campaigns into evidence-backed recruiter decisions without mixing company data.</p>
+          <p>candidateSignal.ai turns resumes, notes, raw CV text, and job campaigns into evidence-backed recruiter decisions without mixing company data.</p>
           <div className="homeHeroActions">
-            <a className="primaryLink large" href="/login">Company Login</a>
-            <a className="plainLink large" href="/login?invite=1">Accept Invite</a>
+            <a className="primaryLink large" href="/?login=company">Company Login</a>
+            <a className="plainLink large" href="/?login=company&invite=1">Accept Invite</a>
           </div>
-          <a className="adminHeroLink" href="/admin/login">Platform Admin Portal</a>
+          <a className="adminHeroLink" href="/?login=admin">Platform Admin Portal</a>
         </div>
       </section>
       <section className="homeFeatureGrid" id="platform">
@@ -243,8 +245,8 @@ function LandingPage() {
       </section>
       <footer className="publicFooter" id="security">
         <div>
-          <strong>candidatSignal.ai</strong>
-          <span>(c) 2026 candidatSignal.ai. Built for calm, evidence-backed hiring.</span>
+          <strong>candidateSignal.ai</strong>
+          <span>(c) 2026 candidateSignal.ai. Built for calm, evidence-backed hiring.</span>
         </div>
         <nav>
           <a href="#privacy">Privacy Policy</a>
@@ -292,7 +294,8 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   const [piiAccessEvents, setPiiAccessEvents] = useState<PiiAccessEvent[]>([]);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [bulkFiles, setBulkFiles] = useState<File[]>([]);
-  const [batchName, setBatchName] = useState("Initial bulk resume import");
+  const [batchName, setBatchName] = useState("");
+  const [bulkContextNote, setBulkContextNote] = useState("");
   const [bulkCampaignId, setBulkCampaignId] = useState("workspace");
   const [requirementFile, setRequirementFile] = useState<File | null>(null);
   const [requirementText, setRequirementText] = useState("");
@@ -320,6 +323,8 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const invite = params.get("invite");
+    const login = params.get("login");
+    if (!lockedLoginMode && (login === "admin" || login === "company")) setLoginMode(login);
     if (invite) {
       setInviteToken(invite);
       setInviteMode(true);
@@ -491,9 +496,25 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
           .then((batch) => setSelectedBatch(batch))
           .catch(() => undefined);
       }
+      listCandidates(token)
+        .then((result) => setCandidates(result.candidates))
+        .catch(() => undefined);
+      listCampaigns(token)
+        .then((result) => setCampaigns(result.campaigns))
+        .catch(() => undefined);
+      if (candidate?.document_id) {
+        getCandidate(token, candidate.document_id)
+          .then((result) => setCandidate(result))
+          .catch(() => undefined);
+      }
+      if (campaign?.id) {
+        getCampaign(token, campaign.id)
+          .then((result) => setCampaign(result))
+          .catch(() => undefined);
+      }
     }, 4000);
     return () => window.clearInterval(timer);
-  }, [token, currentUser?.tenant_role, parseBatches, selectedBatch?.id, selectedBatch?.status, maintenanceJobs]);
+  }, [token, currentUser?.tenant_role, parseBatches, selectedBatch?.id, selectedBatch?.status, maintenanceJobs, candidate?.document_id, campaign?.id]);
 
   function handleSessionFailure(error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
@@ -537,12 +558,9 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     try {
       window.localStorage.removeItem("resume-intel-token");
       const loginEmail = resolveLoginIdentifier(email, loginMode);
-      const result = await authClient.signIn.email({ email: loginEmail, password });
-      if (result.error) {
-        throw new Error(result.error.message || "Better Auth login failed");
-      }
+      const result = await signInWithBetterAuth(loginEmail, password);
       const tokenFromHeader = window.localStorage.getItem("resume-intel-token") || "";
-      const tokenFromResponse = (result.data as { token?: string } | null)?.token || "";
+      const tokenFromResponse = result.token || "";
       const nextToken = tokenFromHeader || tokenFromResponse;
       if (!nextToken) throw new Error("Login did not return a bearer token");
       const current = await me(nextToken) as { user: CurrentUser };
@@ -635,10 +653,15 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
 
   async function handleBulkUpload() {
     if (!bulkFiles.length || !token) return;
+    const selectedCampaign = campaigns.find((item) => item.id === bulkCampaignId);
+    const generatedName = autoBatchNameForFiles(bulkFiles, selectedCampaign?.name);
+    const effectiveBatchName = batchName.trim() || bulkContextNote.trim() || generatedName;
     if (bulkCampaignId !== "workspace") {
-      const result = await run("Queueing campaign resumes", () => uploadCampaignResumes(token, bulkCampaignId, bulkFiles));
+      const result = await run("Queueing campaign resumes", () => uploadCampaignResumes(token, bulkCampaignId, bulkFiles, bulkContextNote, effectiveBatchName));
       if (!result) return;
       setBulkFiles([]);
+      setBulkContextNote("");
+      setBatchName("");
       setCampaign(result.campaign);
       setCampaigns((items) => [result.campaign, ...items.filter((item) => item.id !== result.campaign.id)]);
       setParseBatches((items) => [result.batch, ...items.filter((item) => item.id !== result.batch.id)]);
@@ -646,9 +669,11 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
       await refresh();
       return;
     }
-    const result = await run("Creating parse batch", () => bulkUploadResumes(bulkFiles, batchName, token, false));
+    const result = await run("Creating parse batch", () => bulkUploadResumes(bulkFiles, effectiveBatchName, token, false, bulkContextNote));
     if (!result) return;
     setBulkFiles([]);
+    setBulkContextNote("");
+    setBatchName("");
     setParseBatches((items) => [result.batch, ...items.filter((item) => item.id !== result.batch.id)]);
     setSelectedBatch(result.batch);
     await refresh();
@@ -696,6 +721,15 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     if (!result) return;
     setCandidate(result);
     setView("candidate");
+  }
+
+  async function handleDeleteCandidate(documentId: string) {
+    if (!token) return;
+    if (!window.confirm("Remove this upload from the active candidate database? The stored file and audit history are preserved, but this profile will no longer appear in search or campaigns.")) return;
+    await run("Removing candidate from active database", () => deleteCandidate(token, documentId, "removed_bad_or_wrong_upload"));
+    setCandidate(null);
+    setView("database");
+    await refresh();
   }
 
   async function handleSendCopilotMessage() {
@@ -899,7 +933,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
 
   async function handleUploadCampaignResumes() {
     if (!campaign?.id || !campaignFiles.length || !token) return;
-    const result = await run("Queueing campaign resumes", () => uploadCampaignResumes(token, campaign.id, campaignFiles));
+    const result = await run("Queueing campaign resumes", () => uploadCampaignResumes(token, campaign.id, campaignFiles, "Campaign-specific resume upload", autoBatchNameForFiles(campaignFiles, campaign.name)));
     if (!result) return;
     setCampaignFiles([]);
     setCampaign(result.campaign);
@@ -908,9 +942,9 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     await refresh();
   }
 
-  async function handleCampaignCandidateStatus(candidateId: string, status: "recommended" | "shortlisted" | "rejected") {
+  async function handleCampaignCandidateStatus(candidateId: string, status: CampaignPipelineStatus, note = "") {
     if (!campaign?.id || !token) return;
-    const updated = await run("Updating campaign candidate", () => updateCampaignCandidateStatus(token, campaign.id, candidateId, status));
+    const updated = await run("Updating campaign candidate", () => updateCampaignCandidateStatus(token, campaign.id, candidateId, status, note));
     if (!updated) return;
     setCampaign((current) => {
       if (!current) return current;
@@ -1085,7 +1119,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
           <section className="mergedHomeContent">
             <a className="publicBrand mergedHomeBrand" href="/">
               <BrandMark />
-              <strong>candidatSignal.ai</strong>
+              <strong>candidateSignal.ai</strong>
             </a>
             <div className="mergedHomeHero">
               <h1>
@@ -1093,7 +1127,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                 <span>Understand candidates.</span>
                 <em>Find the right fit faster.</em>
               </h1>
-              <p>candidatSignal.ai turns resumes, notes, raw CV text, and job campaigns into evidence-backed recruiter decisions without mixing company data.</p>
+              <p>candidateSignal.ai turns resumes, notes, raw CV text, and job campaigns into evidence-backed recruiter decisions without mixing company data.</p>
             </div>
             <div className="mergedHomeFeatureGrid" id="platform">
               <article>
@@ -1128,7 +1162,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
           </section>
         ) : (
           <section className="landingIntro loginIntroCompact">
-            <span className="eyebrow">candidatSignal.ai</span>
+            <span className="eyebrow">candidateSignal.ai</span>
             <h1>{inviteMode ? "Accept company invite." : isAdminLogin ? "Platform admin login." : "Company workspace login."}</h1>
             <p>
               {inviteMode
@@ -1236,7 +1270,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                 <span>{isAdminLogin ? "admin or admin@example.com / resume-intel" : "recruiter or recruiter@example.com / resume-intel"}</span>
               </div> : null}
               {lockedLoginMode ? (
-                <a className="plain actionLink" href={isAdminLogin ? "/login" : "/admin/login"}>
+                <a className="plain actionLink" href={isAdminLogin ? "/?login=company" : "/?login=admin"}>
                   {isAdminLogin ? "Go to Company Login" : "Go to Admin Login"}
                 </a>
               ) : null}
@@ -1258,7 +1292,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     return (
       <main className="loginShell">
         <section className="landingIntro loginIntroCompact">
-          <span className="eyebrow">candidatSignal.ai</span>
+          <span className="eyebrow">candidateSignal.ai</span>
           <h1>Checking session.</h1>
           <p>Verifying your workspace access before opening the app.</p>
           <div className="loginBoundaryCard">
@@ -1347,6 +1381,8 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               setBulkFiles={setBulkFiles}
               batchName={batchName}
               setBatchName={setBatchName}
+              bulkContextNote={bulkContextNote}
+              setBulkContextNote={setBulkContextNote}
               campaigns={campaigns}
               bulkCampaignId={bulkCampaignId}
               setBulkCampaignId={setBulkCampaignId}
@@ -1409,6 +1445,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               saveNote={handleAddNote}
               updateSavedNote={handleUpdateNote}
               deleteSavedNote={handleDeleteNote}
+              deleteCandidate={handleDeleteCandidate}
               openCandidate={handleOpenCandidate}
               reparseCandidate={handleReparseCandidate}
               canReparse={isTenantAdmin(currentUser)}
@@ -1495,7 +1532,7 @@ function AdminShellTopBar({ user, status, busy, logout }: { user: CurrentUser | 
     <header className="shellTopBar adminShellTopBar">
       <div>
         <BrandMark />
-        <strong>candidatSignal.ai</strong>
+        <strong>candidateSignal.ai</strong>
       </div>
       <div className="topNavActions">
         <button
@@ -1532,7 +1569,7 @@ function WorkspaceTopNav({
         <button className="workspaceBrandButton" type="button" aria-label="Open workspace home" onClick={() => setView("dashboard")}>
           <BrandMark />
         </button>
-        <strong>candidatSignal.ai</strong>
+        <strong>candidateSignal.ai</strong>
       </div>
       <nav>
         <NavButton icon={<Database size={28} />} label="Workspace" active={view === "dashboard"} onClick={() => setView("dashboard")} />
@@ -1567,7 +1604,7 @@ function AccountSettingsMenu({
 }) {
   const role = user?.tenant_role ?? user?.role ?? user?.platform_role ?? "user";
   const canManageWorkspaceSettings = isTenantAdmin(user);
-  function switchLogin(path: "/login" | "/admin/login") {
+  function switchLogin(path: "/?login=company" | "/?login=admin") {
     logout();
     window.location.href = path;
   }
@@ -1604,8 +1641,8 @@ function AccountSettingsMenu({
           </div>
         ) : null}
         <div className="accountMenuActions">
-          <button type="button" onClick={() => switchLogin("/login")}><LogIn size={16} /> Company Login</button>
-          <button type="button" onClick={() => switchLogin("/admin/login")}><ShieldCheck size={16} /> Admin Login</button>
+          <button type="button" onClick={() => switchLogin("/?login=company")}><LogIn size={16} /> Company Login</button>
+          <button type="button" onClick={() => switchLogin("/?login=admin")}><ShieldCheck size={16} /> Admin Login</button>
         </div>
         <button className="logoutButton" type="button" onClick={logout}><LogOut size={16} /> Logout</button>
       </section>
@@ -2075,16 +2112,41 @@ function RecruiterCopilot({
             </div>
             <span>•••</span>
           </header>
-          <h3>Query Analysis</h3>
-          <div className="queryAnalysisCard">
-            <div><span>Role intent</span><strong>{queryInsights.roleIntent}</strong></div>
-            <div><span>Mandatory signals</span><strong>{queryInsights.skills.length ? queryInsights.skills.join(", ") : "Not specified"}</strong></div>
-            <div><span>Location signals</span><strong>{queryInsights.locations.length ? queryInsights.locations.join(", ") : "Any location"}</strong></div>
-            <div><span>Current result set</span><strong>{latestFilteredCandidates.length} visible candidates</strong></div>
+          <h3>Editable Query Analysis</h3>
+          <div className="queryAnalysisCard editableQueryAnalysis">
+            <label>
+              <span>Role intent</span>
+              <input
+                value={queryInsights.roleIntent}
+                onChange={(event) => setInput(copilotAnalysisQuery({ ...queryInsights, roleIntent: event.target.value }))}
+              />
+            </label>
+            <label>
+              <span>Skills / signals</span>
+              <input
+                value={queryInsights.skills.join(", ")}
+                onChange={(event) => setInput(copilotAnalysisQuery({ ...queryInsights, skills: splitCommaList(event.target.value) }))}
+                placeholder="Spark, Python, healthcare"
+              />
+            </label>
+            <label>
+              <span>Location preference</span>
+              <input
+                value={queryInsights.locations.join(", ")}
+                onChange={(event) => setInput(copilotAnalysisQuery({ ...queryInsights, locations: splitCommaList(event.target.value) }))}
+                placeholder="New York, remote, USA"
+              />
+            </label>
+            <div>
+              <span>Current result set</span>
+              <strong>{latestFilteredCandidates.length} visible candidates</strong>
+            </div>
           </div>
-          <h3>Suggested Tweaks</h3>
+          <h3>Quick Refinements</h3>
           <div className="guideList">
-            {queryInsights.tweaks.map((tweak) => <button className="promptChip" key={tweak} onClick={() => setInput(tweak)}>{tweak}</button>)}
+            <button className="promptChip" onClick={() => setInput(rewriteCopilotLocationPreference(latestQuery, "preferred"))}>Treat location as preferred</button>
+            <button className="promptChip" onClick={() => setInput(rewriteCopilotLocationPreference(latestQuery, "required"))}>Make location required</button>
+            <button className="promptChip" onClick={() => setInput(`${latestQuery || queryInsights.roleIntent} with recent experience and recruiter-note relevance`)}>Add recency + notes</button>
           </div>
           <details className="savedThreadsDrawer">
             <summary>Saved Threads ({threads.length})</summary>
@@ -2197,6 +2259,8 @@ function UploadResumeView(props: {
   setBulkFiles: (files: File[]) => void;
   batchName: string;
   setBatchName: (value: string) => void;
+  bulkContextNote: string;
+  setBulkContextNote: (value: string) => void;
   campaigns: JobCampaign[];
   bulkCampaignId: string;
   setBulkCampaignId: (value: string) => void;
@@ -2220,6 +2284,8 @@ function UploadResumeView(props: {
   const selectedCampaign = props.campaigns.find((item) => item.id === props.bulkCampaignId);
   const activeBatch = props.selectedBatch ?? props.batches[0] ?? null;
   const activeProgress = activeBatch ? (activeBatch.progress_percent ?? batchProgress(activeBatch)) : 0;
+  const generatedBatchName = autoBatchNameForFiles(props.bulkFiles, selectedCampaign?.name);
+  const shownBatchName = props.batchName.trim() || props.bulkContextNote.trim() || generatedBatchName;
   return (
     <section className="uploadPage stitchUploadPage">
       <header className="stitchHeader compact">
@@ -2245,7 +2311,18 @@ function UploadResumeView(props: {
         </div>
         <ProgressBar value={activeProgress} />
         <div className="stitchBatchControls">
-          <input value={props.batchName} onChange={(event) => props.setBatchName(event.target.value)} placeholder="Batch name" />
+          <div className="autoBatchName">
+            <span>Batch</span>
+            <strong>{shownBatchName}</strong>
+          </div>
+          <input
+            value={props.bulkContextNote}
+            onChange={(event) => {
+              props.setBulkContextNote(event.target.value);
+              props.setBatchName("");
+            }}
+            placeholder="Optional: add note or campaign name"
+          />
           <select value={props.bulkCampaignId} onChange={(event) => props.setBulkCampaignId(event.target.value)}>
             <option value="workspace">Unassigned (Workspace)</option>
             {props.campaigns.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
@@ -2254,7 +2331,11 @@ function UploadResumeView(props: {
             {selectedCampaign ? `Queue into campaign` : "Queue resumes"}
           </button>
         </div>
-        <p>{activeBatch ? `Processing ${activeBatch.completed_count + activeBatch.failed_count} of ${activeBatch.total_files} files.` : "Select resumes to create a parsing batch."}</p>
+        <p>
+          {activeBatch
+            ? `Processing ${activeBatch.completed_count + activeBatch.failed_count} of ${activeBatch.total_files} files. Estimated LLM cost: ${formatCost(activeBatch.estimated_cost)}.`
+            : "Select resumes to create a parsing batch."}
+        </p>
       </section>
       <section className="stitchQueueTable">
         <div className="stitchQueueHead">
@@ -2266,10 +2347,10 @@ function UploadResumeView(props: {
           {(activeBatch?.jobs ?? []).map((job) => (
             <div className="jobRow uploadQueueRow" key={job.id}>
               <span>{job.original_filename}</span>
-              <span>{activeBatch?.source_type === "campaign" ? activeBatch.name : "Unassigned (Workspace)"}</span>
+              <span>{activeBatch?.campaign_id ? activeBatch.name : "Unassigned (Workspace)"}{activeBatch?.context_note ? <small>{activeBatch.context_note}</small> : null}</span>
               <span className="queueStatusCell">
                 <b className={`queueStatus ${job.status}`}>{domainLabel(job.status)}</b>
-                <small>{job.stage_label ?? job.stage}{job.error_message ? ` | ${job.error_message}` : ""}</small>
+                <small>{job.stage_label ?? job.stage}{job.error_message ? ` | ${job.error_message}` : ""}{job.estimated_cost ? ` | ${formatCost(job.estimated_cost)}` : ""}</small>
               </span>
               <span className="jobActions">
                 {job.document_id ? <button className="plain small" onClick={() => props.openCandidate(job.document_id!)}>View Profile</button> : null}
@@ -2288,7 +2369,7 @@ function UploadResumeView(props: {
           {props.batches.slice(0, 4).map((batch) => (
             <button key={batch.id} onClick={() => props.selectBatch(batch)}>
               <strong>{batch.name}</strong>
-              <span>{domainLabel(batch.status)} • {batch.completed_count}/{batch.total_files} completed</span>
+              <span>{domainLabel(batch.status)} • {batch.completed_count}/{batch.total_files} completed • {formatCost(batch.estimated_cost)}</span>
             </button>
           ))}
         </section>
@@ -2477,7 +2558,7 @@ function OperationsView(props: {
             {props.batches.length ? props.batches.slice(0, 10).map((batch) => (
               <article key={batch.id} role="button" tabIndex={0} onClick={() => props.selectBatch(batch)}>
                 <strong>{batch.name}</strong>
-                <span>{batch.status} | {batch.completed_count}/{batch.total_files} succeeded | {batch.failed_count} failed</span>
+                <span>{batch.status} | {batch.completed_count}/{batch.total_files} succeeded | {batch.failed_count} failed | {formatCost(batch.estimated_cost)}</span>
                 <ProgressBar value={batch.progress_percent ?? batchProgress(batch)} />
               </article>
             )) : <EmptyPanel title="No parse batches" body="Single and bulk uploads will create parse batches here." />}
@@ -2489,7 +2570,7 @@ function OperationsView(props: {
           <div className="panelHead">
             <div>
               <h3>{props.selectedBatch.name}</h3>
-              <span>{props.selectedBatch.status} | {props.selectedBatch.completed_count}/{props.selectedBatch.total_files} succeeded</span>
+              <span>{props.selectedBatch.status} | {props.selectedBatch.completed_count}/{props.selectedBatch.total_files} succeeded | {formatCost(props.selectedBatch.estimated_cost)}</span>
               <ProgressBar value={props.selectedBatch.progress_percent ?? batchProgress(props.selectedBatch)} />
             </div>
             <button className="plain danger" disabled={props.busy} onClick={() => props.cancelBatch(props.selectedBatch!.id)}>Cancel batch</button>
@@ -2502,7 +2583,7 @@ function OperationsView(props: {
                 <span>{job.status}</span>
                 <span>
                   <ProgressBar value={job.progress_percent ?? 0} />
-                  <small>{job.stage_label ?? job.stage}{job.error_message ? ` | ${job.error_message}` : ""}</small>
+                  <small>{job.stage_label ?? job.stage}{job.error_message ? ` | ${job.error_message}` : ""}{job.estimated_cost ? ` | ${formatCost(job.estimated_cost)}` : ""}</small>
                 </span>
                 <span className="jobActions">
                   <button className="plain small" disabled={props.busy || !["failed", "retrying", "cancelled"].includes(job.status)} onClick={() => props.retryJob(job.id)}>Retry</button>
@@ -2593,6 +2674,7 @@ function CandidateDetail({
   saveNote,
   updateSavedNote,
   deleteSavedNote,
+  deleteCandidate,
   openCandidate,
   reparseCandidate,
   canReparse,
@@ -2609,6 +2691,7 @@ function CandidateDetail({
   saveNote: () => void;
   updateSavedNote: (noteId: string, name: string, content: string) => void;
   deleteSavedNote: (noteId: string) => void;
+  deleteCandidate: (documentId: string) => void;
   openCandidate: (id: string) => void;
   reparseCandidate: (id: string) => void;
   canReparse: boolean;
@@ -2672,6 +2755,8 @@ function CandidateDetail({
   const resumeHeaderLocation = textValue(locationIntel?.resume_header_location) || textValue(candidate.contact?.location);
   const currentLocation = latestJobLocation;
   const coverage = candidate.primary_key_coverage;
+  const coverageScore = Number(coverage?.score ?? 0);
+  const needsUploadReview = coverageScore > 0 && coverageScore < 0.8;
   const verifiedFactRows = [
     candidate.name ? { label: "Name", value: candidate.name, source: "Parsed identity field", query: [candidate.name] } : null,
     candidate.contact?.email ? { label: "Email", value: candidate.contact.email, source: "Parsed contact field", query: [candidate.contact.email] } : null,
@@ -2815,9 +2900,20 @@ function CandidateDetail({
           <button className="plain" onClick={() => setActiveTab("cv")}>View CV</button>
           <button className="plain" onClick={() => setActiveTab("notes")}>Recruiter Notes</button>
           {canReparse ? <button className="plain" onClick={() => reparseCandidate(candidate.document_id)}>Reparse CV</button> : null}
+          <button className="plain danger" onClick={() => deleteCandidate(candidate.document_id)}>Remove Upload</button>
           <button className="primary" onClick={match}>Match to Role</button>
         </section>
       </header>
+      {needsUploadReview ? (
+        <article className="candidateBadUploadBanner">
+          <AlertTriangle size={18} />
+          <div>
+            <strong>Low candidate coverage detected ({Math.round(coverageScore * 100)}%)</strong>
+            <span>If this was a job requirement or the wrong file, remove it from the active resume database. The file remains audit-preserved.</span>
+          </div>
+          <button className="plain danger" onClick={() => deleteCandidate(candidate.document_id)}>Remove from database</button>
+        </article>
+      ) : null}
 
       <main className="candidateReportMain candidateCleanMainShell">
         <header className="candidateBriefHeader">
@@ -3825,7 +3921,7 @@ function CampaignsView({
   openCampaign: (id: string) => void;
   matchCampaign: (id?: string) => void;
   uploadResumes: () => void;
-  updateCandidateStatus: (candidateId: string, status: "recommended" | "shortlisted" | "rejected") => void;
+  updateCandidateStatus: (candidateId: string, status: CampaignPipelineStatus, note?: string) => void;
   openCandidate: (id: string) => void;
   busy: boolean;
 }) {
@@ -3833,10 +3929,24 @@ function CampaignsView({
   const selectedCandidates = useMemo(() => activeCampaign?.candidates ?? [], [activeCampaign?.candidates]);
   const [selectedCandidateId, setSelectedCandidateId] = useState("");
   const [autoOpenedCampaignId, setAutoOpenedCampaignId] = useState("");
-  const recommendedCandidates = selectedCandidates.filter((item) => !["shortlisted", "rejected", "reviewing"].includes(item.status));
-  const reviewingCandidates = selectedCandidates.filter((item) => item.status === "reviewing");
-  const shortlistedCandidates = selectedCandidates.filter((item) => item.status === "shortlisted");
-  const shortlisted = shortlistedCandidates.length;
+  const [stageNote, setStageNote] = useState("");
+  const campaignStages: Array<{ id: CampaignPipelineStatus; label: string }> = [
+    { id: "recommended", label: "Matched" },
+    { id: "shortlisted", label: "Shortlisted" },
+    { id: "contacted", label: "Contacted" },
+    { id: "replied", label: "Replied" },
+    { id: "screened", label: "Screened" },
+    { id: "submitted", label: "Submitted" },
+    { id: "interviewing", label: "Interviewing" },
+    { id: "offer", label: "Offer" },
+    { id: "placed", label: "Placed" },
+    { id: "rejected", label: "Rejected" },
+  ];
+  const stageBuckets = campaignStages.map((stage) => ({
+    ...stage,
+    candidates: selectedCandidates.filter((item) => stageCandidateStatus(item.status) === stage.id),
+  }));
+  const shortlisted = selectedCandidates.filter((item) => item.status === "shortlisted").length;
   const rejected = selectedCandidates.filter((item) => item.status === "rejected").length;
   const selectedCampaignCandidate = selectedCandidates.find((item) => item.candidate_id === selectedCandidateId) ?? selectedCandidates[0];
   const campaignProgress = campaignProgressStats(activeCampaign, selectedCandidates);
@@ -3950,7 +4060,7 @@ function CampaignsView({
                   <article key={batch.id}>
                     <div>
                       <span>{batch.name}</span>
-                      <em>{batch.status} | {batch.completed_count}/{batch.total_files} completed, {batch.failed_count} failed | {formatDateTime(batch.updated_at)}</em>
+                      <em>{batch.status} | {batch.completed_count}/{batch.total_files} completed, {batch.failed_count} failed | {formatCost(batch.estimated_cost)} | {formatDateTime(batch.updated_at)}</em>
                     </div>
                     <ProgressBar value={batch.total_files ? Math.round((batch.completed_count / batch.total_files) * 100) : 0} />
                   </article>
@@ -3997,28 +4107,17 @@ function CampaignsView({
           </section>
           {selectedCandidates.length ? (
             <div className="campaignBoardShell">
-              <div className="campaignBoard">
-                <CampaignColumn
-                  title="Recommended"
-                  count={recommendedCandidates.length}
-                  candidates={recommendedCandidates}
-                  selectedId={selectedCampaignCandidate?.candidate_id}
-                  selectCandidate={setSelectedCandidateId}
-                />
-                <CampaignColumn
-                  title="Reviewing"
-                  count={reviewingCandidates.length}
-                  candidates={reviewingCandidates}
-                  selectedId={selectedCampaignCandidate?.candidate_id}
-                  selectCandidate={setSelectedCandidateId}
-                />
-                <CampaignColumn
-                  title="Shortlisted"
-                  count={shortlistedCandidates.length}
-                  candidates={shortlistedCandidates}
-                  selectedId={selectedCampaignCandidate?.candidate_id}
-                  selectCandidate={setSelectedCandidateId}
-                />
+              <div className="campaignBoard campaignPipelineBoard">
+                {stageBuckets.map((stage) => (
+                  <CampaignColumn
+                    key={stage.id}
+                    title={stage.label}
+                    count={stage.candidates.length}
+                    candidates={stage.candidates}
+                    selectedId={selectedCampaignCandidate?.candidate_id}
+                    selectCandidate={setSelectedCandidateId}
+                  />
+                ))}
               </div>
               <aside className="campaignCandidatePanel">
                 {selectedCampaignCandidate ? (
@@ -4051,10 +4150,20 @@ function CampaignsView({
                       <strong>Draft reachout angle</strong>
                       <span>{selectedCampaignCandidate.evidence?.recommendation ?? "Open the candidate report to tailor outreach from resume evidence and recruiter notes."}</span>
                     </div>
+                    <div className="campaignStageEditor">
+                      <label>
+                        <span>Move stage</span>
+                        <select value={stageCandidateStatus(selectedCampaignCandidate.status)} onChange={(event) => updateCandidateStatus(selectedCampaignCandidate.candidate_id, event.target.value as CampaignPipelineStatus, stageNote)}>
+                          {campaignStages.map((stage) => <option key={stage.id} value={stage.id}>{stage.label}</option>)}
+                        </select>
+                      </label>
+                      <textarea value={stageNote} onChange={(event) => setStageNote(event.target.value)} placeholder="Optional stage note, feedback, or next action" />
+                    </div>
                     <div className="jobActions">
                       <button className="plain small" onClick={() => openCandidate(selectedCampaignCandidate.candidate_id)}>Open report</button>
-                      <button className="secondary small" onClick={() => updateCandidateStatus(selectedCampaignCandidate.candidate_id, "shortlisted")} disabled={selectedCampaignCandidate.status === "shortlisted"}>Shortlist</button>
-                      <button className="plain small danger" onClick={() => updateCandidateStatus(selectedCampaignCandidate.candidate_id, "rejected")} disabled={selectedCampaignCandidate.status === "rejected"}>Reject</button>
+                      <button className="secondary small" onClick={() => updateCandidateStatus(selectedCampaignCandidate.candidate_id, "shortlisted", stageNote)} disabled={selectedCampaignCandidate.status === "shortlisted"}>Shortlist</button>
+                      <button className="plain small" onClick={() => updateCandidateStatus(selectedCampaignCandidate.candidate_id, "submitted", stageNote)} disabled={selectedCampaignCandidate.status === "submitted"}>Submit</button>
+                      <button className="plain small danger" onClick={() => updateCandidateStatus(selectedCampaignCandidate.candidate_id, "rejected", stageNote)} disabled={selectedCampaignCandidate.status === "rejected"}>Reject</button>
                     </div>
                   </>
                 ) : null}
@@ -4106,6 +4215,28 @@ function campaignEvidenceItems(item: JobCampaignCandidate) {
     ...toTextList(item.evidence?.evidence?.must_have_hits),
     ...toTextList(item.evidence?.evidence?.nice_to_have_hits),
   ].filter(Boolean);
+}
+
+function stageCandidateStatus(status: string): CampaignPipelineStatus {
+  if (status === "uploaded" || status === "matched" || status === "reviewing") return "recommended";
+  if (
+    [
+      "recommended",
+      "shortlisted",
+      "contacted",
+      "replied",
+      "screened",
+      "submitted",
+      "interviewing",
+      "offer",
+      "placed",
+      "rejected",
+      "archived",
+    ].includes(status)
+  ) {
+    return status as CampaignPipelineStatus;
+  }
+  return "recommended";
 }
 
 function campaignScoreBreakdownItems(item: JobCampaignCandidate) {
@@ -4376,7 +4507,7 @@ function TeamSettings({
       <header className="privacySettingsTop">
         <div>
           <button className="plain small" type="button" onClick={() => window.history.back()}>Back</button>
-          <strong>candidatSignal.ai</strong>
+          <strong>candidateSignal.ai</strong>
         </div>
         <button className="primary" type="button" onClick={refreshPiiAudit}>Refresh Audit</button>
       </header>
@@ -5113,6 +5244,27 @@ function buildCopilotQueryInsights(query: string, candidates: CandidateSummary[]
   };
 }
 
+function splitCommaList(value: string) {
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function autoBatchNameForFiles(files: File[], campaignName?: string | null) {
+  const count = files.length;
+  const date = new Date().toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  if (!count) return campaignName ? `${campaignName} upload` : "Resume upload";
+  if (count === 1) return `${campaignName ? `${campaignName} - ` : ""}${files[0].name}`;
+  return `${campaignName ? `${campaignName} - ` : ""}${count} resumes - ${date}`;
+}
+
+function copilotAnalysisQuery(analysis: { roleIntent: string; skills: string[]; locations: string[] }) {
+  const parts = [
+    analysis.roleIntent || "candidate",
+    analysis.skills.length ? `with ${analysis.skills.join(", ")}` : "",
+    analysis.locations.length ? `near/preferred ${analysis.locations.join(", ")}` : "",
+  ].filter(Boolean);
+  return `Find ${parts.join(" ")}`.replace(/\s+/g, " ").trim();
+}
+
 function copilotThreadMessages(thread: CopilotThread): WorkspaceChatMessage[] {
   const messages = (thread.messages ?? []).map((message) => ({
     role: message.role,
@@ -5312,6 +5464,13 @@ function formatBytes(value?: number | null) {
   if (value < 1024) return `${value} B`;
   if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatCost(value?: number | null) {
+  const amount = Number(value ?? 0);
+  if (!Number.isFinite(amount) || amount <= 0) return "$0.0000";
+  if (amount < 0.0001) return "<$0.0001";
+  return `$${amount.toFixed(4)}`;
 }
 
 function shortHash(value?: string | null) {

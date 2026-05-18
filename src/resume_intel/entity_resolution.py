@@ -16,7 +16,7 @@ def find_matches_for_record(record: dict[str, Any], limit: int = 10, tenant_id: 
             """
             select document_id, name, email, phone, record_json
             from candidates
-            where document_id <> %s and (%s::uuid is null or tenant_id=%s)
+            where document_id <> %s and (%s::uuid is null or tenant_id=%s) and deleted_at is null
             """,
             (record["document_id"], tenant_id, tenant_id),
         ).fetchall()
@@ -71,6 +71,8 @@ def list_clusters(tenant_id: str | None = None) -> list[dict[str, Any]]:
             join candidates left_c on left_c.document_id=erm.left_document_id
             join candidates right_c on right_c.document_id=erm.right_document_id
             where (%s::uuid is null or erm.tenant_id=%s)
+              and left_c.deleted_at is null
+              and right_c.deleted_at is null
             order by erm.score desc, erm.created_at desc
             """,
             (tenant_id, tenant_id),

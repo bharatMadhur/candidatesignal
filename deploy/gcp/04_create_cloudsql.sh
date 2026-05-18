@@ -21,7 +21,19 @@ gcloud sql instances describe "${SQL_INSTANCE}" >/dev/null 2>&1 \
     --storage-type=SSD \
     --storage-size="${SQL_STORAGE_GB}" \
     --availability-type=ZONAL \
-    --no-backup
+    --backup-start-time="${SQL_BACKUP_START_TIME}" \
+    --retained-backups-count="${SQL_BACKUP_RETENTION_COUNT}" \
+    --enable-point-in-time-recovery \
+    --retained-transaction-log-days="${SQL_PITR_RETENTION_DAYS}" \
+    --deletion-protection
+
+gcloud sql instances patch "${SQL_INSTANCE}" \
+  --backup-start-time="${SQL_BACKUP_START_TIME}" \
+  --retained-backups-count="${SQL_BACKUP_RETENTION_COUNT}" \
+  --enable-point-in-time-recovery \
+  --retained-transaction-log-days="${SQL_PITR_RETENTION_DAYS}" \
+  --deletion-protection \
+  --quiet
 
 gcloud sql databases describe "${SQL_DATABASE}" --instance="${SQL_INSTANCE}" >/dev/null 2>&1 \
   || gcloud sql databases create "${SQL_DATABASE}" --instance="${SQL_INSTANCE}"
@@ -33,4 +45,4 @@ echo "Cloud SQL ready."
 echo "Instance: ${SQL_INSTANCE}"
 echo "Database: ${SQL_DATABASE}"
 echo "User: ${SQL_USER}"
-echo "Note: this script uses the cheapest zonal/no-HA default. Enable backups before production traffic."
+echo "Protection: automated backups enabled, PITR enabled, deletion protection enabled."

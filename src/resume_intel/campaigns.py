@@ -11,6 +11,24 @@ from .requirements import create_requirement_from_text, match_requirement
 from .settings import load_settings
 
 
+CAMPAIGN_PIPELINE_STATUSES = {
+    "recommended",
+    "uploaded",
+    "matched",
+    "shortlisted",
+    "contacted",
+    "replied",
+    "screened",
+    "submitted",
+    "interviewing",
+    "offer",
+    "placed",
+    "rejected",
+    "archived",
+}
+LOCKED_MATCH_STATUSES = {"shortlisted", "contacted", "replied", "screened", "submitted", "interviewing", "offer", "placed", "rejected", "archived"}
+
+
 def create_campaign(
     tenant_id: str,
     user_id: str,
@@ -95,6 +113,7 @@ def get_campaign(campaign_id: str, tenant_id: str) -> dict[str, Any]:
             from campaign_candidates
             join candidates on candidates.document_id = campaign_candidates.candidate_id
               and candidates.tenant_id = campaign_candidates.tenant_id
+             and candidates.deleted_at is null
             where campaign_candidates.campaign_id=%s and campaign_candidates.tenant_id=%s
             order by campaign_candidates.score desc, campaign_candidates.updated_at desc
             """,
@@ -122,6 +141,8 @@ def get_campaign(campaign_id: str, tenant_id: str) -> dict[str, Any]:
             "total_files": int(item["total_files"] or 0),
             "completed_count": int(item["completed_count"] or 0),
             "failed_count": int(item["failed_count"] or 0),
+            "context_note": item.get("context_note"),
+            "estimated_cost": float(item.get("estimated_cost") or 0),
             "updated_at": item["updated_at"].isoformat() if item["updated_at"] else None,
         }
         for item in batch_rows
@@ -143,7 +164,7 @@ def run_campaign_match(campaign_id: str, tenant_id: str, user_id: str) -> dict[s
                 values (%s, %s, %s, 'matched', 'recommended', %s, %s)
                 on conflict (campaign_id, candidate_id) do update set
                   source=case when campaign_candidates.source='uploaded' then campaign_candidates.source else 'matched' end,
-                  status=case when campaign_candidates.status in ('shortlisted', 'rejected') then campaign_candidates.status else 'recommended' end,
+                  status=case when campaign_candidates.status = any(%s) then campaign_candidates.status else 'recommended' end,
                   score=excluded.score,
                   evidence=excluded.evidence,
                   updated_at=now()
@@ -154,6 +175,7 @@ def run_campaign_match(campaign_id: str, tenant_id: str, user_id: str) -> dict[s
                     match["candidate_id"],
                     float(match.get("total_score") or 0),
                     Jsonb(_campaign_match_evidence_payload(match)),
+                    list(LOCKED_MATCH_STATUSES),
                 ),
             )
         conn.execute("update job_campaigns set updated_at=now() where id=%s and tenant_id=%s", (campaign_id, tenant_id))
@@ -168,8 +190,8 @@ def run_campaign_match(campaign_id: str, tenant_id: str, user_id: str) -> dict[s
     return get_campaign(campaign_id, tenant_id) | {"matches": matches}
 
 
-def set_campaign_candidate_status(campaign_id: str, candidate_id: str, status: str, tenant_id: str, user_id: str) -> dict[str, Any]:
-    if status not in {"recommended", "shortlisted", "rejected"}:
+def set_campaign_candidate_status(campaign_id: str, candidate_id: str, status: str, tenant_id: str, user_id: str, note: str | None = None) -> dict[str, Any]:
+    if status not in CAMPAIGN_PIPELINE_STATUSES:
         raise ValueError(status)
     with db() as conn:
         row = conn.execute(
@@ -178,9 +200,13 @@ def set_campaign_candidate_status(campaign_id: str, candidate_id: str, status: s
             select %s, job_campaigns.id, candidates.document_id, 'copilot', %s, 0, %s
             from job_campaigns
             join candidates on candidates.document_id=%s and candidates.tenant_id=job_campaigns.tenant_id
+              and candidates.deleted_at is null
             where job_campaigns.id=%s and job_campaigns.tenant_id=%s
             on conflict (campaign_id, candidate_id) do update set
               status=excluded.status,
+              owner_user_id=%s,
+              stage_note=%s,
+              last_stage_changed_at=now(),
               source=case
                 when campaign_candidates.source in ('uploaded', 'matched') then campaign_candidates.source
                 else excluded.source
@@ -196,15 +222,32 @@ def set_campaign_candidate_status(campaign_id: str, candidate_id: str, status: s
                 candidate_id,
                 campaign_id,
                 tenant_id,
+                user_id,
+                (note or "").strip() or None,
             ),
         ).fetchone()
         if row:
             conn.execute(
                 """
+                insert into candidate_activity_events (tenant_id, document_id, campaign_id, user_id, event_type, title, body, metadata)
+                values (%s, %s, %s, %s, 'campaign.stage_changed', %s, %s, %s)
+                """,
+                (
+                    tenant_id,
+                    candidate_id,
+                    campaign_id,
+                    user_id,
+                    f"Moved to {status.replace('_', ' ').title()}",
+                    (note or "").strip() or None,
+                    Jsonb({"status": status, "campaign_id": campaign_id}),
+                ),
+            )
+            conn.execute(
+                """
                 insert into audit_logs (tenant_id, user_id, action, entity_type, entity_id, metadata)
                 values (%s, %s, 'campaign.candidate_status_changed', 'campaign_candidate', %s, %s)
                 """,
-                (tenant_id, user_id, str(row["id"]), Jsonb({"campaign_id": campaign_id, "candidate_id": candidate_id, "status": status})),
+                (tenant_id, user_id, str(row["id"]), Jsonb({"campaign_id": campaign_id, "candidate_id": candidate_id, "status": status, "note": note})),
             )
         conn.commit()
     if not row:
@@ -301,6 +344,9 @@ def _candidate_link_row(row: dict[str, Any]) -> dict[str, Any]:
         "status": row["status"],
         "score": float(row["score"] or 0),
         "evidence": row["evidence"] or {},
+        "stage_note": row.get("stage_note"),
+        "owner_user_id": str(row["owner_user_id"]) if row.get("owner_user_id") else None,
+        "last_stage_changed_at": row["last_stage_changed_at"].isoformat() if row.get("last_stage_changed_at") else None,
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
         "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
     }

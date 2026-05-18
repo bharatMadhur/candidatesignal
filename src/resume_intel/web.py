@@ -38,6 +38,7 @@ from .db_store import (
     load_candidate_db,
     load_raw_text_db,
     public_candidate_record,
+    soft_delete_candidate_db,
     update_note_db,
 )
 from .entity_resolution import decide_match, entity_resolution_requirements, find_matches_for_record, list_clusters, persist_matches
@@ -104,7 +105,7 @@ MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 configure_logging()
 http_logger = logging.getLogger("resume_intel.http")
 
-app = FastAPI(title="candidatSignal.ai API")
+app = FastAPI(title="candidateSignal.ai API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -222,6 +223,7 @@ class CampaignRequest(BaseModel):
 
 class CampaignCandidateStatusRequest(BaseModel):
     status: str
+    note: str | None = None
 
 
 class GovernancePolicyRequest(BaseModel):
@@ -246,7 +248,7 @@ def health() -> dict:
 
 @app.get("/healthz")
 def healthz() -> dict:
-    return {"ok": True, "service": "candidatSignal.ai-api"}
+    return {"ok": True, "service": "candidateSignal.ai-api"}
 
 
 @app.get("/readyz")
@@ -269,7 +271,7 @@ def healthz_deep() -> dict:
         raise HTTPException(status_code=503, detail=f"deep health check failed: {exc}") from exc
     return {
         "ok": True,
-        "service": "candidatSignal.ai-api",
+        "service": "candidateSignal.ai-api",
         "database": "ready",
         "migrations": {
             "status": "ready" if migrations else "missing",
@@ -493,6 +495,16 @@ def candidate(document_id: str, user: dict = Depends(current_user)) -> dict:
         if _can_view_pii(user):
             _audit_pii_access(user, document_id, _candidate_pii_fields(record), action="view_candidate_detail")
         return record
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="candidate not found") from exc
+
+
+@app.delete("/candidates/{document_id}")
+def delete_candidate(document_id: str, reason: str = Query("removed_by_recruiter"), user: dict = Depends(current_user)) -> dict:
+    require_tenant_write(user)
+    try:
+        deleted = soft_delete_candidate_db(document_id, _tenant_id(user), user["id"], reason)
+        return {"candidate": deleted, "user": user}
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="candidate not found") from exc
 
@@ -911,6 +923,8 @@ def match_job_campaign(campaign_id: str, user: dict = Depends(current_user)) -> 
 def upload_campaign_resumes(
     campaign_id: str,
     files: list[UploadFile] = File(...),
+    context_note: str = Form(""),
+    batch_name: str = Form(""),
     user: dict = Depends(current_user),
 ) -> dict:
     require_tenant_write(user)
@@ -929,8 +943,11 @@ def upload_campaign_resumes(
             tenant_id,
             user["id"],
             [(file.filename or "resume.pdf", file.file) for file in files],
-            f"Campaign upload - {campaign['name']}",
+            batch_name.strip() or _auto_batch_name(files, prefix=f"Campaign upload - {campaign['name']}"),
+            initial_note_name="Upload Context" if context_note.strip() else None,
+            initial_note_content=context_note,
             campaign_id=campaign_id,
+            context_note=context_note,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -949,7 +966,7 @@ def update_campaign_candidate_status(
 ) -> dict:
     require_tenant_write(user)
     try:
-        return set_campaign_candidate_status(campaign_id, candidate_id, request.status, _tenant_id(user), user["id"])
+        return set_campaign_candidate_status(campaign_id, candidate_id, request.status, _tenant_id(user), user["id"], request.note)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="campaign candidate not found") from exc
     except ValueError as exc:
@@ -1102,7 +1119,8 @@ def disable_member(membership_id: str, user: dict = Depends(current_user)) -> di
 def bulk_upload_resumes(
     background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
-    batch_name: str = Form("Bulk resume upload"),
+    batch_name: str = Form(""),
+    context_note: str = Form(""),
     auto_start: bool = Form(False),
     user: dict = Depends(current_user),
 ) -> dict:
@@ -1118,7 +1136,10 @@ def bulk_upload_resumes(
             tenant_id,
             user["id"],
             [(file.filename or "resume.pdf", file.file) for file in files],
-            batch_name,
+            batch_name.strip() or _auto_batch_name(files),
+            initial_note_name="Upload Context" if context_note.strip() else None,
+            initial_note_content=context_note,
+            context_note=context_note,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1322,6 +1343,14 @@ def _tenant_id(user: dict) -> str:
     if not tenant_id:
         raise HTTPException(status_code=403, detail="tenant membership required")
     return tenant_id
+
+
+def _auto_batch_name(files: list[UploadFile], *, prefix: str = "Resume upload") -> str:
+    count = len(files)
+    first_name = Path(files[0].filename or "resume").stem if files else "resumes"
+    if count == 1:
+        return f"{prefix} - {first_name[:60]}"
+    return f"{prefix} - {count} files - {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
 
 
 def _can_view_pii(user: dict) -> bool:

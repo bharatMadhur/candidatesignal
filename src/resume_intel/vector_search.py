@@ -202,7 +202,7 @@ def semantic_candidate_scores(query_text: str, limit: int = 100, tenant_id: str 
         if tenant_id:
             rows = conn.execute(
                 """
-                select document_id, max(1 - (embedding <=> %s::vector)) as score,
+                select candidate_search_chunks.document_id, max(1 - (embedding <=> %s::vector)) as score,
                        (array_agg(chunk_type order by embedding <=> %s::vector))[1:5] as top_chunks,
                        (array_agg(jsonb_build_object(
                          'chunk_type', chunk_type,
@@ -212,8 +212,12 @@ def semantic_candidate_scores(query_text: str, limit: int = 100, tenant_id: str 
                          'embedding_model', embedding_model
                        ) order by embedding <=> %s::vector))[1:5] as evidence
                 from candidate_search_chunks
-                where tenant_id=%s and embedding_model=%s
-                group by document_id
+                join candidates on candidates.document_id = candidate_search_chunks.document_id
+                  and candidates.tenant_id = candidate_search_chunks.tenant_id
+                where candidate_search_chunks.tenant_id=%s
+                  and candidate_search_chunks.embedding_model=%s
+                  and candidates.deleted_at is null
+                group by candidate_search_chunks.document_id
                 order by score desc
                 limit %s
                 """,
@@ -222,7 +226,7 @@ def semantic_candidate_scores(query_text: str, limit: int = 100, tenant_id: str 
         else:
             rows = conn.execute(
                 """
-                select document_id, max(1 - (embedding <=> %s::vector)) as score,
+                select candidate_search_chunks.document_id, max(1 - (embedding <=> %s::vector)) as score,
                        (array_agg(chunk_type order by embedding <=> %s::vector))[1:5] as top_chunks,
                        (array_agg(jsonb_build_object(
                          'chunk_type', chunk_type,
@@ -232,8 +236,11 @@ def semantic_candidate_scores(query_text: str, limit: int = 100, tenant_id: str 
                          'embedding_model', embedding_model
                        ) order by embedding <=> %s::vector))[1:5] as evidence
                 from candidate_search_chunks
-                where embedding_model=%s
-                group by document_id
+                join candidates on candidates.document_id = candidate_search_chunks.document_id
+                  and candidates.tenant_id = candidate_search_chunks.tenant_id
+                where candidate_search_chunks.embedding_model=%s
+                  and candidates.deleted_at is null
+                group by candidate_search_chunks.document_id
                 order by score desc
                 limit %s
                 """,
@@ -259,7 +266,7 @@ def semantic_candidate_search(query_text: str, limit: int = 25, tenant_id: str |
             """
             select document_id, name, email, phone, source_file, record_json, updated_at
             from candidates
-            where document_id = any(%s) and (%s::uuid is null or tenant_id=%s)
+            where document_id = any(%s) and (%s::uuid is null or tenant_id=%s) and deleted_at is null
             """,
             (ids, tenant_id, tenant_id),
         ).fetchall()

@@ -438,6 +438,7 @@ export type DocumentPage = {
 export type ParseBatch = {
   id: string;
   tenant_id: string;
+  campaign_id?: string | null;
   name: string;
   source_type: string;
   total_files: number;
@@ -446,6 +447,8 @@ export type ParseBatch = {
   completed_count: number;
   failed_count: number;
   progress_percent?: number;
+  context_note?: string | null;
+  estimated_cost?: number;
   status: string;
   created_at?: string | null;
   updated_at?: string | null;
@@ -463,9 +466,27 @@ export type JobCampaignCandidate = {
   score: number;
   evidence?: any;
   candidate?: CandidateSummary;
+  stage_note?: string | null;
+  owner_user_id?: string | null;
+  last_stage_changed_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
+
+export type CampaignPipelineStatus =
+  | "recommended"
+  | "uploaded"
+  | "matched"
+  | "shortlisted"
+  | "contacted"
+  | "replied"
+  | "screened"
+  | "submitted"
+  | "interviewing"
+  | "offer"
+  | "placed"
+  | "rejected"
+  | "archived";
 
 export type JobCampaign = {
   id: string;
@@ -479,7 +500,17 @@ export type JobCampaign = {
   candidate_count: number;
   upload_batch_count: number;
   candidates?: JobCampaignCandidate[];
-  upload_batches?: Array<{ id: string; name: string; status: string; total_files: number; completed_count: number; failed_count: number; updated_at?: string | null }>;
+  upload_batches?: Array<{
+    id: string;
+    name: string;
+    status: string;
+    total_files: number;
+    completed_count: number;
+    failed_count: number;
+    context_note?: string | null;
+    estimated_cost?: number | null;
+    updated_at?: string | null;
+  }>;
   matches?: RequirementMatch[];
   created_at?: string | null;
   updated_at?: string | null;
@@ -637,8 +668,13 @@ export async function getCandidate(token: string, id: string): Promise<Candidate
   return request(`/candidates/${id}`, { token });
 }
 
+export async function deleteCandidate(token: string, id: string, reason = "removed_by_recruiter"): Promise<{ candidate: { document_id: string; deleted: boolean; reason: string } }> {
+  const search = new URLSearchParams({ reason });
+  return request(`/candidates/${id}?${search.toString()}`, { method: "DELETE", token });
+}
+
 export async function getCandidateSource(token: string, id: string): Promise<Blob> {
-  const response = await fetch(`${API_BASE}/candidates/${id}/document-preview`, {
+  const response = await fetch(`${apiBase()}/candidates/${id}/document-preview`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!response.ok) throw new Error(await response.text());
@@ -646,7 +682,7 @@ export async function getCandidateSource(token: string, id: string): Promise<Blo
 }
 
 export async function getCandidateRawText(token: string, id: string): Promise<string> {
-  const response = await fetch(`${API_BASE}/candidates/${id}/raw-text`, {
+  const response = await fetch(`${apiBase()}/candidates/${id}/raw-text`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!response.ok) throw new Error(await response.text());
@@ -669,10 +705,11 @@ export async function uploadResume(file: File, noteName: string, note: string, t
   return request("/resumes/upload", { method: "POST", token, body, form: true });
 }
 
-export async function bulkUploadResumes(files: File[], batchName: string, token: string, autoStart = false): Promise<{ batch: ParseBatch }> {
+export async function bulkUploadResumes(files: File[], batchName: string, token: string, autoStart = false, contextNote = ""): Promise<{ batch: ParseBatch }> {
   const body = new FormData();
   files.forEach((file) => body.append("files", file));
-  body.append("batch_name", batchName);
+  if (batchName.trim()) body.append("batch_name", batchName.trim());
+  if (contextNote.trim()) body.append("context_note", contextNote.trim());
   body.append("auto_start", String(autoStart));
   return request("/resumes/bulk-upload", { method: "POST", token, body, form: true });
 }
@@ -697,17 +734,19 @@ export async function matchCampaign(token: string, id: string): Promise<JobCampa
   return request(`/campaigns/${id}/match`, { method: "POST", token });
 }
 
-export async function uploadCampaignResumes(token: string, campaignId: string, files: File[]): Promise<{ campaign: JobCampaign; batch: ParseBatch }> {
+export async function uploadCampaignResumes(token: string, campaignId: string, files: File[], contextNote = "", batchName = ""): Promise<{ campaign: JobCampaign; batch: ParseBatch }> {
   const body = new FormData();
   files.forEach((file) => body.append("files", file));
+  if (contextNote.trim()) body.append("context_note", contextNote.trim());
+  if (batchName.trim()) body.append("batch_name", batchName.trim());
   return request(`/campaigns/${campaignId}/resumes`, { method: "POST", token, body, form: true });
 }
 
-export async function updateCampaignCandidateStatus(token: string, campaignId: string, candidateId: string, status: "recommended" | "shortlisted" | "rejected"): Promise<JobCampaignCandidate> {
+export async function updateCampaignCandidateStatus(token: string, campaignId: string, candidateId: string, status: CampaignPipelineStatus, note = ""): Promise<JobCampaignCandidate> {
   return request(`/campaigns/${campaignId}/candidates/${candidateId}/status`, {
     method: "POST",
     token,
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, note: note || null }),
   });
 }
 
@@ -933,11 +972,20 @@ async function request(path: string, options: { method?: string; token?: string;
   const headers: Record<string, string> = {};
   if (!options.form) headers["Content-Type"] = "application/json";
   if (options.token) headers.Authorization = `Bearer ${options.token}`;
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(`${apiBase()}${path}`, {
     method: options.method ?? "GET",
     headers,
     body: options.body,
   });
   if (!response.ok) throw new Error(await response.text());
   return response.json();
+}
+
+function apiBase() {
+  if (typeof window === "undefined") return API_BASE;
+  if (API_BASE === "/api") return "/api/backend";
+  if (API_BASE === "http://localhost:8010" || API_BASE === "http://127.0.0.1:8010") {
+    return "/api/backend";
+  }
+  return API_BASE;
 }

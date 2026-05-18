@@ -16,6 +16,8 @@ gcloud artifacts repositories describe "${ARTIFACT_REPOSITORY}" --location="${RE
 gsutil ls -b "gs://${DOCUMENT_BUCKET}" >/dev/null 2>&1 \
   || gsutil mb -p "${PROJECT_ID}" -l "${REGION}" -b on "gs://${DOCUMENT_BUCKET}"
 gsutil uniformbucketlevelaccess set on "gs://${DOCUMENT_BUCKET}"
+gsutil versioning set on "gs://${DOCUMENT_BUCKET}"
+gsutil lifecycle set "${SCRIPT_DIR}/gcs-lifecycle.json" "gs://${DOCUMENT_BUCKET}"
 
 for account in "${VM_SERVICE_ACCOUNT}" "${OCR_SERVICE_ACCOUNT}" "${BUILD_SERVICE_ACCOUNT}"; do
   email="$(service_account_email "${account}")"

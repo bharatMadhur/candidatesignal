@@ -2,8 +2,11 @@ import type { Metadata } from "next";
 import "./styles.css";
 
 export const metadata: Metadata = {
-  title: "candidatSignal.ai",
+  title: "candidateSignal.ai",
   description: "Resume parsing, candidate intelligence, and HR campaign matching workspace",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

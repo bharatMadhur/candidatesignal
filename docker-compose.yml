@@ -84,6 +84,7 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-resume_intel}:${POSTGRES_PASSWORD:-resume_intel}@postgres:5432/${POSTGRES_DB:-resume_intel}
       NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://localhost:8010}
+      SERVER_API_BASE: ${SERVER_API_BASE:-http://api:8010}
       BETTER_AUTH_SECRET_FILE: /run/secrets/better_auth_secret
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3001}
     secrets:

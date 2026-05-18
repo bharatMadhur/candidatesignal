@@ -112,6 +112,29 @@ CONFIRM_CREATE_RESOURCES=1 deploy/gcp/03_deploy_ocr_cloud_run.sh
 CONFIRM_CREATE_RESOURCES=1 deploy/gcp/05_create_vm.sh
 ```
 
+## Cheap Data Protection Defaults
+
+The deployment keeps the database zonal and small, but enables the minimum
+production safety net:
+
+```bash
+SQL_BACKUP_START_TIME=09:00
+SQL_BACKUP_RETENTION_COUNT=8
+SQL_PITR_RETENTION_DAYS=3
+```
+
+This enables automated Cloud SQL backups, point-in-time recovery, and deletion
+protection without upgrading to HA or a larger database tier. To enable this on
+an already-created Cloud SQL instance:
+
+```bash
+CONFIRM_CREATE_RESOURCES=1 deploy/gcp/07_enable_cloudsql_protection.sh
+```
+
+Uploaded documents are stored in the private GCS bucket with object versioning
+enabled. Noncurrent object versions are deleted after 30 days to control storage
+cost while still protecting against accidental file overwrites/deletes.
+
 ## VM App Bootstrap
 
 SSH to the VM:
@@ -157,6 +180,8 @@ docker compose -f docker-compose.gcp.yml --env-file .env exec api python scripts
 
 - `SQL_TIER=db-f1-micro`
 - `SQL_EDITION=enterprise`
+- `SQL_BACKUP_RETENTION_COUNT=8`
+- `SQL_PITR_RETENTION_DAYS=3`
 - `VM_MACHINE_TYPE=e2-medium`
 - `OCR_MIN_INSTANCES=0`
 - `OCR_MAX_INSTANCES=1`
@@ -166,7 +191,8 @@ docker compose -f docker-compose.gcp.yml --env-file .env exec api python scripts
 - No GPU.
 - No Cloud SQL HA.
 
-Before real production traffic, turn on Cloud SQL backups and consider upgrading Cloud SQL to at least `db-g1-small` or a custom 1-2 vCPU tier.
+Before heavier production traffic, consider upgrading Cloud SQL to at least
+`db-g1-small` or a custom 1-2 vCPU tier. Keep backups/PITR enabled.
 
 ## Security Notes
 

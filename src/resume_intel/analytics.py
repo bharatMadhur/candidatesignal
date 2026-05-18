@@ -11,16 +11,18 @@ def tenant_workspace_analytics(tenant_id: str, *, limit: int = 15) -> dict[str, 
     capped_limit = max(1, min(int(limit or 15), 50))
     with db() as conn:
         candidate_count = conn.execute(
-            "select count(*) as count from candidates where tenant_id=%s",
+            "select count(*) as count from candidates where tenant_id=%s and deleted_at is null",
             (tenant_id,),
         ).fetchone()
         top_skills = conn.execute(
             """
             select skill as label,
                    coalesce(category, 'Uncategorized') as category,
-                   count(distinct document_id) as candidate_count
+                   count(distinct candidate_skills.document_id) as candidate_count
             from candidate_skills
-            where tenant_id=%s
+            join candidates on candidates.document_id=candidate_skills.document_id
+              and candidates.tenant_id=candidate_skills.tenant_id
+            where candidate_skills.tenant_id=%s and candidates.deleted_at is null
             group by skill, category
             order by candidate_count desc, lower(skill)
             limit %s
@@ -30,11 +32,13 @@ def tenant_workspace_analytics(tenant_id: str, *, limit: int = 15) -> dict[str, 
         top_domains = conn.execute(
             """
             select domain as label,
-                   count(distinct document_id) as candidate_count,
+                   count(distinct candidate_domain_years.document_id) as candidate_count,
                    round(avg(years)::numeric, 2) as average_years,
                    round(max(years)::numeric, 2) as max_years
             from candidate_domain_years
-            where tenant_id=%s
+            join candidates on candidates.document_id=candidate_domain_years.document_id
+              and candidates.tenant_id=candidate_domain_years.tenant_id
+            where candidate_domain_years.tenant_id=%s and candidates.deleted_at is null
             group by domain
             order by candidate_count desc, average_years desc, domain
             limit %s
@@ -44,9 +48,11 @@ def tenant_workspace_analytics(tenant_id: str, *, limit: int = 15) -> dict[str, 
         top_companies = conn.execute(
             """
             select company as label,
-                   count(distinct document_id) as candidate_count
+                   count(distinct candidate_experience.document_id) as candidate_count
             from candidate_experience
-            where tenant_id=%s and nullif(trim(company), '') is not null
+            join candidates on candidates.document_id=candidate_experience.document_id
+              and candidates.tenant_id=candidate_experience.tenant_id
+            where candidate_experience.tenant_id=%s and candidates.deleted_at is null and nullif(trim(company), '') is not null
             group by company
             order by candidate_count desc, lower(company)
             limit %s
@@ -58,9 +64,11 @@ def tenant_workspace_analytics(tenant_id: str, *, limit: int = 15) -> dict[str, 
             select location as label,
                    country,
                    signal_type,
-                   count(distinct document_id) as candidate_count
+                   count(distinct candidate_locations.document_id) as candidate_count
             from candidate_locations
-            where tenant_id=%s and nullif(trim(location), '') is not null
+            join candidates on candidates.document_id=candidate_locations.document_id
+              and candidates.tenant_id=candidate_locations.tenant_id
+            where candidate_locations.tenant_id=%s and candidates.deleted_at is null and nullif(trim(location), '') is not null
             group by location, country, signal_type
             order by candidate_count desc, lower(location)
             limit %s
@@ -70,9 +78,11 @@ def tenant_workspace_analytics(tenant_id: str, *, limit: int = 15) -> dict[str, 
         top_countries = conn.execute(
             """
             select country as label,
-                   count(distinct document_id) as candidate_count
+                   count(distinct candidate_locations.document_id) as candidate_count
             from candidate_locations
-            where tenant_id=%s and nullif(trim(country), '') is not null
+            join candidates on candidates.document_id=candidate_locations.document_id
+              and candidates.tenant_id=candidate_locations.tenant_id
+            where candidate_locations.tenant_id=%s and candidates.deleted_at is null and nullif(trim(country), '') is not null
             group by country
             order by candidate_count desc, lower(country)
             limit %s
@@ -82,9 +92,11 @@ def tenant_workspace_analytics(tenant_id: str, *, limit: int = 15) -> dict[str, 
         education = conn.execute(
             """
             select school as label,
-                   count(distinct document_id) as candidate_count
+                   count(distinct candidate_education.document_id) as candidate_count
             from candidate_education
-            where tenant_id=%s and nullif(trim(school), '') is not null
+            join candidates on candidates.document_id=candidate_education.document_id
+              and candidates.tenant_id=candidate_education.tenant_id
+            where candidate_education.tenant_id=%s and candidates.deleted_at is null and nullif(trim(school), '') is not null
             group by school
             order by candidate_count desc, lower(school)
             limit %s
@@ -92,7 +104,7 @@ def tenant_workspace_analytics(tenant_id: str, *, limit: int = 15) -> dict[str, 
             (tenant_id, capped_limit),
         ).fetchall()
         candidate_rows = conn.execute(
-            "select record_json from candidates where tenant_id=%s",
+            "select record_json from candidates where tenant_id=%s and deleted_at is null",
             (tenant_id,),
         ).fetchall()
 

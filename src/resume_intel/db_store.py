@@ -61,6 +61,9 @@ def save_candidate_db(
               phone = excluded.phone,
               record_json = excluded.record_json,
               raw_text = excluded.raw_text,
+              deleted_at = null,
+              deleted_by_user_id = null,
+              deletion_reason = null,
               updated_at = now()
             """,
             (
@@ -87,6 +90,17 @@ def save_candidate_db(
             _replace_document_pages(conn, record, tenant_id, str(document_row["id"]))
         _replace_llm_usage_events(conn, record, tenant_id)
         _replace_normalized_candidate_tables(conn, record, tenant_id)
+        _upsert_training_data_example(conn, record, raw_text, tenant_id, "resume_parse")
+        _record_activity_event(
+            conn,
+            tenant_id,
+            record["document_id"],
+            user_id,
+            "candidate.parsed",
+            "Resume parsed",
+            record.get("original_filename") or Path(record.get("source_file") or "Uploaded CV").name,
+            {"coverage": (record.get("primary_key_coverage") or {}).get("score")},
+        )
         conn.commit()
     if reindex_search:
         upsert_candidate_search_chunks(record, raw_text, tenant_id)
@@ -96,9 +110,9 @@ def save_candidate_db(
 def load_candidate_db(document_id: str, tenant_id: str | None = None) -> dict[str, Any]:
     with db() as conn:
         if tenant_id:
-            row = conn.execute("select record_json from candidates where document_id=%s and tenant_id=%s", (document_id, tenant_id)).fetchone()
+            row = conn.execute("select record_json from candidates where document_id=%s and tenant_id=%s and deleted_at is null", (document_id, tenant_id)).fetchone()
         else:
-            row = conn.execute("select record_json from candidates where document_id=%s", (document_id,)).fetchone()
+            row = conn.execute("select record_json from candidates where document_id=%s and deleted_at is null", (document_id,)).fetchone()
         if not row:
             raise FileNotFoundError(document_id)
         return row["record_json"]
@@ -153,7 +167,7 @@ def list_candidates_db(tenant_id: str | None = None) -> list[dict[str, Any]]:
             """
             select document_id, name, email, phone, source_file, record_json, created_at, updated_at
             from candidates
-            where tenant_id=%s
+            where tenant_id=%s and deleted_at is null
             order by updated_at desc
             """,
             (tenant_id,),
@@ -257,6 +271,17 @@ def add_note_db(document_id: str, user_id: str, name: str, content: str, tenant_
             "update candidates set record_json=%s, updated_at=now() where document_id=%s and tenant_id=%s",
             (Jsonb(record), document_id, tenant_id),
         )
+        _upsert_training_data_example(conn, record, raw_text, tenant_id, "recruiter_note")
+        _record_activity_event(
+            conn,
+            tenant_id,
+            document_id,
+            user_id,
+            "note.created",
+            f"Note added: {note_name}",
+            note_content[:500],
+            {"note_id": note["id"], "note_name": note_name},
+        )
         conn.commit()
     upsert_candidate_search_chunks(record, raw_text, tenant_id)
     return record
@@ -288,6 +313,17 @@ def update_note_db(document_id: str, note_id: str, user_id: str, name: str, cont
     record["primary_key_coverage"] = primary_key_coverage(record)
     with db() as conn:
         conn.execute("update candidates set record_json=%s, updated_at=now() where document_id=%s and tenant_id=%s", (Jsonb(record), document_id, tenant_id))
+        _upsert_training_data_example(conn, record, raw_text, tenant_id, "recruiter_note")
+        _record_activity_event(
+            conn,
+            tenant_id,
+            document_id,
+            user_id,
+            "note.updated",
+            "Note updated",
+            content.strip()[:500],
+            {"note_id": note_id},
+        )
         conn.commit()
     upsert_candidate_search_chunks(record, raw_text, tenant_id)
     return record
@@ -319,19 +355,61 @@ def delete_note_db(document_id: str, note_id: str, user_id: str, tenant_id: str 
     record["primary_key_coverage"] = primary_key_coverage(record)
     with db() as conn:
         conn.execute("update candidates set record_json=%s, updated_at=now() where document_id=%s and tenant_id=%s", (Jsonb(record), document_id, tenant_id))
+        _upsert_training_data_example(conn, record, raw_text, tenant_id, "recruiter_note")
+        _record_activity_event(
+            conn,
+            tenant_id,
+            document_id,
+            user_id,
+            "note.deleted",
+            "Note deleted",
+            None,
+            {"note_id": note_id},
+        )
         conn.commit()
     upsert_candidate_search_chunks(record, raw_text, tenant_id)
     return record
+
+
+def soft_delete_candidate_db(document_id: str, tenant_id: str, user_id: str, reason: str = "removed_by_recruiter") -> dict[str, Any]:
+    with db() as conn:
+        row = conn.execute(
+            """
+            update candidates
+            set deleted_at=now(), deleted_by_user_id=%s, deletion_reason=%s, updated_at=now()
+            where document_id=%s and tenant_id=%s and deleted_at is null
+            returning document_id, name, original_filename, source_file
+            """,
+            (user_id, reason[:500], document_id, tenant_id),
+        ).fetchone()
+        if not row:
+            raise FileNotFoundError(document_id)
+        conn.execute("delete from candidate_search_chunks where tenant_id=%s and document_id=%s", (tenant_id, document_id))
+        _record_activity_event(
+            conn,
+            tenant_id,
+            document_id,
+            user_id,
+            "candidate.deleted",
+            "Candidate removed from active database",
+            reason,
+            {"original_filename": row.get("original_filename") or Path(row.get("source_file") or "").name},
+        )
+        conn.commit()
+    return {"document_id": row["document_id"], "name": row["name"], "deleted": True, "reason": reason}
 
 
 def candidate_document_metadata(document_id: str, tenant_id: str) -> dict[str, Any]:
     with db() as conn:
         row = conn.execute(
             """
-            select *
+            select candidate_documents.*
             from candidate_documents
-            where document_id=%s and tenant_id=%s
-            order by created_at desc
+            join candidates on candidates.document_id = candidate_documents.document_id
+              and candidates.tenant_id = candidate_documents.tenant_id
+            where candidate_documents.document_id=%s and candidate_documents.tenant_id=%s
+              and candidates.deleted_at is null
+            order by candidate_documents.created_at desc
             limit 1
             """,
             (document_id, tenant_id),
@@ -360,7 +438,7 @@ def candidate_document_metadata(document_id: str, tenant_id: str) -> dict[str, A
 
 def load_raw_text_db(document_id: str, tenant_id: str) -> str:
     with db() as conn:
-        row = conn.execute("select raw_text from candidates where document_id=%s and tenant_id=%s", (document_id, tenant_id)).fetchone()
+        row = conn.execute("select raw_text from candidates where document_id=%s and tenant_id=%s and deleted_at is null", (document_id, tenant_id)).fetchone()
     if not row:
         raise FileNotFoundError(document_id)
     return row["raw_text"] or ""
@@ -370,10 +448,14 @@ def list_document_pages_db(document_id: str, tenant_id: str) -> list[dict[str, A
     with db() as conn:
         rows = conn.execute(
             """
-            select page_number, extraction_method, raw_text, quality_flags, created_at
+            select document_pages.page_number, document_pages.extraction_method, document_pages.raw_text,
+                   document_pages.quality_flags, document_pages.created_at
             from document_pages
-            where document_id=%s and tenant_id=%s
-            order by page_number
+            join candidates on candidates.document_id = document_pages.document_id
+              and candidates.tenant_id = document_pages.tenant_id
+            where document_pages.document_id=%s and document_pages.tenant_id=%s
+              and candidates.deleted_at is null
+            order by document_pages.page_number
             """,
             (document_id, tenant_id),
         ).fetchall()
@@ -396,6 +478,7 @@ def rebuild_normalized_candidate_analytics(tenant_id: str | None = None) -> int:
             select tenant_id, record_json
             from candidates
             where (%s::uuid is null or tenant_id=%s)
+              and deleted_at is null
             """,
             (tenant_id, tenant_id),
         ).fetchall()
@@ -529,6 +612,19 @@ def _replace_llm_usage_events(conn: Any, record: dict[str, Any], tenant_id: str)
                 "succeeded" if not item.get("error") else "failed",
             ),
         )
+
+
+def llm_usage_cost_for_document(document_id: str, tenant_id: str) -> float:
+    with db() as conn:
+        row = conn.execute(
+            """
+            select coalesce(sum(estimated_cost), 0) as estimated_cost
+            from llm_usage_events
+            where tenant_id=%s and document_id=%s
+            """,
+            (tenant_id, document_id),
+        ).fetchone()
+    return round(float(row["estimated_cost"] or 0), 6)
 
 
 def _replace_normalized_candidate_tables(conn: Any, record: dict[str, Any], tenant_id: str) -> None:
@@ -677,7 +773,17 @@ def _safe_float(value: Any) -> float | None:
 
 def _estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     with db() as conn:
-        row = conn.execute("select input_per_million, output_per_million from model_prices where model=%s", (model,)).fetchone()
+        normalized = model.removeprefix("openai/")
+        row = conn.execute(
+            """
+            select input_per_million, output_per_million
+            from model_prices
+            where model in (%s, %s, %s)
+            order by case when model=%s then 0 when model=%s then 1 else 2 end
+            limit 1
+            """,
+            (model, normalized, f"openai/{normalized}", model, normalized),
+        ).fetchone()
     if not row:
         return 0.0
     return round((input_tokens / 1_000_000) * float(row["input_per_million"]) + (output_tokens / 1_000_000) * float(row["output_per_million"]), 6)
@@ -710,6 +816,48 @@ def _sync_notes_from_db(record: dict[str, Any], tenant_id: str, document_id: str
             (tenant_id, document_id),
         ).fetchall()
     record["notes"] = [_note_row(row) for row in rows]
+
+
+def _upsert_training_data_example(conn: Any, record: dict[str, Any], raw_text: str | None, tenant_id: str, source_type: str) -> None:
+    conn.execute(
+        """
+        insert into training_data_examples (tenant_id, document_id, source_type, input_text, expected_output, metadata, updated_at)
+        values (%s, %s, %s, %s, %s, %s, now())
+        """,
+        (
+            tenant_id,
+            record["document_id"],
+            source_type,
+            (raw_text or "")[:200000],
+            Jsonb(record),
+            Jsonb(
+                {
+                    "source_file": record.get("original_filename") or record.get("source_file"),
+                    "coverage": (record.get("primary_key_coverage") or {}).get("score"),
+                    "llm_usage_totals": record.get("llm_usage_totals") or {},
+                }
+            ),
+        ),
+    )
+
+
+def _record_activity_event(
+    conn: Any,
+    tenant_id: str,
+    document_id: str,
+    user_id: str | None,
+    event_type: str,
+    title: str,
+    body: str | None,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    conn.execute(
+        """
+        insert into candidate_activity_events (tenant_id, document_id, user_id, event_type, title, body, metadata)
+        values (%s, %s, %s, %s, %s, %s, %s)
+        """,
+        (tenant_id, document_id, user_id, event_type, title[:300], body, Jsonb(metadata or {})),
+    )
 
 
 def _note_row(row: Any) -> dict[str, Any]:

@@ -21,6 +21,101 @@
   --evidence: #f0f9ff;
 }
 
+.autoBatchName {
+  display: grid;
+  gap: 2px;
+  min-width: 220px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.autoBatchName span,
+.editableQueryAnalysis label span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.autoBatchName strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.editableQueryAnalysis {
+  display: grid;
+  gap: 10px;
+}
+
+.editableQueryAnalysis label {
+  display: grid;
+  gap: 5px;
+}
+
+.editableQueryAnalysis input,
+.campaignStageEditor textarea,
+.campaignStageEditor select {
+  width: 100%;
+}
+
+.candidateBadUploadBanner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: -8px 24px 18px;
+  padding: 12px 14px;
+  border: 1px solid #e4b36d;
+  border-radius: 10px;
+  background: #fff8ec;
+  color: var(--ink);
+}
+
+.candidateBadUploadBanner div {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+}
+
+.candidateBadUploadBanner span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.candidateCleanActions .danger,
+.plain.danger {
+  color: #9f2d20;
+}
+
+.campaignPipelineBoard {
+  grid-template-columns: repeat(10, minmax(210px, 1fr));
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.campaignStageEditor {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.campaignStageEditor label {
+  display: grid;
+  gap: 5px;
+}
+
+.campaignStageEditor label span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 * {
   box-sizing: border-box;
 }
