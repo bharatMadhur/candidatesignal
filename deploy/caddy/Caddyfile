@@ -1,6 +1,26 @@
 {$APEX_DOMAIN}, {$WWW_DOMAIN} {
 	encode zstd gzip
 
+	handle /api/auth/me {
+		uri strip_prefix /api
+		reverse_proxy api:8010
+	}
+
+	handle /api/auth/logout {
+		uri strip_prefix /api
+		reverse_proxy api:8010
+	}
+
+	handle /api/auth/bootstrap {
+		uri strip_prefix /api
+		reverse_proxy api:8010
+	}
+
+	handle /api/auth/platform/* {
+		uri strip_prefix /api
+		reverse_proxy api:8010
+	}
+
 	handle /api/auth/* {
 		reverse_proxy ui:3001
 	}
@@ -18,6 +38,26 @@
 
 {$APP_DOMAIN} {
 	encode zstd gzip
+
+	handle /api/auth/me {
+		uri strip_prefix /api
+		reverse_proxy api:8010
+	}
+
+	handle /api/auth/logout {
+		uri strip_prefix /api
+		reverse_proxy api:8010
+	}
+
+	handle /api/auth/bootstrap {
+		uri strip_prefix /api
+		reverse_proxy api:8010
+	}
+
+	handle /api/auth/platform/* {
+		uri strip_prefix /api
+		reverse_proxy api:8010
+	}
 
 	handle /api/auth/* {
 		reverse_proxy ui:3001
