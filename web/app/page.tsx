@@ -308,7 +308,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<CandidateSummary[]>([]);
   const [copilotInput, setCopilotInput] = useState("");
-  const [copilotResultLimit, setCopilotResultLimit] = useState(5);
+  const [copilotResultLimit, setCopilotResultLimit] = useState(10);
   const [copilotCampaignId, setCopilotCampaignId] = useState("");
   const [copilotThreads, setCopilotThreads] = useState<CopilotThread[]>([]);
   const [copilotThread, setCopilotThread] = useState<CopilotThread | null>(null);
@@ -708,7 +708,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
 
   async function handleReparseCandidate(documentId: string) {
     if (!token) return;
-    if (!window.confirm("Queue a full deep reparse from the stored original CV? This will run OCR/LLM parsing again and update the candidate record.")) return;
+    if (!window.confirm("Queue a full deep reparse from the stored original CV? This will re-read the resume and update the candidate profile.")) return;
     const result = await run("Queueing full candidate reparse", () => reparseCandidate(token, documentId, true));
     if (!result) return;
     setSelectedBatch(result.batch);
@@ -823,7 +823,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
 
   async function handleRunCandidateMaintenance() {
     if (!token) return;
-    if (!window.confirm("Recalculate deterministic candidate intelligence for this company? This will not call OCR, LLM parsing, or embeddings.")) return;
+    if (!window.confirm("Refresh candidate intelligence for this company? This updates derived fields from already saved profile data and does not re-read resumes.")) return;
     const result = await run("Queueing candidate intelligence maintenance", () => createCandidateRederiveJob(token, false, true));
     if (result?.job) setMaintenanceJobs((items) => [result.job, ...items.filter((item) => item.id !== result.job.id)]);
     await refresh();
@@ -1435,7 +1435,6 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
           {workspaceMode === "tenant" && view === "candidate" && candidate ? (
             <CandidateDetail
               candidate={candidate}
-              user={currentUser}
               token={token}
               reparseBatches={parseBatches}
               noteName={noteName}
@@ -1572,10 +1571,10 @@ function WorkspaceTopNav({
         <strong>candidateSignal.ai</strong>
       </div>
       <nav>
-        <NavButton icon={<Database size={28} />} label="Workspace" active={view === "dashboard"} onClick={() => setView("dashboard")} />
-        <NavButton icon={<Search size={28} />} label="Search" active={view === "copilot" || view === "requirement" || view === "matches"} onClick={() => setView("copilot")} />
-        <NavButton icon={<Rocket size={28} />} label="Campaigns" active={view === "campaigns"} onClick={() => setView("campaigns")} />
-        <NavButton icon={<Users size={28} />} label="Profiles" active={view === "database" || view === "candidate"} onClick={() => setView("database")} />
+        <NavButton icon={<Database size={18} />} label="Home" active={view === "dashboard"} onClick={() => setView("dashboard")} />
+        <NavButton icon={<Users size={18} />} label="Candidates" active={view === "database" || view === "candidate"} onClick={() => setView("database")} />
+        <NavButton icon={<Rocket size={18} />} label="Campaigns" active={view === "campaigns"} onClick={() => setView("campaigns")} />
+        <NavButton icon={<Search size={18} />} label="Copilot" active={view === "copilot" || view === "requirement" || view === "matches"} onClick={() => setView("copilot")} />
       </nav>
       <div className="topNavActions">
         <button className={view === "upload" ? "shellUploadButton active" : "shellUploadButton"} type="button" onClick={() => setView("upload")}>
@@ -1722,24 +1721,29 @@ function Dashboard({
     <section className="snapshotPage">
       <main className="snapshotMain">
         <header className="stitchHeader">
-          <h2>Recruiting Snapshot</h2>
-          <p>Here is what requires your attention today.</p>
+          <h2>Today&apos;s Recruiting Work</h2>
+          <p>Start from candidates, campaigns, and reviews that need action. Technical system details stay out of the recruiter workspace.</p>
         </header>
+        <section className="homeActionBar">
+          <button className="primary" onClick={() => setView("upload")}><UploadCloud size={18} /> Upload resumes</button>
+          <button className="secondary" onClick={() => setView("campaigns")}><Rocket size={18} /> Create campaign</button>
+          <button className="plain" onClick={() => setView("copilot")}><Search size={18} /> Search candidates</button>
+        </section>
         <div className="stitchMetricGrid">
           <button className="stitchMetricCard" onClick={() => setView("database")}>
-            <div><span>Resumes Added (24h)</span><b><FileUp size={20} /></b></div>
+            <div><span>New or Updated</span><b><FileUp size={20} /></b></div>
             <strong>{newToday || newThisWeek}</strong>
-            <em>Updated from recent resume activity</em>
+            <em>Candidate profiles from recent resume activity</em>
           </button>
           <button className="stitchMetricCard attention" onClick={() => setView("upload")}>
-            <div><span>Needs Attention</span><b><AlertTriangle size={20} /></b></div>
+            <div><span>Needs Review</span><b><AlertTriangle size={20} /></b></div>
             <strong>{incomplete + duplicateCount + deadLetterCount}</strong>
-            <em>Profiles flagged for review</em>
+            <em>Low coverage, versions, or failed uploads</em>
           </button>
           <button className="stitchMetricCard" onClick={() => setView("database")}>
-            <div><span>Ready For Review</span><b><CheckCircle2 size={20} /></b></div>
+            <div><span>Ready Candidates</span><b><CheckCircle2 size={20} /></b></div>
             <strong>{readyForReview}</strong>
-            <em>This week</em>
+            <em>Profiles with enough data for matching</em>
           </button>
         </div>
         <section className="stitchCampaignSection">
@@ -1940,12 +1944,12 @@ function RecruiterCopilot({
               onChange={(event) => setInput(event.target.value)}
               placeholder="Find senior data engineers with heavy PySpark experience, ideal locations, and evidence."
             />
-            <button disabled={busy || !input.trim()} type="submit">✦ Generate</button>
+            <button disabled={busy || !input.trim()} type="submit">Search</button>
           </form>
           <section className="stitchSignals">
             <div className="stitchSignalsHead">
               <div>
-                <h3>Top Signals</h3>
+                <h3>Candidate Results</h3>
                 <span>{latestFilteredCandidates.length || latestResultCount} Matches</span>
               </div>
               <div className="copilotControlGroup">
@@ -1962,6 +1966,8 @@ function RecruiterCopilot({
                     <option value={3}>3</option>
                     <option value={5}>5</option>
                     <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
                   </select>
                 </label>
               </div>
@@ -2010,7 +2016,7 @@ function RecruiterCopilot({
                       <button onClick={() => openCandidate(candidate.document_id)}>
                         <strong>{candidate.name ?? "Unnamed candidate"}</strong>
                         <span>{candidate.current_title ?? "No title"} {candidate.current_company ? `at ${candidate.current_company}` : ""}</span>
-                        <em>Current location: {candidate.location || "Not stated"}{candidate.countries?.length ? ` · Associated: ${candidate.countries.join(", ")}` : ""}</em>
+                        <em>{candidate.location || "Location not stated"}{candidate.countries?.length ? ` · ${candidate.countries.join(", ")}` : ""}</em>
                       </button>
                       <b>{Math.round(Number(breakdown.total_score ?? candidate.semantic_score ?? 0) * 100)}% Match</b>
                     </div>
@@ -2023,15 +2029,10 @@ function RecruiterCopilot({
                       <span>{breakdown.location_reason ? `${reason} Location: ${breakdown.location_reason}.` : reason}</span>
                     </div>
                     {evidenceItems.length ? (
-                      <details className="copilotEvidenceDetails">
-                        <summary>Evidence snippets ({evidenceItems.length})</summary>
-                        {evidenceItems.map((evidence, evidenceIndex) => (
-                          <div className="stitchEvidenceExtract" key={`${candidate.document_id}-${evidenceIndex}`}>
-                            <strong>{evidenceSourceLabel(evidence)}</strong>
-                            <p>{evidence.snippet}</p>
-                          </div>
-                        ))}
-                      </details>
+                      <div className="copilotInlineEvidence">
+                        <strong>{evidenceSourceLabel(evidenceItems[0])}</strong>
+                        <span>{evidenceItems[0].snippet}</span>
+                      </div>
                     ) : (
                       <details className="copilotEvidenceDetails mutedEvidence">
                         <summary>No exact snippet returned</summary>
@@ -2049,7 +2050,7 @@ function RecruiterCopilot({
                   </article>
                 );
               })}
-              {!latestFilteredCandidates.length ? <EmptyPanel title="No generated matches yet" body="Write what you are looking for and click Generate to search the tenant database." /> : null}
+              {!latestFilteredCandidates.length ? <EmptyPanel title="No candidate results yet" body="Write what you are looking for and click Search to review the company candidate database." /> : null}
             </div>
           </section>
         </section> : (
@@ -2289,13 +2290,13 @@ function UploadResumeView(props: {
   return (
     <section className="uploadPage stitchUploadPage">
       <header className="stitchHeader compact">
-        <h2>Bulk Resume Upload</h2>
-        <p>Securely parse and add candidates to your workspace or a specific campaign.</p>
+        <h2>Upload Resumes</h2>
+        <p>Add resumes to the database or attach them directly to a campaign. Parsing runs in the background.</p>
       </header>
       <label className="stitchDropZone">
         <FileUp size={34} />
         <strong>{props.bulkFiles.length ? `${props.bulkFiles.length} file${props.bulkFiles.length === 1 ? "" : "s"} selected` : "Drag and drop files here"}</strong>
-        <span>Supported formats: {DOCUMENT_FORMAT_LABEL}. Scanned PDFs and image resumes use local OCR.</span>
+        <span>Supported formats: {DOCUMENT_FORMAT_LABEL}. Scanned PDFs and image resumes are handled automatically.</span>
         <b>Browse Files</b>
         <input
           type="file"
@@ -2333,7 +2334,7 @@ function UploadResumeView(props: {
         </div>
         <p>
           {activeBatch
-            ? `Processing ${activeBatch.completed_count + activeBatch.failed_count} of ${activeBatch.total_files} files. Estimated LLM cost: ${formatCost(activeBatch.estimated_cost)}.`
+            ? `Processing ${activeBatch.completed_count + activeBatch.failed_count} of ${activeBatch.total_files} files. Profiles update automatically when parsing completes.`
             : "Select resumes to create a parsing batch."}
         </p>
       </section>
@@ -2343,14 +2344,14 @@ function UploadResumeView(props: {
           {activeBatch ? <button className="plain danger" onClick={() => props.cancelBatch(activeBatch.id)}>Cancel batch</button> : null}
         </div>
         <div className="jobTable">
-          <div className="jobRow uploadQueueRow header"><span>Filename</span><span>Campaign Assignment</span><span>Status</span><span>Action</span></div>
+          <div className="jobRow uploadQueueRow header"><span>Resume</span><span>Destination</span><span>Status</span><span>Action</span></div>
           {(activeBatch?.jobs ?? []).map((job) => (
             <div className="jobRow uploadQueueRow" key={job.id}>
               <span>{job.original_filename}</span>
               <span>{activeBatch?.campaign_id ? activeBatch.name : "Unassigned (Workspace)"}{activeBatch?.context_note ? <small>{activeBatch.context_note}</small> : null}</span>
               <span className="queueStatusCell">
                 <b className={`queueStatus ${job.status}`}>{domainLabel(job.status)}</b>
-                <small>{job.stage_label ?? job.stage}{job.error_message ? ` | ${job.error_message}` : ""}{job.estimated_cost ? ` | ${formatCost(job.estimated_cost)}` : ""}</small>
+                <small>{job.error_message ? job.error_message : job.stage_label ?? job.stage}</small>
               </span>
               <span className="jobActions">
                 {job.document_id ? <button className="plain small" onClick={() => props.openCandidate(job.document_id!)}>View Profile</button> : null}
@@ -2369,7 +2370,7 @@ function UploadResumeView(props: {
           {props.batches.slice(0, 4).map((batch) => (
             <button key={batch.id} onClick={() => props.selectBatch(batch)}>
               <strong>{batch.name}</strong>
-              <span>{domainLabel(batch.status)} • {batch.completed_count}/{batch.total_files} completed • {formatCost(batch.estimated_cost)}</span>
+              <span>{domainLabel(batch.status)} • {batch.completed_count}/{batch.total_files} completed</span>
             </button>
           ))}
         </section>
@@ -2466,7 +2467,7 @@ function OperationsView(props: {
         <div className="panelHead">
           <div>
             <h3>Candidate Intelligence Maintenance</h3>
-            <span>Recalculate deterministic fields, timeline totals, countries, coverage, and normalized analytics without OCR, LLM parsing, or embeddings.</span>
+            <span>Refresh timeline totals, countries, coverage, and profile analytics from already saved candidate data.</span>
           </div>
           <button className="primary small" disabled={props.busy || activeMaintenanceJobs.length > 0 || !props.canManageMaintenance} onClick={props.runCandidateMaintenance}>
             {props.canManageMaintenance ? "Run local rederive" : "Admin only"}
@@ -2479,7 +2480,7 @@ function OperationsView(props: {
                 <div>
                   <strong>{job.stage_label ?? job.stage}</strong>
                   <span>
-                    {job.status} | {job.processed_candidates}/{job.total_candidates} processed | {job.failed_candidates} failed | {job.refresh_embeddings ? "embeddings enabled" : "local only"}
+                    {job.status} | {job.processed_candidates}/{job.total_candidates} processed | {job.failed_candidates} failed
                   </span>
                   <ProgressBar value={job.progress_percent ?? 0} />
                   {job.error_message ? <p>{job.error_message}</p> : null}
@@ -2558,7 +2559,7 @@ function OperationsView(props: {
             {props.batches.length ? props.batches.slice(0, 10).map((batch) => (
               <article key={batch.id} role="button" tabIndex={0} onClick={() => props.selectBatch(batch)}>
                 <strong>{batch.name}</strong>
-                <span>{batch.status} | {batch.completed_count}/{batch.total_files} succeeded | {batch.failed_count} failed | {formatCost(batch.estimated_cost)}</span>
+                <span>{batch.status} | {batch.completed_count}/{batch.total_files} succeeded | {batch.failed_count} failed</span>
                 <ProgressBar value={batch.progress_percent ?? batchProgress(batch)} />
               </article>
             )) : <EmptyPanel title="No parse batches" body="Single and bulk uploads will create parse batches here." />}
@@ -2570,7 +2571,7 @@ function OperationsView(props: {
           <div className="panelHead">
             <div>
               <h3>{props.selectedBatch.name}</h3>
-              <span>{props.selectedBatch.status} | {props.selectedBatch.completed_count}/{props.selectedBatch.total_files} succeeded | {formatCost(props.selectedBatch.estimated_cost)}</span>
+              <span>{props.selectedBatch.status} | {props.selectedBatch.completed_count}/{props.selectedBatch.total_files} succeeded</span>
               <ProgressBar value={props.selectedBatch.progress_percent ?? batchProgress(props.selectedBatch)} />
             </div>
             <button className="plain danger" disabled={props.busy} onClick={() => props.cancelBatch(props.selectedBatch!.id)}>Cancel batch</button>
@@ -2583,7 +2584,7 @@ function OperationsView(props: {
                 <span>{job.status}</span>
                 <span>
                   <ProgressBar value={job.progress_percent ?? 0} />
-                  <small>{job.stage_label ?? job.stage}{job.error_message ? ` | ${job.error_message}` : ""}{job.estimated_cost ? ` | ${formatCost(job.estimated_cost)}` : ""}</small>
+                  <small>{job.stage_label ?? job.stage}{job.error_message ? ` | ${job.error_message}` : ""}</small>
                 </span>
                 <span className="jobActions">
                   <button className="plain small" disabled={props.busy || !["failed", "retrying", "cancelled"].includes(job.status)} onClick={() => props.retryJob(job.id)}>Retry</button>
@@ -2660,11 +2661,10 @@ function CandidateTable({ candidates, open }: { candidates: CandidateSummary[]; 
   );
 }
 
-type CandidateDetailTab = "overview" | "timeline" | "evidence" | "cv" | "notes" | "versions" | "debug";
+type CandidateDetailTab = "overview" | "timeline" | "evidence" | "cv" | "notes" | "versions";
 
 function CandidateDetail({
   candidate,
-  user,
   token,
   reparseBatches,
   noteName,
@@ -2681,7 +2681,6 @@ function CandidateDetail({
   match,
 }: {
   candidate: Candidate;
-  user: CurrentUser | null;
   token: string;
   reparseBatches: ParseBatch[];
   noteName: string;
@@ -2854,7 +2853,6 @@ function CandidateDetail({
   const verifiedSkillGroups = skillTaxonomyEntries.length
     ? skillTaxonomyEntries.map(([group, values]) => ({ group, skills: toTextList(Array.isArray(values) ? values : []) }))
     : [{ group: "Skills", skills: candidate.skills ?? [] }];
-  const canViewDebug = ["tenant_owner", "tenant_admin"].includes(user?.tenant_role ?? "") || isPlatformAdmin(user);
   const candidateTabs: Array<{ id: CandidateDetailTab; label: string }> = [
     { id: "overview", label: "Overview" },
     { id: "timeline", label: "Timeline" },
@@ -2862,7 +2860,6 @@ function CandidateDetail({
     { id: "cv", label: "Original CV" },
     { id: "notes", label: "Notes" },
     { id: "versions", label: "Versions" },
-    ...(canViewDebug ? [{ id: "debug" as CandidateDetailTab, label: "Debug" }] : []),
   ];
   const locationChips = candidateLocationChips(locationSignals, currentLocation);
   const primaryLinkedIn = toTextList(piiIntel.linkedin_urls ?? [])[0];
@@ -3257,40 +3254,6 @@ function CandidateDetail({
           </section>
         ) : null}
 
-        {canViewDebug && activeTab === "debug" ? (
-          <section className="candidateTabPanel candidateDebugPanel">
-            <article className="briefCard">
-              <h3>Debug</h3>
-              <p className="muted">Admin-only extraction, OCR, coverage, and raw JSON diagnostics.</p>
-            </article>
-            <section className="factsAiReportGrid">
-              <article className="briefCard">
-                <h3>Extraction</h3>
-                <div className="claimRows">
-                  <div><span>Method</span><strong>{candidate._metadata?.extraction_method ?? "Unknown"}</strong><em>Document extraction path</em></div>
-                  <div><span>Pages</span><strong>{candidate._metadata?.page_count ?? candidate._metadata?.pages?.length ?? "Unknown"}</strong><em>Stored page metadata</em></div>
-                  <div><span>Coverage</span><strong>{coverage ? `${Math.round(coverage.score * 100)}%` : "Unknown"}</strong><em>Current coverage calculation</em></div>
-                </div>
-              </article>
-              <article className="briefCard">
-                <h3>LLM Usage</h3>
-                <div className="claimRows inference">
-                  <div><span>Input tokens</span><strong>{candidate.llm_usage_totals?.input_tokens ?? 0}</strong><em>Debug only</em></div>
-                  <div><span>Output tokens</span><strong>{candidate.llm_usage_totals?.output_tokens ?? 0}</strong><em>Debug only</em></div>
-                  <div><span>Total tokens</span><strong>{candidate.llm_usage_totals?.total_tokens ?? 0}</strong><em>Debug only</em></div>
-                </div>
-              </article>
-            </section>
-            <details className="debugDetails">
-              <summary>Primary coverage JSON</summary>
-              <pre className="jsonPreview">{JSON.stringify(candidate.primary_key_coverage, null, 2)}</pre>
-            </details>
-            <details className="debugDetails">
-              <summary>Derived profile JSON</summary>
-              <pre className="jsonPreview">{JSON.stringify(candidate.derived, null, 2)}</pre>
-            </details>
-          </section>
-        ) : null}
       </main>
     </section>
   );
@@ -3930,6 +3893,7 @@ function CampaignsView({
   const [selectedCandidateId, setSelectedCandidateId] = useState("");
   const [autoOpenedCampaignId, setAutoOpenedCampaignId] = useState("");
   const [stageNote, setStageNote] = useState("");
+  const [activeTab, setActiveTab] = useState<"intake" | "matches" | "pipeline" | "uploads" | "activity">("pipeline");
   const campaignStages: Array<{ id: CampaignPipelineStatus; label: string }> = [
     { id: "recommended", label: "Matched" },
     { id: "shortlisted", label: "Shortlisted" },
@@ -3951,6 +3915,7 @@ function CampaignsView({
   const selectedCampaignCandidate = selectedCandidates.find((item) => item.candidate_id === selectedCandidateId) ?? selectedCandidates[0];
   const campaignProgress = campaignProgressStats(activeCampaign, selectedCandidates);
   const campaignTimeline = useMemo(() => campaignTimelineItems(activeCampaign, selectedCandidates), [activeCampaign, selectedCandidates]);
+  const rankedCandidates = useMemo(() => [...selectedCandidates].sort((left, right) => Number(right.score ?? 0) - Number(left.score ?? 0)), [selectedCandidates]);
 
   useEffect(() => {
     if (!selectedCandidates.length) {
@@ -4030,6 +3995,13 @@ function CampaignsView({
 
       {activeCampaign ? (
         <section className="panel campaignDetail">
+          <nav className="campaignWorkflowTabs" aria-label="Campaign workflow">
+            <button className={activeTab === "intake" ? "active" : ""} onClick={() => setActiveTab("intake")}>Intake</button>
+            <button className={activeTab === "matches" ? "active" : ""} onClick={() => setActiveTab("matches")}>Matches</button>
+            <button className={activeTab === "pipeline" ? "active" : ""} onClick={() => setActiveTab("pipeline")}>Pipeline</button>
+            <button className={activeTab === "uploads" ? "active" : ""} onClick={() => setActiveTab("uploads")}>Uploads</button>
+            <button className={activeTab === "activity" ? "active" : ""} onClick={() => setActiveTab("activity")}>Activity</button>
+          </nav>
           <div className="campaignHero">
             <div>
               <span className="eyebrow">Active campaign</span>
@@ -4045,30 +4017,22 @@ function CampaignsView({
               <button className="plain" onClick={uploadResumes} disabled={busy || !campaignFiles.length}>Queue {campaignFiles.length || ""} resume{campaignFiles.length === 1 ? "" : "s"}</button>
             </div>
           </div>
-          <details className="campaignMetaDetails">
-            <summary>Campaign activity</summary>
+          {activeTab === "intake" ? <section className="campaignTabPane">
             <div className="metricGrid">
               <Metric label="Candidates" value={String(selectedCandidates.length)} />
               <Metric label="Shortlisted" value={String(shortlisted)} />
               <Metric label="Rejected" value={String(rejected)} />
               <Metric label="Requirement" value={activeCampaign.requirement_status ?? "Not linked"} />
             </div>
-            {activeCampaign.upload_batches?.length ? (
-              <div className="campaignBatches">
-                <strong>Campaign upload history</strong>
-                {activeCampaign.upload_batches.map((batch) => (
-                  <article key={batch.id}>
-                    <div>
-                      <span>{batch.name}</span>
-                      <em>{batch.status} | {batch.completed_count}/{batch.total_files} completed, {batch.failed_count} failed | {formatCost(batch.estimated_cost)} | {formatDateTime(batch.updated_at)}</em>
-                    </div>
-                    <ProgressBar value={batch.total_files ? Math.round((batch.completed_count / batch.total_files) * 100) : 0} />
-                  </article>
-                ))}
-              </div>
-            ) : null}
-          </details>
-          <section className="campaignProgressPanel">
+            <article className="campaignScorecardCard">
+              <span className="eyebrow">Scorecard</span>
+              <h3>{activeCampaign.requirement_title || "Requirement profile"}</h3>
+              <p>{activeCampaign.requirement_id ? "Requirement is linked. Run matching or review the candidate pipeline." : "Add a requirement or create this campaign from a hiring brief before ranking candidates."}</p>
+              <button className="secondary" onClick={() => matchCampaign(activeCampaign.id)} disabled={busy || !activeCampaign.requirement_id}>Run matching</button>
+            </article>
+          </section> : null}
+
+          {activeTab === "intake" ? <section className="campaignProgressPanel">
             <div className="campaignProgressHead">
               <div>
                 <span className="eyebrow">Campaign Progress</span>
@@ -4086,8 +4050,67 @@ function CampaignsView({
                 </article>
               ))}
             </div>
-          </section>
-          <section className="campaignActivityTimeline">
+          </section> : null}
+
+          {activeTab === "matches" ? (
+            <section className="campaignTabPane campaignMatchesList">
+              <div className="campaignPanelHeader">
+                <div>
+                  <span className="eyebrow">Ranked candidates</span>
+                  <h3>{rankedCandidates.length} candidates in this campaign</h3>
+                </div>
+                <button className="secondary" onClick={() => matchCampaign(activeCampaign.id)} disabled={busy || !activeCampaign.requirement_id}>Refresh matches</button>
+              </div>
+              {rankedCandidates.length ? rankedCandidates.map((item, index) => (
+                <article className="campaignMatchRow" key={item.candidate_id}>
+                  <b>{index + 1}</b>
+                  <button onClick={() => openCandidate(item.candidate_id)}>
+                    <strong>{item.candidate?.name ?? item.candidate_id}</strong>
+                    <span>{item.candidate?.current_title ?? "No title"} {item.candidate?.current_company ? `at ${item.candidate.current_company}` : ""}</span>
+                  </button>
+                  <em>{Math.round((item.score ?? 0) * 100)}%</em>
+                  <p>{campaignReasonItems(item)[0] ?? item.evidence?.recommendation ?? "Open report for source-backed evidence."}</p>
+                  <div>
+                    <button className="secondary small" onClick={() => updateCandidateStatus(item.candidate_id, "shortlisted")}>Shortlist</button>
+                    <button className="plain small danger" onClick={() => updateCandidateStatus(item.candidate_id, "rejected")}>Reject</button>
+                  </div>
+                </article>
+              )) : <EmptyPanel title="No matches yet" body="Run matching to rank existing candidates, or upload resumes into this campaign." />}
+            </section>
+          ) : null}
+
+          {activeTab === "uploads" ? (
+            <section className="campaignTabPane campaignUploadsPane">
+              <div className="campaignPanelHeader">
+                <div>
+                  <span className="eyebrow">Campaign sourcing</span>
+                  <h3>Upload resumes into this campaign</h3>
+                  <p>New resumes become part of the campaign and the main candidate database.</p>
+                </div>
+                <label className="primary uploadMini">
+                  Select resumes
+                  <input type="file" multiple accept={DOCUMENT_FILE_ACCEPT} onChange={(event) => setCampaignFiles(Array.from(event.target.files ?? []))} />
+                </label>
+                <button className="secondary" onClick={uploadResumes} disabled={busy || !campaignFiles.length}>Queue {campaignFiles.length || ""} resume{campaignFiles.length === 1 ? "" : "s"}</button>
+              </div>
+              {activeCampaign.upload_batches?.length ? (
+                <div className="campaignBatches">
+                  <strong>Upload history</strong>
+                  {activeCampaign.upload_batches.map((batch) => (
+                    <article key={batch.id}>
+                      <div>
+                        <span>{batch.name}</span>
+                        <em>{domainLabel(batch.status)} | {batch.completed_count}/{batch.total_files} completed, {batch.failed_count} failed | {formatDateTime(batch.updated_at)}</em>
+                      </div>
+                      <ProgressBar value={batch.total_files ? Math.round(((batch.completed_count + batch.failed_count) / batch.total_files) * 100) : 0} />
+                    </article>
+                  ))}
+                </div>
+              ) : <EmptyPanel title="No campaign uploads yet" body="Upload resumes here when sourcing specifically for this job." />}
+            </section>
+          ) : null}
+
+          {activeTab === "activity" ? <section className="campaignActivityTimeline">
             <div className="campaignActivityHead">
               <span className="eyebrow">Campaign Timeline</span>
               <strong>{campaignTimeline.length} events</strong>
@@ -4104,8 +4127,9 @@ function CampaignsView({
                 </article>
               ))}
             </div>
-          </section>
-          {selectedCandidates.length ? (
+          </section> : null}
+
+          {activeTab === "pipeline" && selectedCandidates.length ? (
             <div className="campaignBoardShell">
               <div className="campaignBoard campaignPipelineBoard">
                 {stageBuckets.map((stage) => (
@@ -4169,7 +4193,8 @@ function CampaignsView({
                 ) : null}
               </aside>
             </div>
-          ) : <EmptyPanel title="No campaign candidates yet" body="Run matching to rank the existing database, or upload resumes directly into this campaign." />}
+          ) : null}
+          {activeTab === "pipeline" && !selectedCandidates.length ? <EmptyPanel title="No campaign candidates yet" body="Run matching to rank the existing database, or upload resumes directly into this campaign." /> : null}
         </section>
       ) : (
         <section className="panel emptyState">
@@ -4554,8 +4579,8 @@ function TeamSettings({
                 </label>
                 <label className="policySwitchRow">
                   <span>
-                    <strong>Enable External LLM Processing</strong>
-                    <small>Allow sanitized, non-PII candidate data to be processed by third-party LLM providers for advanced matching.</small>
+                    <strong>Enable Advanced AI Matching</strong>
+                    <small>Allow sanitized candidate context to be used for richer match explanations. Contact details stay governed by the PII policy.</small>
                   </span>
                   <input
                     type="checkbox"
@@ -5464,13 +5489,6 @@ function formatBytes(value?: number | null) {
   if (value < 1024) return `${value} B`;
   if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function formatCost(value?: number | null) {
-  const amount = Number(value ?? 0);
-  if (!Number.isFinite(amount) || amount <= 0) return "$0.0000";
-  if (amount < 0.0001) return "<$0.0001";
-  return `$${amount.toFixed(4)}`;
 }
 
 function shortHash(value?: string | null) {

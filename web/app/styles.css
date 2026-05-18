@@ -8545,6 +8545,310 @@ h3 {
   padding: 28px;
 }
 
+/* Recruiter workflow polish: calm hierarchy, compact lists, and less technical noise. */
+.homeActionBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 18px;
+}
+
+.homeActionBar button {
+  min-height: 38px;
+}
+
+.workspaceTopNav {
+  min-height: 62px;
+}
+
+.workspaceTopNav nav {
+  gap: 4px;
+}
+
+.workspaceTopNav .topNavLink {
+  min-height: 38px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.workspaceTopNav .topNavLink svg {
+  width: 17px;
+  height: 17px;
+}
+
+.shellUploadButton {
+  min-height: 38px;
+  padding: 8px 14px;
+}
+
+.stitchHeader h2,
+.campaignFocusTitle h2,
+.candidateCleanIdentity h2 {
+  letter-spacing: -0.04em;
+}
+
+.stitchMetricGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stitchMetricCard {
+  min-height: 132px;
+  padding: 16px;
+}
+
+.stitchMetricCard strong {
+  font-size: 34px;
+  line-height: 38px;
+}
+
+.stitchCampaignTable article {
+  padding: 14px 16px;
+}
+
+.snapshotAside {
+  position: sticky;
+  top: 82px;
+}
+
+.stitchDropZone {
+  min-height: 210px;
+}
+
+.stitchProgressCard {
+  gap: 12px;
+}
+
+.stitchProgressCard > p {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.stitchQueueTable {
+  background: #fff;
+}
+
+.uploadQueueRow {
+  grid-template-columns: minmax(220px, 1.4fr) minmax(180px, 1fr) minmax(180px, 1fr) minmax(190px, auto);
+}
+
+.singleUploadFallback,
+.stitchRecentBatches {
+  opacity: 0.92;
+}
+
+.copilotGrid {
+  grid-template-columns: minmax(0, 1fr) 320px;
+  align-items: start;
+}
+
+.copilotGuide {
+  position: sticky;
+  top: 86px;
+  max-height: calc(100vh - 104px);
+  overflow: auto;
+}
+
+.stitchSearchCommand {
+  min-height: 72px;
+  padding: 14px 16px;
+}
+
+.stitchSearchCommand input {
+  font-size: 16px;
+}
+
+.copilotResultList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  align-items: start;
+  max-height: calc(100vh - 300px);
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.copilotCompactCard {
+  min-height: auto;
+  padding: 14px;
+  gap: 10px;
+}
+
+.copilotCompactCard .stitchCandidateTop {
+  gap: 10px;
+}
+
+.copilotCompactCard .stitchCandidateTop > b {
+  font-size: 13px;
+  min-width: 70px;
+}
+
+.copilotScorePills {
+  display: none;
+}
+
+.copilotWhyShown {
+  font-size: 13px;
+  line-height: 19px;
+  margin: 0;
+}
+
+.copilotInlineEvidence {
+  display: grid;
+  gap: 4px;
+  border-left: 3px solid var(--primary-soft);
+  padding: 8px 10px;
+  background: #f7f9fa;
+  color: var(--text);
+}
+
+.copilotInlineEvidence strong {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.copilotInlineEvidence span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.stitchCandidateActions {
+  padding-top: 2px;
+}
+
+.campaignWorkflowTabs {
+  display: flex;
+  gap: 6px;
+  margin: -6px 0 18px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.campaignWorkflowTabs button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 700;
+  padding: 10px 12px;
+  white-space: nowrap;
+}
+
+.campaignWorkflowTabs button.active {
+  border-bottom-color: var(--primary);
+  color: var(--text);
+}
+
+.campaignTabPane {
+  display: grid;
+  gap: 16px;
+}
+
+.campaignScorecardCard,
+.campaignPanelHeader,
+.campaignMatchRow {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  padding: 16px;
+}
+
+.campaignPanelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.campaignPanelHeader h3,
+.campaignScorecardCard h3 {
+  margin: 4px 0;
+}
+
+.campaignMatchesList {
+  gap: 10px;
+}
+
+.campaignMatchRow {
+  display: grid;
+  grid-template-columns: 36px minmax(220px, 1.2fr) 70px minmax(240px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.campaignMatchRow > b {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.campaignMatchRow button:not(.secondary):not(.plain) {
+  display: grid;
+  gap: 3px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.campaignMatchRow p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.campaignMatchRow em {
+  color: var(--primary);
+  font-style: normal;
+  font-weight: 800;
+}
+
+.campaignUploadsPane .campaignBatches {
+  display: grid;
+  gap: 10px;
+}
+
+.campaignBoardShell {
+  grid-template-columns: minmax(0, 1fr) 340px;
+}
+
+.campaignBoard {
+  min-height: 500px;
+}
+
+.campaignCandidatePanel {
+  min-height: auto;
+}
+
+.candidateReportTabs {
+  position: sticky;
+  top: 62px;
+  z-index: 3;
+  background: rgba(248, 249, 249, 0.94);
+  backdrop-filter: blur(14px);
+}
+
+.candidateCleanLayout {
+  grid-template-columns: minmax(0, 1fr) 340px;
+}
+
+.candidateContextRail {
+  max-height: calc(100vh - 150px);
+  overflow: auto;
+}
+
 @media (max-width: 767px) {
   .appShell,
   .candidateLayout,
