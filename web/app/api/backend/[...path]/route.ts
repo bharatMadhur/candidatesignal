@@ -67,5 +67,7 @@ async function proxyToBackend(request: NextRequest, context: RouteContext) {
 }
 
 function backendBase() {
-  return (process.env.SERVER_API_BASE || process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8010").replace(/\/$/, "");
+  const configured = process.env.SERVER_API_BASE || process.env.NEXT_PUBLIC_API_BASE;
+  if (configured && /^https?:\/\//.test(configured)) return configured.replace(/\/$/, "");
+  return "http://127.0.0.1:8010";
 }
