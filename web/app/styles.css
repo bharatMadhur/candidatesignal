@@ -3612,117 +3612,6 @@ button:disabled {
   font-size: 11px;
 }
 
-.candidateNotesFlow {
-  display: grid;
-  gap: 14px;
-  margin: 14px 0 18px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #fff;
-  padding: 16px;
-  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.04);
-}
-
-.candidateNotesFlow header {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.candidateNotesFlow h3 {
-  margin: 3px 0;
-  color: var(--ink);
-  font-size: 18px;
-  letter-spacing: -0.02em;
-}
-
-.candidateNotesFlow p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 19px;
-}
-
-.candidateNotesFlowBody {
-  display: grid;
-  grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.4fr);
-  gap: 14px;
-  align-items: start;
-}
-
-.candidateNotesInlineComposer {
-  display: grid;
-  gap: 10px;
-  border: 1px solid var(--soft-line);
-  border-radius: 9px;
-  background: var(--surface-low);
-  padding: 12px;
-}
-
-.candidateNotesInlineComposer > div {
-  display: grid;
-  grid-template-columns: minmax(160px, 0.6fr) minmax(220px, 1fr) auto;
-  gap: 8px;
-  align-items: stretch;
-}
-
-.candidateNotesInlineComposer input,
-.candidateNotesInlineComposer textarea {
-  width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-  padding: 10px 12px;
-}
-
-.candidateNotesInlineComposer textarea {
-  min-height: 42px;
-  max-height: 96px;
-  resize: vertical;
-}
-
-.candidateNotesFlowList {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.candidateNotesFlowList article {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-  border: 1px solid var(--soft-line);
-  border-radius: 9px;
-  background: var(--surface-low);
-  padding: 11px;
-}
-
-.candidateNotesFlowList article > div:first-child {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.candidateNotesFlowList strong {
-  color: var(--ink);
-  font-size: 13px;
-}
-
-.candidateNotesFlowList span {
-  color: var(--muted);
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-.candidateNotesFlowList article p {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-}
-
 .polishedNotesReport {
   max-width: 900px;
 }
@@ -9766,17 +9655,6 @@ h3 {
     width: 100%;
     justify-content: flex-start;
     overflow-x: auto;
-  }
-
-  .candidateNotesFlow header,
-  .candidateNotesFlowBody {
-    grid-template-columns: 1fr;
-    display: grid;
-  }
-
-  .candidateNotesInlineComposer > div,
-  .candidateNotesFlowList {
-    grid-template-columns: 1fr;
   }
 
   .candidateCleanMainShell {
