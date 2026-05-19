@@ -8832,6 +8832,356 @@ h3 {
   min-height: auto;
 }
 
+.campaignCleanPage {
+  min-height: calc(100vh - 62px);
+  background: #f6f7f7;
+}
+
+.campaignEmptyStart {
+  display: grid;
+  place-items: center;
+  min-height: calc(100vh - 160px);
+  padding: 40px;
+}
+
+.cleanCampaignComposer {
+  width: min(680px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  padding: 24px;
+}
+
+.cleanCampaignComposer h2 {
+  margin: 6px 0;
+  font-size: 30px;
+  letter-spacing: -0.04em;
+}
+
+.cleanCampaignComposer input,
+.cleanCampaignComposer textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f8faf9;
+  padding: 12px;
+}
+
+.cleanCampaignComposer textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.campaignCleanWorkspace {
+  display: grid;
+  grid-template-columns: 276px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+  padding: 22px;
+}
+
+.campaignCleanRail {
+  position: sticky;
+  top: 84px;
+  display: grid;
+  gap: 14px;
+  max-height: calc(100vh - 108px);
+  overflow: auto;
+}
+
+.campaignRailHeader,
+.campaignRailCreate,
+.campaignCleanHeader,
+.campaignEditPanel,
+.campaignProgressMini,
+.campaignRequirementImport,
+.campaignScorecardEditor {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 36px rgba(20, 31, 36, 0.04);
+}
+
+.campaignRailHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px;
+}
+
+.campaignRailList {
+  display: grid;
+  gap: 8px;
+}
+
+.campaignRailList button {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+  padding: 12px;
+  text-align: left;
+}
+
+.campaignRailList button.active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.campaignRailList span,
+.campaignRailCreate summary {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.campaignRailCreate {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.campaignRailCreate summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.campaignRailCreate input,
+.campaignRailCreate textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f8faf9;
+  padding: 10px;
+}
+
+.campaignCleanMain {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.campaignCleanHeader {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px;
+}
+
+.campaignCleanHeader h2 {
+  margin: 4px 0 6px;
+  font-size: clamp(28px, 3vw, 44px);
+  line-height: 1.06;
+  letter-spacing: -0.05em;
+}
+
+.campaignCleanHeader p {
+  max-width: 780px;
+  margin: 0;
+  color: var(--muted);
+}
+
+.campaignCleanBadges,
+.campaignCleanActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.campaignCleanBadges span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #f8faf9;
+  color: var(--muted);
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.campaignCleanActions {
+  justify-content: flex-end;
+  margin-top: 0;
+}
+
+.campaignCleanActions button {
+  min-height: 38px;
+}
+
+.campaignEditPanel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.campaignEditGrid,
+.campaignScorecardGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.campaignEditGrid label,
+.campaignScorecardGrid label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.campaignEditGrid .wide,
+.campaignScorecardGrid .wide {
+  grid-column: 1 / -1;
+}
+
+.campaignEditGrid input,
+.campaignEditGrid select,
+.campaignEditGrid textarea,
+.campaignScorecardGrid input,
+.campaignScorecardGrid textarea,
+.campaignRequirementImportGrid textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f8faf9;
+  color: var(--text);
+  padding: 10px 12px;
+}
+
+.campaignEditGrid textarea,
+.campaignScorecardGrid textarea,
+.campaignRequirementImportGrid textarea {
+  min-height: 92px;
+  resize: vertical;
+}
+
+.campaignEditActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.campaignProgressMini {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  overflow: hidden;
+}
+
+.campaignProgressMini article {
+  display: grid;
+  gap: 3px;
+  border-right: 1px solid var(--border);
+  padding: 12px 14px;
+}
+
+.campaignProgressMini article:last-child {
+  border-right: 0;
+}
+
+.campaignProgressMini span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.campaignProgressMini strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.campaignProgressMini .done strong {
+  color: var(--success);
+}
+
+.campaignProgressMini .active strong {
+  color: var(--primary);
+}
+
+.cleanTabs {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  padding: 0 10px;
+}
+
+.campaignScorecardWorkspace {
+  display: grid;
+  gap: 14px;
+}
+
+.campaignRequirementImport,
+.campaignScorecardEditor {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+}
+
+.campaignRequirementImportGrid {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) auto minmax(320px, 1.4fr) auto;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.campaignRequirementDrop {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  overflow: hidden;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: #f8faf9;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 10px 12px;
+  font-weight: 800;
+}
+
+.campaignRequirementDrop input,
+.uploadMini input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.campaignScorecardEditor .campaignPanelHeader {
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+}
+
+.campaignScorecardGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.campaignBoardShell {
+  gap: 14px;
+}
+
+.campaignPipelineBoard {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  padding: 12px;
+}
+
+.campaignCandidatePanel,
+.campaignMatchesList,
+.campaignUploadsPane,
+.campaignActivityTimeline {
+  border-radius: 10px;
+}
+
 .candidateReportTabs {
   position: sticky;
   top: 62px;

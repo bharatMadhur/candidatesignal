@@ -494,6 +494,16 @@ export type JobCampaign = {
   requirement_id?: string | null;
   requirement_title?: string | null;
   requirement_status?: string | null;
+  requirement?: {
+    id: string;
+    title?: string | null;
+    status?: string | null;
+    original_text?: string | null;
+    extracted_requirement_json?: any;
+    final_requirement_profile?: any;
+    recruiter_answers?: Record<string, string>;
+  } | null;
+  scorecard?: CampaignScorecard;
   name: string;
   description: string;
   status: string;
@@ -514,6 +524,17 @@ export type JobCampaign = {
   matches?: RequirementMatch[];
   created_at?: string | null;
   updated_at?: string | null;
+};
+
+export type CampaignScorecard = {
+  title?: string | null;
+  location_preference?: string[];
+  seniority?: string | null;
+  min_years_experience?: number | string | null;
+  must_have_skills?: string[];
+  nice_to_have_skills?: string[];
+  dealbreakers?: string[];
+  domains?: string[];
 };
 
 export type WorkerStatus = {
@@ -726,8 +747,38 @@ export async function createCampaign(token: string, name: string, description: s
   });
 }
 
+export async function updateCampaign(token: string, id: string, payload: { name?: string; description?: string; status?: string; requirement_id?: string | null; unlink_requirement?: boolean }): Promise<JobCampaign> {
+  return request(`/campaigns/${id}`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function getCampaign(token: string, id: string): Promise<JobCampaign> {
   return request(`/campaigns/${id}`, { token });
+}
+
+export async function createCampaignRequirement(token: string, campaignId: string, text: string): Promise<JobCampaign> {
+  return request(`/campaigns/${campaignId}/requirement`, {
+    method: "POST",
+    token,
+    body: JSON.stringify({ text }),
+  });
+}
+
+export async function uploadCampaignRequirement(token: string, campaignId: string, file: File): Promise<JobCampaign> {
+  const body = new FormData();
+  body.append("file", file);
+  return request(`/campaigns/${campaignId}/requirement/upload`, { method: "POST", token, body, form: true });
+}
+
+export async function updateCampaignScorecard(token: string, campaignId: string, scorecard: CampaignScorecard): Promise<JobCampaign> {
+  return request(`/campaigns/${campaignId}/scorecard`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify(scorecard),
+  });
 }
 
 export async function matchCampaign(token: string, id: string): Promise<JobCampaign> {

@@ -7,7 +7,7 @@ from psycopg.types.json import Jsonb
 from .candidate_facts import factual_current_company, factual_current_title
 from .db import db
 from .geo import current_job_location
-from .requirements import create_requirement_from_text, match_requirement
+from .requirements import create_requirement_from_text, match_requirement, update_requirement_scorecard
 from .settings import load_settings
 
 
@@ -27,6 +27,7 @@ CAMPAIGN_PIPELINE_STATUSES = {
     "archived",
 }
 LOCKED_MATCH_STATUSES = {"shortlisted", "contacted", "replied", "screened", "submitted", "interviewing", "offer", "placed", "rejected", "archived"}
+CAMPAIGN_STATUSES = {"active", "paused", "archived", "closed", "draft"}
 
 
 def create_campaign(
@@ -67,6 +68,143 @@ def create_campaign(
     return campaign
 
 
+def update_campaign(
+    campaign_id: str,
+    tenant_id: str,
+    user_id: str,
+    *,
+    name: str | None = None,
+    description: str | None = None,
+    status: str | None = None,
+    requirement_id: str | None = None,
+    unlink_requirement: bool = False,
+) -> dict[str, Any]:
+    existing = get_campaign(campaign_id, tenant_id)
+    next_name = (name if name is not None else existing["name"]).strip()
+    if not next_name:
+        raise ValueError("campaign name is required")
+    next_description = description if description is not None else existing.get("description", "")
+    next_status = (status or existing.get("status") or "active").strip().lower()
+    if next_status not in CAMPAIGN_STATUSES:
+        raise ValueError(f"unsupported campaign status: {next_status}")
+    next_requirement_id = None if unlink_requirement else (requirement_id if requirement_id is not None else existing.get("requirement_id"))
+    if next_requirement_id:
+        _requirement_exists(next_requirement_id, tenant_id)
+
+    with db() as conn:
+        row = conn.execute(
+            """
+            update job_campaigns
+            set name=%s,
+                description=%s,
+                status=%s,
+                requirement_id=%s,
+                updated_at=now()
+            where id=%s and tenant_id=%s
+            returning id
+            """,
+            (next_name, next_description or "", next_status, next_requirement_id, campaign_id, tenant_id),
+        ).fetchone()
+        if not row:
+            raise FileNotFoundError(campaign_id)
+        conn.execute(
+            """
+            insert into audit_logs (tenant_id, user_id, action, entity_type, entity_id, metadata)
+            values (%s, %s, 'campaign.updated', 'job_campaign', %s, %s)
+            """,
+            (
+                tenant_id,
+                user_id,
+                campaign_id,
+                Jsonb({
+                    "name": next_name,
+                    "status": next_status,
+                    "requirement_id": next_requirement_id,
+                    "unlink_requirement": unlink_requirement,
+                }),
+            ),
+        )
+        conn.commit()
+    return get_campaign(campaign_id, tenant_id)
+
+
+def attach_campaign_requirement(
+    campaign_id: str,
+    tenant_id: str,
+    user_id: str,
+    requirement: dict[str, Any],
+) -> dict[str, Any]:
+    requirement_id = requirement.get("id")
+    if not requirement_id:
+        raise ValueError("requirement id is required")
+    _requirement_exists(requirement_id, tenant_id)
+    with db() as conn:
+        row = conn.execute(
+            """
+            update job_campaigns
+            set requirement_id=%s, updated_at=now()
+            where id=%s and tenant_id=%s
+            returning id
+            """,
+            (requirement_id, campaign_id, tenant_id),
+        ).fetchone()
+        if not row:
+            raise FileNotFoundError(campaign_id)
+        conn.execute(
+            """
+            insert into audit_logs (tenant_id, user_id, action, entity_type, entity_id, metadata)
+            values (%s, %s, 'campaign.requirement_attached', 'job_campaign', %s, %s)
+            """,
+            (tenant_id, user_id, campaign_id, Jsonb({"requirement_id": requirement_id, "source_type": requirement.get("source_type")})),
+        )
+        conn.commit()
+    campaign = get_campaign(campaign_id, tenant_id)
+    campaign["requirement"] = requirement
+    return campaign
+
+
+def create_campaign_requirement_from_text(
+    campaign_id: str,
+    tenant_id: str,
+    user_id: str,
+    text: str,
+) -> dict[str, Any]:
+    get_campaign(campaign_id, tenant_id)
+    if not text.strip():
+        raise ValueError("requirement text is required")
+    requirement = create_requirement_from_text(text, user_id, load_settings(), tenant_id)
+    return attach_campaign_requirement(campaign_id, tenant_id, user_id, requirement)
+
+
+def update_campaign_scorecard(
+    campaign_id: str,
+    tenant_id: str,
+    user_id: str,
+    fields: dict[str, Any],
+) -> dict[str, Any]:
+    campaign = get_campaign(campaign_id, tenant_id)
+    requirement_id = campaign.get("requirement_id")
+    if not requirement_id:
+        seed_text = (campaign.get("description") or campaign.get("name") or "Campaign requirement").strip()
+        requirement = create_requirement_from_text(seed_text, user_id, load_settings(), tenant_id)
+        campaign = attach_campaign_requirement(campaign_id, tenant_id, user_id, requirement)
+        requirement_id = campaign["requirement_id"]
+    requirement = update_requirement_scorecard(requirement_id, fields, tenant_id)
+    with db() as conn:
+        conn.execute("update job_campaigns set updated_at=now() where id=%s and tenant_id=%s", (campaign_id, tenant_id))
+        conn.execute(
+            """
+            insert into audit_logs (tenant_id, user_id, action, entity_type, entity_id, metadata)
+            values (%s, %s, 'campaign.scorecard_updated', 'job_campaign', %s, %s)
+            """,
+            (tenant_id, user_id, campaign_id, Jsonb({"requirement_id": requirement_id, "fields": sorted(fields.keys())})),
+        )
+        conn.commit()
+    campaign = get_campaign(campaign_id, tenant_id)
+    campaign["requirement"] = requirement
+    return campaign
+
+
 def list_campaigns(tenant_id: str) -> list[dict[str, Any]]:
     with db() as conn:
         rows = conn.execute(
@@ -74,6 +212,10 @@ def list_campaigns(tenant_id: str) -> list[dict[str, Any]]:
             select job_campaigns.*,
                    requirements.title as requirement_title,
                    requirements.status as requirement_status,
+                   requirements.original_text as requirement_original_text,
+                   requirements.extracted_json as requirement_extracted_json,
+                   requirements.recruiter_answers as requirement_recruiter_answers,
+                   requirements.final_profile as requirement_final_profile,
                    count(distinct campaign_candidates.id) as candidate_count,
                    count(distinct parse_batches.id) as upload_batch_count
             from job_campaigns
@@ -81,7 +223,9 @@ def list_campaigns(tenant_id: str) -> list[dict[str, Any]]:
             left join campaign_candidates on campaign_candidates.campaign_id = job_campaigns.id
             left join parse_batches on parse_batches.campaign_id = job_campaigns.id
             where job_campaigns.tenant_id=%s
-            group by job_campaigns.id, requirements.title, requirements.status
+            group by job_campaigns.id, requirements.id, requirements.title, requirements.status,
+                     requirements.original_text, requirements.extracted_json,
+                     requirements.recruiter_answers, requirements.final_profile
             order by job_campaigns.updated_at desc
             """,
             (tenant_id,),
@@ -96,6 +240,10 @@ def get_campaign(campaign_id: str, tenant_id: str) -> dict[str, Any]:
             select job_campaigns.*,
                    requirements.title as requirement_title,
                    requirements.status as requirement_status,
+                   requirements.original_text as requirement_original_text,
+                   requirements.extracted_json as requirement_extracted_json,
+                   requirements.recruiter_answers as requirement_recruiter_answers,
+                   requirements.final_profile as requirement_final_profile,
                    count(distinct campaign_candidates.id) as candidate_count,
                    count(distinct parse_batches.id) as upload_batch_count
             from job_campaigns
@@ -103,7 +251,9 @@ def get_campaign(campaign_id: str, tenant_id: str) -> dict[str, Any]:
             left join campaign_candidates on campaign_candidates.campaign_id = job_campaigns.id
             left join parse_batches on parse_batches.campaign_id = job_campaigns.id
             where job_campaigns.id=%s and job_campaigns.tenant_id=%s
-            group by job_campaigns.id, requirements.title, requirements.status
+            group by job_campaigns.id, requirements.id, requirements.title, requirements.status,
+                     requirements.original_text, requirements.extracted_json,
+                     requirements.recruiter_answers, requirements.final_profile
             """,
             (campaign_id, tenant_id),
         ).fetchone()
@@ -298,6 +448,7 @@ def _campaign_top_gaps(gaps: dict[str, Any], hard_filter_failures: list[Any]) ->
         ("Missing nice-to-have", "missing_nice_to_haves"),
         ("Missing domain", "missing_domains"),
         ("Missing location", "missing_locations"),
+        ("Location preference not found", "missing_preferred_locations"),
     ):
         gap_items.extend(f"{label}: {item}" for item in _string_items(gaps.get(key))[:3])
     years_gap = gaps.get("years_gap")
@@ -307,12 +458,26 @@ def _campaign_top_gaps(gaps: dict[str, Any], hard_filter_failures: list[Any]) ->
 
 
 def _string_items(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [item.strip() for item in re.split(r"[\n,;]+", value) if item.strip()]
     if not isinstance(value, list):
         return []
     return [str(item).strip() for item in value if str(item).strip()]
 
 
 def _campaign_row(row: dict[str, Any]) -> dict[str, Any]:
+    requirement_profile = row.get("requirement_final_profile") or row.get("requirement_extracted_json") or {}
+    requirement = None
+    if row.get("requirement_id"):
+        requirement = {
+            "id": str(row["requirement_id"]),
+            "title": row.get("requirement_title"),
+            "status": row.get("requirement_status"),
+            "original_text": row.get("requirement_original_text"),
+            "extracted_requirement_json": row.get("requirement_extracted_json") or {},
+            "final_requirement_profile": row.get("requirement_final_profile"),
+            "recruiter_answers": row.get("requirement_recruiter_answers") or {},
+        }
     return {
         "id": str(row["id"]),
         "tenant_id": str(row["tenant_id"]),
@@ -320,6 +485,8 @@ def _campaign_row(row: dict[str, Any]) -> dict[str, Any]:
         "requirement_id": str(row["requirement_id"]) if row.get("requirement_id") else None,
         "requirement_title": row.get("requirement_title"),
         "requirement_status": row.get("requirement_status"),
+        "requirement": requirement,
+        "scorecard": _scorecard_from_profile(requirement_profile),
         "name": row["name"],
         "description": row["description"],
         "status": row["status"],
@@ -328,6 +495,36 @@ def _campaign_row(row: dict[str, Any]) -> dict[str, Any]:
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
         "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
     }
+
+
+def _scorecard_from_profile(profile: dict[str, Any]) -> dict[str, Any]:
+    profile = profile or {}
+    preferred_locations = (
+        _string_items(profile.get("preferred_locations"))
+        or _string_items(profile.get("location_preference"))
+        or _string_items(profile.get("required_locations"))
+        or _string_items(profile.get("required_countries"))
+    )
+    return {
+        "title": profile.get("title"),
+        "location_preference": preferred_locations,
+        "seniority": profile.get("seniority"),
+        "min_years_experience": profile.get("min_years_experience"),
+        "must_have_skills": _string_items(profile.get("must_have_skills")),
+        "nice_to_have_skills": _string_items(profile.get("nice_to_have_skills")),
+        "dealbreakers": _string_items(profile.get("dealbreakers")),
+        "domains": _string_items(profile.get("domains")),
+    }
+
+
+def _requirement_exists(requirement_id: str, tenant_id: str) -> None:
+    with db() as conn:
+        row = conn.execute(
+            "select id from requirements where id=%s and tenant_id=%s",
+            (requirement_id, tenant_id),
+        ).fetchone()
+    if not row:
+        raise FileNotFoundError(requirement_id)
 
 
 def _campaign_candidate_row(row: dict[str, Any]) -> dict[str, Any]:

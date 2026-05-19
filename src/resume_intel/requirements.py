@@ -100,6 +100,72 @@ def clarify_requirement(requirement_id: str, answers: dict[str, str], tenant_id:
     return _requirement_row(row)
 
 
+def update_requirement_scorecard(
+    requirement_id: str,
+    fields: dict[str, Any],
+    tenant_id: str | None = None,
+) -> dict[str, Any]:
+    req = get_requirement(requirement_id, tenant_id)
+    profile = dict(req.get("final_requirement_profile") or req.get("extracted_requirement_json") or {})
+    answers = dict(req.get("recruiter_answers") or {})
+
+    for profile_key, field_key in (
+        ("must_have_skills", "must_have_skills"),
+        ("nice_to_have_skills", "nice_to_have_skills"),
+        ("dealbreakers", "dealbreakers"),
+        ("domains", "domains"),
+    ):
+        if field_key in fields:
+            profile[profile_key] = _field_list(fields.get(field_key))
+            answers[f"__profile.{profile_key}"] = ", ".join(profile[profile_key])
+
+    if "location_preference" in fields or "preferred_locations" in fields:
+        locations = _field_list(fields.get("location_preference", fields.get("preferred_locations")))
+        profile["preferred_locations"] = locations
+        profile["location_preference"] = locations
+        # Campaign scorecards treat location as a ranking preference unless the
+        # recruiter explicitly uses the standalone requirement workflow.
+        profile["required_locations"] = []
+        profile["required_countries"] = []
+        answers["__profile.preferred_locations"] = ", ".join(locations)
+
+    if "min_years_experience" in fields:
+        years = _field_number(fields.get("min_years_experience"))
+        profile["min_years_experience"] = years
+        answers["__profile.min_years_experience"] = "" if years is None else str(years)
+
+    if "seniority" in fields:
+        seniority = str(fields.get("seniority") or "").strip()
+        profile["seniority"] = seniority or None
+        answers["__profile.seniority"] = seniority
+
+    title = str(fields.get("title") or profile.get("title") or req.get("title") or "").strip() or None
+    if title:
+        profile["title"] = title
+
+    with db() as conn:
+        row = conn.execute(
+            """
+            update requirements
+            set title=coalesce(%s, title),
+                recruiter_answers=%s,
+                final_profile=%s,
+                status='finalized',
+                updated_at=now()
+            where id=%s and (%s::uuid is null or tenant_id=%s)
+            returning id, title, source_type, original_text, extracted_json, clarification_questions,
+                      recruiter_answers, final_profile, status, tenant_id, created_at, updated_at
+            """,
+            (title, Jsonb(answers), Jsonb(profile), requirement_id, tenant_id, tenant_id),
+        ).fetchone()
+        conn.commit()
+    if not row:
+        raise FileNotFoundError(requirement_id)
+    requirement = _requirement_row(row)
+    upsert_requirement_embedding(requirement["id"], _requirement_text(profile, requirement["original_text"]), tenant_id)
+    return requirement
+
+
 def _apply_structured_answers(profile: dict[str, Any], answers: dict[str, str]) -> None:
     list_fields = {
         "__profile.must_have_skills": "must_have_skills",
@@ -145,6 +211,25 @@ def _answer_number(value: str | None) -> float | int | None:
         return None
     number = float(match.group(0))
     return int(number) if number.is_integer() else number
+
+
+def _field_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        raw_items = value
+    else:
+        raw_items = re.split(r"[\n,;]+", str(value))
+    return [str(item).strip() for item in raw_items if str(item).strip()]
+
+
+def _field_number(value: Any) -> float | int | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, (int, float)):
+        number = float(value)
+        return int(number) if number.is_integer() else number
+    return _answer_number(str(value))
 
 
 def finalize_requirement(requirement_id: str, answers: dict[str, str], tenant_id: str | None = None) -> dict[str, Any]:
@@ -366,9 +451,13 @@ def score_candidate(profile: dict[str, Any], candidate: dict[str, Any], raw_text
     domain_hits = [domain for domain in required_domains if domain in candidate_domains or any(alias in candidate_text for alias in DOMAIN_ALIASES.get(domain, []))]
     domain_score = len(domain_hits) / len(required_domains) if required_domains else 1.0
 
-    required_locations = [str(item) for item in [*profile.get("required_locations", []), *profile.get("required_countries", [])] if item]
+    required_locations = [str(item) for item in [*_field_list(profile.get("required_locations")), *_field_list(profile.get("required_countries"))] if item]
+    preferred_locations = [str(item) for item in [*_field_list(profile.get("preferred_locations")), *_field_list(profile.get("location_preference"))] if item]
+    scored_locations = [*required_locations, *preferred_locations]
     location_hits = [item for item in required_locations if _location_hit(item, candidate_text)]
-    location_score = len(location_hits) / len(required_locations) if required_locations else 1.0
+    preferred_location_hits = [item for item in preferred_locations if _location_hit(item, candidate_text)]
+    all_location_hits = [*location_hits, *preferred_location_hits]
+    location_score = len(all_location_hits) / len(scored_locations) if scored_locations else 1.0
 
     total = (must_score * 0.38) + (nice_score * 0.14) + (years_score * 0.18) + (domain_score * 0.2) + (location_score * 0.1)
     gaps = {
@@ -377,6 +466,7 @@ def score_candidate(profile: dict[str, Any], candidate: dict[str, Any], raw_text
         "years_gap": max(0, float(min_years or 0) - float(candidate_years)),
         "missing_domains": [item for item in required_domains if item not in domain_hits],
         "missing_locations": [item for item in required_locations if item not in location_hits],
+        "missing_preferred_locations": [item for item in preferred_locations if item not in preferred_location_hits],
     }
     hard_filter_failures = _hard_filter_failures(profile, gaps, candidate_text, candidate_years, min_years)
     hard_filter_pass = not hard_filter_failures
@@ -386,7 +476,8 @@ def score_candidate(profile: dict[str, Any], candidate: dict[str, Any], raw_text
         "must_have_hits": must_hits,
         "nice_to_have_hits": nice_hits,
         "domain_hits": domain_hits,
-        "location_hits": location_hits,
+        "location_hits": all_location_hits,
+        "preferred_location_hits": preferred_location_hits,
         "candidate_years": candidate_years,
         "hard_filter_failures": hard_filter_failures,
         "notes_relevance": _notes_relevance(profile, candidate),
@@ -834,6 +925,8 @@ def _requirement_text(profile: dict[str, Any], original_text: str) -> str:
             " ".join(profile.get("must_have_skills") or []),
             " ".join(profile.get("nice_to_have_skills") or []),
             " ".join(profile.get("domains") or []),
+            " ".join(_field_list(profile.get("preferred_locations"))),
+            " ".join(_field_list(profile.get("location_preference"))),
             " ".join(profile.get("responsibilities") or []),
             " ".join(profile.get("dealbreakers") or []),
         ]

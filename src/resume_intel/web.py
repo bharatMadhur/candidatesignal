@@ -25,7 +25,17 @@ from psycopg.types.json import Jsonb
 
 from .analytics import tenant_workspace_analytics
 from .auth import bootstrap_platform_admin, clear_platform_tenant_workspace, current_user, login, logout, security, select_platform_tenant_workspace
-from .campaigns import create_campaign, get_campaign, list_campaigns, run_campaign_match, set_campaign_candidate_status
+from .campaigns import (
+    attach_campaign_requirement,
+    create_campaign,
+    create_campaign_requirement_from_text,
+    get_campaign,
+    list_campaigns,
+    run_campaign_match,
+    set_campaign_candidate_status,
+    update_campaign,
+    update_campaign_scorecard,
+)
 from .copilot_synthesis import synthesize_copilot_answer
 from .copilot_threads import append_copilot_message, archive_copilot_thread, create_copilot_thread, get_copilot_thread, list_copilot_threads
 from .db import applied_migrations, db, migrate
@@ -219,6 +229,29 @@ class CampaignRequest(BaseModel):
     name: str
     description: str = ""
     requirement_id: str | None = None
+
+
+class CampaignUpdateRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    status: str | None = None
+    requirement_id: str | None = None
+    unlink_requirement: bool = False
+
+
+class CampaignRequirementTextRequest(BaseModel):
+    text: str
+
+
+class CampaignScorecardRequest(BaseModel):
+    title: str | None = None
+    location_preference: list[str] = Field(default_factory=list)
+    seniority: str | None = None
+    min_years_experience: float | int | None = None
+    must_have_skills: list[str] = Field(default_factory=list)
+    nice_to_have_skills: list[str] = Field(default_factory=list)
+    dealbreakers: list[str] = Field(default_factory=list)
+    domains: list[str] = Field(default_factory=list)
 
 
 class CampaignCandidateStatusRequest(BaseModel):
@@ -894,6 +927,29 @@ def create_job_campaign(request: CampaignRequest, user: dict = Depends(current_u
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@app.patch("/campaigns/{campaign_id}")
+def update_job_campaign(campaign_id: str, request: CampaignUpdateRequest, user: dict = Depends(current_user)) -> dict:
+    require_tenant_write(user)
+    try:
+        campaign = update_campaign(
+            campaign_id,
+            _tenant_id(user),
+            user["id"],
+            name=request.name,
+            description=request.description,
+            status=request.status,
+            requirement_id=request.requirement_id,
+            unlink_requirement=request.unlink_requirement,
+        )
+        if not _can_view_pii(user):
+            campaign = _redact_campaign_pii(campaign)
+        return campaign
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="campaign or requirement not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.get("/campaigns/{campaign_id}")
 def job_campaign(campaign_id: str, user: dict = Depends(current_user)) -> dict:
     try:
@@ -903,6 +959,58 @@ def job_campaign(campaign_id: str, user: dict = Depends(current_user)) -> dict:
         return campaign
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="campaign not found") from exc
+
+
+@app.post("/campaigns/{campaign_id}/requirement")
+def create_campaign_requirement(campaign_id: str, request: CampaignRequirementTextRequest, user: dict = Depends(current_user)) -> dict:
+    require_tenant_write(user)
+    try:
+        campaign = create_campaign_requirement_from_text(campaign_id, _tenant_id(user), user["id"], request.text)
+        if not _can_view_pii(user):
+            campaign = _redact_campaign_pii(campaign)
+        return campaign
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="campaign not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/campaigns/{campaign_id}/requirement/upload")
+def upload_campaign_requirement(campaign_id: str, file: UploadFile = File(...), user: dict = Depends(current_user)) -> dict:
+    require_tenant_write(user)
+    tenant_id = _tenant_id(user)
+    try:
+        get_campaign(campaign_id, tenant_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="campaign not found") from exc
+    input_dir, _, work_dir = _tenant_dirs(tenant_id)
+    input_dir.mkdir(parents=True, exist_ok=True)
+    suffix = Path(file.filename or "requirement.pdf").suffix.lower()
+    if suffix not in SUPPORTED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="unsupported file type")
+    safe_name = Path(file.filename or f"campaign-requirement{suffix}").name
+    target = input_dir / f"campaign-requirement-{uuid.uuid4().hex[:10]}-{safe_name}"
+    with target.open("wb") as handle:
+        shutil.copyfileobj(file.file, handle)
+    requirement = create_requirement_from_file(target, user["id"], load_settings(), work_dir, tenant_id)
+    campaign = attach_campaign_requirement(campaign_id, tenant_id, user["id"], requirement)
+    if not _can_view_pii(user):
+        campaign = _redact_campaign_pii(campaign)
+    return campaign
+
+
+@app.patch("/campaigns/{campaign_id}/scorecard")
+def save_campaign_scorecard(campaign_id: str, request: CampaignScorecardRequest, user: dict = Depends(current_user)) -> dict:
+    require_tenant_write(user)
+    try:
+        campaign = update_campaign_scorecard(campaign_id, _tenant_id(user), user["id"], request.model_dump())
+        if not _can_view_pii(user):
+            campaign = _redact_campaign_pii(campaign)
+        return campaign
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="campaign not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/campaigns/{campaign_id}/match")

@@ -23,6 +23,7 @@ import {
 import {
   Candidate,
   CampaignPipelineStatus,
+  CampaignScorecard,
   CandidateMaintenanceJob,
   CandidateSummary,
   AuditEvent,
@@ -60,6 +61,7 @@ import {
   chatCopilot,
   archiveCopilotThread,
   createCampaign,
+  createCampaignRequirement,
   createCandidateRederiveJob,
   createTenant,
   createRequirement,
@@ -112,7 +114,10 @@ import {
   uploadResume,
   uploadCampaignResumes,
   updateCampaignCandidateStatus,
+  updateCampaign,
+  updateCampaignScorecard,
   updateGovernancePolicy,
+  uploadCampaignRequirement,
   deleteNote,
   disableTenant,
   disableMember,
@@ -923,6 +928,38 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     setView("campaigns");
   }
 
+  async function handleUpdateCampaign(id: string, payload: { name?: string; description?: string; status?: string; requirement_id?: string | null; unlink_requirement?: boolean }) {
+    if (!id || !token) return;
+    const result = await run("Saving campaign", () => updateCampaign(token, id, payload));
+    if (!result) return;
+    setCampaign(result);
+    setCampaigns((items) => items.map((item) => item.id === result.id ? result : item));
+  }
+
+  async function handleCreateCampaignRequirement(id: string, text: string) {
+    if (!id || !token || !text.trim()) return;
+    const result = await run("Extracting campaign requirement", () => createCampaignRequirement(token, id, text));
+    if (!result) return;
+    setCampaign(result);
+    setCampaigns((items) => items.map((item) => item.id === result.id ? result : item));
+  }
+
+  async function handleUploadCampaignRequirement(id: string, file: File) {
+    if (!id || !token) return;
+    const result = await run("Uploading campaign requirement", () => uploadCampaignRequirement(token, id, file));
+    if (!result) return;
+    setCampaign(result);
+    setCampaigns((items) => items.map((item) => item.id === result.id ? result : item));
+  }
+
+  async function handleSaveCampaignScorecard(id: string, scorecard: CampaignScorecard) {
+    if (!id || !token) return;
+    const result = await run("Saving campaign scorecard", () => updateCampaignScorecard(token, id, scorecard));
+    if (!result) return;
+    setCampaign(result);
+    setCampaigns((items) => items.map((item) => item.id === result.id ? result : item));
+  }
+
   async function handleMatchCampaign(id = campaign?.id) {
     if (!id || !token) return;
     const result = await run("Ranking campaign candidates", () => matchCampaign(token, id));
@@ -1474,6 +1511,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
           {workspaceMode === "tenant" && view === "campaigns" ? (
             <CampaignsView
               campaigns={campaigns}
+              requirements={requirements}
               campaign={campaign}
               campaignName={campaignName}
               setCampaignName={setCampaignName}
@@ -1483,6 +1521,10 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               setCampaignFiles={setCampaignFiles}
               createCampaign={handleCreateCampaign}
               openCampaign={handleOpenCampaign}
+              updateCampaign={handleUpdateCampaign}
+              createRequirement={handleCreateCampaignRequirement}
+              uploadRequirement={handleUploadCampaignRequirement}
+              saveScorecard={handleSaveCampaignScorecard}
               matchCampaign={handleMatchCampaign}
               uploadResumes={handleUploadCampaignResumes}
               updateCandidateStatus={handleCampaignCandidateStatus}
@@ -3857,6 +3899,7 @@ function MatchResults({
 
 function CampaignsView({
   campaigns,
+  requirements,
   campaign,
   campaignName,
   setCampaignName,
@@ -3866,6 +3909,10 @@ function CampaignsView({
   setCampaignFiles,
   createCampaign,
   openCampaign,
+  updateCampaign,
+  createRequirement,
+  uploadRequirement,
+  saveScorecard,
   matchCampaign,
   uploadResumes,
   updateCandidateStatus,
@@ -3873,6 +3920,7 @@ function CampaignsView({
   busy,
 }: {
   campaigns: JobCampaign[];
+  requirements: Requirement[];
   campaign: JobCampaign | null;
   campaignName: string;
   setCampaignName: (value: string) => void;
@@ -3882,6 +3930,10 @@ function CampaignsView({
   setCampaignFiles: (files: File[]) => void;
   createCampaign: () => void;
   openCampaign: (id: string) => void;
+  updateCampaign: (id: string, payload: { name?: string; description?: string; status?: string; requirement_id?: string | null; unlink_requirement?: boolean }) => void;
+  createRequirement: (id: string, text: string) => void;
+  uploadRequirement: (id: string, file: File) => void;
+  saveScorecard: (id: string, scorecard: CampaignScorecard) => void;
   matchCampaign: (id?: string) => void;
   uploadResumes: () => void;
   updateCandidateStatus: (candidateId: string, status: CampaignPipelineStatus, note?: string) => void;
@@ -3893,7 +3945,12 @@ function CampaignsView({
   const [selectedCandidateId, setSelectedCandidateId] = useState("");
   const [autoOpenedCampaignId, setAutoOpenedCampaignId] = useState("");
   const [stageNote, setStageNote] = useState("");
-  const [activeTab, setActiveTab] = useState<"intake" | "matches" | "pipeline" | "uploads" | "activity">("pipeline");
+  const [activeTab, setActiveTab] = useState<"pipeline" | "matches" | "scorecard" | "uploads" | "activity">("pipeline");
+  const [editingCampaign, setEditingCampaign] = useState(false);
+  const [editForm, setEditForm] = useState({ name: "", description: "", status: "active", requirement_id: "" });
+  const [scorecardForm, setScorecardForm] = useState<CampaignScorecardForm>(emptyCampaignScorecardForm());
+  const [requirementDraft, setRequirementDraft] = useState("");
+  const [campaignRequirementFile, setCampaignRequirementFile] = useState<File | null>(null);
   const campaignStages: Array<{ id: CampaignPipelineStatus; label: string }> = [
     { id: "recommended", label: "Matched" },
     { id: "shortlisted", label: "Shortlisted" },
@@ -3916,6 +3973,7 @@ function CampaignsView({
   const campaignProgress = campaignProgressStats(activeCampaign, selectedCandidates);
   const campaignTimeline = useMemo(() => campaignTimelineItems(activeCampaign, selectedCandidates), [activeCampaign, selectedCandidates]);
   const rankedCandidates = useMemo(() => [...selectedCandidates].sort((left, right) => Number(right.score ?? 0) - Number(left.score ?? 0)), [selectedCandidates]);
+  const scorecardCompleteness = campaignScorecardCompleteness(scorecardForm);
 
   useEffect(() => {
     if (!selectedCandidates.length) {
@@ -3935,122 +3993,154 @@ function CampaignsView({
     }
   }, [autoOpenedCampaignId, campaign, campaigns, openCampaign]);
 
+  useEffect(() => {
+    if (!activeCampaign) return;
+    setEditForm({
+      name: activeCampaign.name,
+      description: activeCampaign.description ?? "",
+      status: activeCampaign.status ?? "active",
+      requirement_id: activeCampaign.requirement_id ?? "",
+    });
+    setScorecardForm(campaignScorecardForm(activeCampaign));
+    setRequirementDraft(activeCampaign.requirement?.original_text ?? activeCampaign.description ?? "");
+  }, [activeCampaign?.id, activeCampaign?.updated_at, activeCampaign?.requirement_id]);
+
+  async function saveCampaignDetails() {
+    if (!activeCampaign) return;
+    await updateCampaign(activeCampaign.id, {
+      name: editForm.name,
+      description: editForm.description,
+      status: editForm.status,
+      requirement_id: editForm.requirement_id || null,
+      unlink_requirement: !editForm.requirement_id,
+    });
+    setEditingCampaign(false);
+  }
+
+  async function uploadCurrentRequirement() {
+    if (!activeCampaign || !campaignRequirementFile) return;
+    await uploadRequirement(activeCampaign.id, campaignRequirementFile);
+    setCampaignRequirementFile(null);
+    setActiveTab("scorecard");
+  }
+
+  async function extractRequirementDraft() {
+    if (!activeCampaign || !requirementDraft.trim()) return;
+    await createRequirement(activeCampaign.id, requirementDraft);
+    setActiveTab("scorecard");
+  }
+
+  async function saveCurrentScorecard() {
+    if (!activeCampaign) return;
+    await saveScorecard(activeCampaign.id, campaignScorecardPayload(scorecardForm, activeCampaign));
+  }
+
   return (
-    <section className="campaignPage">
-      <div className={activeCampaign ? "pageTitle campaignFocusTitle" : "pageTitle"}>
-        <div>
-          {activeCampaign ? <span className="eyebrow">Active campaign <i /></span> : null}
-          <h2>{activeCampaign?.name ?? "Job Campaigns"}</h2>
-          <p>{activeCampaign?.description || "Start a hiring campaign, rank existing candidates, and upload new resumes into the same campaign and database."}</p>
+    <section className="campaignPage campaignCleanPage">
+      {!activeCampaign ? (
+        <div className="campaignEmptyStart">
+          <section className="panel campaignComposer cleanCampaignComposer">
+            <span className="eyebrow">New campaign</span>
+            <h2>Create a hiring campaign</h2>
+            <p>Start with a campaign name and hiring brief. You can upload or paste a full requirement after creation.</p>
+            <input value={campaignName} onChange={(event) => setCampaignName(event.target.value)} placeholder="Campaign name" />
+            <textarea value={campaignDescription} onChange={(event) => setCampaignDescription(event.target.value)} placeholder="Optional hiring brief or context" />
+            <button className="primary" onClick={createCampaign} disabled={busy || !campaignName.trim()}>Create campaign</button>
+          </section>
         </div>
-        {activeCampaign ? (
-          <div className="campaignHeaderActions">
-            <button className="secondary" onClick={() => activeCampaign && matchCampaign(activeCampaign.id)} disabled={busy || !activeCampaign.requirement_id}>Find Matches</button>
-            <label className="primary uploadMini">
-              Source More
-              <input type="file" multiple accept={DOCUMENT_FILE_ACCEPT} onChange={(event) => setCampaignFiles(Array.from(event.target.files ?? []))} />
-            </label>
-            <button className="plain" onClick={uploadResumes} disabled={busy || !campaignFiles.length}>Queue {campaignFiles.length || ""} resume{campaignFiles.length === 1 ? "" : "s"}</button>
-          </div>
-        ) : <span>{campaigns.length} active workflows</span>}
-      </div>
-      {!activeCampaign ? <div className="campaignGrid">
-        <section className="panel campaignComposer">
-          <div className="panelHead"><h3>Start Campaign</h3><span>Requirement + matching workflow</span></div>
-          <input value={campaignName} onChange={(event) => setCampaignName(event.target.value)} placeholder="Campaign name" />
-          <textarea value={campaignDescription} onChange={(event) => setCampaignDescription(event.target.value)} placeholder="Paste role description, hiring-manager note, or portfolio requirement..." />
-          <button className="primary" onClick={createCampaign} disabled={busy || !campaignName.trim()}>Create campaign profile</button>
-          <p className="muted">Creating a campaign also creates a requirement profile when description text is provided.</p>
-        </section>
-        <section className="panel campaignList">
-          <div className="panelHead"><h3>Campaign Queue</h3><span>{campaigns.length}</span></div>
-          {campaigns.map((item) => (
-            <button className={campaign?.id === item.id ? "historyItem active" : "historyItem"} key={item.id} onClick={() => openCampaign(item.id)}>
-              <strong>{item.name}</strong>
-              <span>{item.status} | {item.candidate_count} candidates | {item.upload_batch_count} upload batches</span>
-            </button>
-          ))}
-          {!campaigns.length ? <EmptyPanel title="No campaigns yet" body="Create a job campaign from a requirement or hiring-manager brief." /> : null}
-        </section>
-      </div> : null}
-      {activeCampaign ? (
-        <section className="campaignSwitcher">
-          <div>
-            {campaigns.slice(0, 6).map((item) => (
-              <button className={activeCampaign.id === item.id ? "active" : ""} key={item.id} onClick={() => openCampaign(item.id)}>
-                {item.name}
-              </button>
-            ))}
-          </div>
-          <details>
-            <summary>New campaign</summary>
-            <div className="campaignQuickCreate">
+      ) : (
+        <div className="campaignCleanWorkspace">
+          <aside className="campaignCleanRail">
+            <div className="campaignRailHeader">
+              <span className="eyebrow">Campaigns</span>
+              <strong>{campaigns.length}</strong>
+            </div>
+            <div className="campaignRailList">
+              {campaigns.map((item) => (
+                <button className={activeCampaign.id === item.id ? "active" : ""} key={item.id} onClick={() => openCampaign(item.id)}>
+                  <strong>{item.name}</strong>
+                  <span>{domainLabel(item.status)} | {item.candidate_count} candidates</span>
+                </button>
+              ))}
+            </div>
+            <details className="campaignRailCreate">
+              <summary>New campaign</summary>
               <input value={campaignName} onChange={(event) => setCampaignName(event.target.value)} placeholder="Campaign name" />
-              <textarea value={campaignDescription} onChange={(event) => setCampaignDescription(event.target.value)} placeholder="Paste requirement or hiring-manager note..." />
-              <button className="primary" onClick={createCampaign} disabled={busy || !campaignName.trim()}>Create campaign</button>
-            </div>
-          </details>
-        </section>
-      ) : null}
+              <textarea value={campaignDescription} onChange={(event) => setCampaignDescription(event.target.value)} placeholder="Optional hiring brief" />
+              <button className="primary small" onClick={createCampaign} disabled={busy || !campaignName.trim()}>Create</button>
+            </details>
+          </aside>
 
-      {activeCampaign ? (
-        <section className="panel campaignDetail">
-          <nav className="campaignWorkflowTabs" aria-label="Campaign workflow">
-            <button className={activeTab === "intake" ? "active" : ""} onClick={() => setActiveTab("intake")}>Intake</button>
-            <button className={activeTab === "matches" ? "active" : ""} onClick={() => setActiveTab("matches")}>Matches</button>
-            <button className={activeTab === "pipeline" ? "active" : ""} onClick={() => setActiveTab("pipeline")}>Pipeline</button>
-            <button className={activeTab === "uploads" ? "active" : ""} onClick={() => setActiveTab("uploads")}>Uploads</button>
-            <button className={activeTab === "activity" ? "active" : ""} onClick={() => setActiveTab("activity")}>Activity</button>
-          </nav>
-          <div className="campaignHero">
-            <div>
-              <span className="eyebrow">Active campaign</span>
-              <h3>{activeCampaign.name}</h3>
-              <p>{activeCampaign.description || "No description stored."}</p>
-            </div>
-            <div className="campaignActions">
-              <button className="secondary" onClick={() => matchCampaign(activeCampaign.id)} disabled={busy || !activeCampaign.requirement_id}>Find best-fit candidates</button>
-              <label className="plain uploadMini">
-                Add resumes
-                <input type="file" multiple accept={DOCUMENT_FILE_ACCEPT} onChange={(event) => setCampaignFiles(Array.from(event.target.files ?? []))} />
-              </label>
-              <button className="plain" onClick={uploadResumes} disabled={busy || !campaignFiles.length}>Queue {campaignFiles.length || ""} resume{campaignFiles.length === 1 ? "" : "s"}</button>
-            </div>
-          </div>
-          {activeTab === "intake" ? <section className="campaignTabPane">
-            <div className="metricGrid">
-              <Metric label="Candidates" value={String(selectedCandidates.length)} />
-              <Metric label="Shortlisted" value={String(shortlisted)} />
-              <Metric label="Rejected" value={String(rejected)} />
-              <Metric label="Requirement" value={activeCampaign.requirement_status ?? "Not linked"} />
-            </div>
-            <article className="campaignScorecardCard">
-              <span className="eyebrow">Scorecard</span>
-              <h3>{activeCampaign.requirement_title || "Requirement profile"}</h3>
-              <p>{activeCampaign.requirement_id ? "Requirement is linked. Run matching or review the candidate pipeline." : "Add a requirement or create this campaign from a hiring brief before ranking candidates."}</p>
-              <button className="secondary" onClick={() => matchCampaign(activeCampaign.id)} disabled={busy || !activeCampaign.requirement_id}>Run matching</button>
-            </article>
-          </section> : null}
-
-          {activeTab === "intake" ? <section className="campaignProgressPanel">
-            <div className="campaignProgressHead">
+          <main className="campaignCleanMain">
+            <header className="campaignCleanHeader">
               <div>
-                <span className="eyebrow">Campaign Progress</span>
-                <h3>{campaignProgress.label}</h3>
-                <p>{campaignProgress.description}</p>
+                <span className="eyebrow">Campaign</span>
+                <h2>{activeCampaign.name}</h2>
+                <p>{activeCampaign.description || "No hiring brief saved yet."}</p>
+                <div className="campaignCleanBadges">
+                  <span>{domainLabel(activeCampaign.status)}</span>
+                  <span>{activeCampaign.requirement_title || "No requirement uploaded"}</span>
+                  <span>{scorecardCompleteness}% scorecard</span>
+                </div>
               </div>
-              <strong>{campaignProgress.percent}%</strong>
-            </div>
-            <ProgressBar value={campaignProgress.percent} />
-            <div className="campaignStageList">
+              <div className="campaignCleanActions">
+                <button className="plain" onClick={() => setEditingCampaign((value) => !value)}>{editingCampaign ? "Close edit" : "Edit Campaign"}</button>
+                <button className="secondary" onClick={() => setActiveTab("uploads")}>Upload Resumes</button>
+                <button className="primary" onClick={() => matchCampaign(activeCampaign.id)} disabled={busy || !activeCampaign.requirement_id}>Find Matches</button>
+              </div>
+            </header>
+
+            {editingCampaign ? (
+              <section className="campaignEditPanel">
+                <div className="campaignEditGrid">
+                  <label>
+                    <span>Campaign name</span>
+                    <input value={editForm.name} onChange={(event) => setEditForm((value) => ({ ...value, name: event.target.value }))} />
+                  </label>
+                  <label>
+                    <span>Status</span>
+                    <select value={editForm.status} onChange={(event) => setEditForm((value) => ({ ...value, status: event.target.value }))}>
+                      <option value="active">Active</option>
+                      <option value="paused">Paused</option>
+                      <option value="archived">Archived</option>
+                      <option value="closed">Closed</option>
+                    </select>
+                  </label>
+                  <label className="wide">
+                    <span>Description / hiring brief</span>
+                    <textarea value={editForm.description} onChange={(event) => setEditForm((value) => ({ ...value, description: event.target.value }))} />
+                  </label>
+                  <label className="wide">
+                    <span>Linked requirement</span>
+                    <select value={editForm.requirement_id} onChange={(event) => setEditForm((value) => ({ ...value, requirement_id: event.target.value }))}>
+                      <option value="">No linked requirement</option>
+                      {requirements.map((item) => <option key={item.id} value={item.id}>{item.title || "Untitled requirement"} | {domainLabel(item.status)}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <div className="campaignEditActions">
+                  <button className="plain" onClick={() => setEditingCampaign(false)}>Cancel</button>
+                  <button className="primary" onClick={saveCampaignDetails} disabled={busy || !editForm.name.trim()}>Save campaign</button>
+                </div>
+              </section>
+            ) : null}
+
+            <section className="campaignProgressMini">
               {campaignProgress.stages.map((stage) => (
                 <article className={stage.done ? "done" : stage.active ? "active" : ""} key={stage.label}>
                   <span>{stage.label}</span>
                   <strong>{stage.value}</strong>
                 </article>
               ))}
-            </div>
-          </section> : null}
+            </section>
+
+            <nav className="campaignWorkflowTabs cleanTabs" aria-label="Campaign workflow">
+              <button className={activeTab === "pipeline" ? "active" : ""} onClick={() => setActiveTab("pipeline")}>Pipeline</button>
+              <button className={activeTab === "matches" ? "active" : ""} onClick={() => setActiveTab("matches")}>Matches</button>
+              <button className={activeTab === "scorecard" ? "active" : ""} onClick={() => setActiveTab("scorecard")}>Scorecard</button>
+              <button className={activeTab === "uploads" ? "active" : ""} onClick={() => setActiveTab("uploads")}>Uploads</button>
+              <button className={activeTab === "activity" ? "active" : ""} onClick={() => setActiveTab("activity")}>Activity</button>
+            </nav>
 
           {activeTab === "matches" ? (
             <section className="campaignTabPane campaignMatchesList">
@@ -4076,6 +4166,65 @@ function CampaignsView({
                   </div>
                 </article>
               )) : <EmptyPanel title="No matches yet" body="Run matching to rank existing candidates, or upload resumes into this campaign." />}
+            </section>
+          ) : null}
+
+          {activeTab === "scorecard" ? (
+            <section className="campaignScorecardWorkspace">
+              <article className="campaignRequirementImport">
+                <div>
+                  <span className="eyebrow">Requirement intake</span>
+                  <h3>Upload or paste a requirement</h3>
+                  <p>The system extracts the requirement into editable scorecard fields. Save the scorecard before matching.</p>
+                </div>
+                <div className="campaignRequirementImportGrid">
+                  <label className="campaignRequirementDrop">
+                    <FileUp size={20} />
+                    <span>{campaignRequirementFile ? campaignRequirementFile.name : "Upload requirement file"}</span>
+                    <input type="file" accept={DOCUMENT_FILE_ACCEPT} onChange={(event) => setCampaignRequirementFile(event.target.files?.[0] ?? null)} />
+                  </label>
+                  <button className="secondary" disabled={busy || !campaignRequirementFile} onClick={uploadCurrentRequirement}>Extract file</button>
+                  <textarea value={requirementDraft} onChange={(event) => setRequirementDraft(event.target.value)} placeholder="Paste job requirement, client email, or hiring manager notes..." />
+                  <button className="secondary" disabled={busy || !requirementDraft.trim()} onClick={extractRequirementDraft}>Extract pasted text</button>
+                </div>
+              </article>
+
+              <article className="campaignScorecardEditor">
+                <div className="campaignPanelHeader">
+                  <div>
+                    <span className="eyebrow">Editable scorecard</span>
+                    <h3>{activeCampaign.requirement_title || "Campaign requirement"}</h3>
+                    <p>Location is treated as a preference in campaign matching, not a hard blocker.</p>
+                  </div>
+                  <button className="primary" onClick={saveCurrentScorecard} disabled={busy}>Save Scorecard</button>
+                </div>
+                <div className="campaignScorecardGrid">
+                  <label>
+                    <span>Location preference</span>
+                    <input value={scorecardForm.location_preference} onChange={(event) => setScorecardForm((value) => ({ ...value, location_preference: event.target.value }))} placeholder="New York, Remote US, EST" />
+                  </label>
+                  <label>
+                    <span>Seniority</span>
+                    <input value={scorecardForm.seniority} onChange={(event) => setScorecardForm((value) => ({ ...value, seniority: event.target.value }))} placeholder="Senior / Lead / Principal" />
+                  </label>
+                  <label>
+                    <span>Minimum years</span>
+                    <input value={scorecardForm.min_years_experience} onChange={(event) => setScorecardForm((value) => ({ ...value, min_years_experience: event.target.value }))} placeholder="5" />
+                  </label>
+                  <label className="wide">
+                    <span>Must-have skills</span>
+                    <textarea value={scorecardForm.must_have_skills} onChange={(event) => setScorecardForm((value) => ({ ...value, must_have_skills: event.target.value }))} placeholder="Python, Spark, Databricks" />
+                  </label>
+                  <label className="wide">
+                    <span>Nice-to-have skills</span>
+                    <textarea value={scorecardForm.nice_to_have_skills} onChange={(event) => setScorecardForm((value) => ({ ...value, nice_to_have_skills: event.target.value }))} placeholder="Healthcare, Azure, Airflow" />
+                  </label>
+                  <label className="wide">
+                    <span>Dealbreakers</span>
+                    <textarea value={scorecardForm.dealbreakers} onChange={(event) => setScorecardForm((value) => ({ ...value, dealbreakers: event.target.value }))} placeholder="No production data engineering experience" />
+                  </label>
+                </div>
+              </article>
             </section>
           ) : null}
 
@@ -4195,15 +4344,96 @@ function CampaignsView({
             </div>
           ) : null}
           {activeTab === "pipeline" && !selectedCandidates.length ? <EmptyPanel title="No campaign candidates yet" body="Run matching to rank the existing database, or upload resumes directly into this campaign." /> : null}
-        </section>
-      ) : (
-        <section className="panel emptyState">
-          <h3>Select a campaign</h3>
-          <p>Open a campaign to see ranked candidates, uploaded resume batches, shortlist/reject state, and evidence.</p>
-        </section>
+          </main>
+        </div>
       )}
     </section>
   );
+}
+
+type CampaignScorecardForm = {
+  location_preference: string;
+  seniority: string;
+  min_years_experience: string;
+  must_have_skills: string;
+  nice_to_have_skills: string;
+  dealbreakers: string;
+};
+
+function emptyCampaignScorecardForm(): CampaignScorecardForm {
+  return {
+    location_preference: "",
+    seniority: "",
+    min_years_experience: "",
+    must_have_skills: "",
+    nice_to_have_skills: "",
+    dealbreakers: "",
+  };
+}
+
+function campaignScorecardForm(campaign: JobCampaign): CampaignScorecardForm {
+  const scorecard = campaign.scorecard ?? {};
+  const profile = campaign.requirement?.final_requirement_profile ?? campaign.requirement?.extracted_requirement_json ?? {};
+  const locationPreference = firstCampaignList(
+    scorecard.location_preference,
+    profile.preferred_locations,
+    profile.location_preference,
+    profile.required_locations,
+    profile.required_countries
+  );
+  return {
+    location_preference: campaignListInput(locationPreference),
+    seniority: textValue(scorecard.seniority ?? profile.seniority),
+    min_years_experience: textValue(scorecard.min_years_experience ?? profile.min_years_experience),
+    must_have_skills: campaignListInput(scorecard.must_have_skills ?? profile.must_have_skills),
+    nice_to_have_skills: campaignListInput(scorecard.nice_to_have_skills ?? profile.nice_to_have_skills),
+    dealbreakers: campaignListInput(scorecard.dealbreakers ?? profile.dealbreakers),
+  };
+}
+
+function firstCampaignList(...values: unknown[]) {
+  for (const value of values) {
+    if (Array.isArray(value) && value.length) return value;
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return [];
+}
+
+function campaignScorecardPayload(form: CampaignScorecardForm, campaign: JobCampaign): CampaignScorecard {
+  const years = Number(form.min_years_experience.replace(/[^\d.]/g, ""));
+  return {
+    title: campaign.requirement_title || campaign.name,
+    location_preference: campaignInputList(form.location_preference),
+    seniority: form.seniority.trim() || null,
+    min_years_experience: Number.isFinite(years) && years > 0 ? years : null,
+    must_have_skills: campaignInputList(form.must_have_skills),
+    nice_to_have_skills: campaignInputList(form.nice_to_have_skills),
+    dealbreakers: campaignInputList(form.dealbreakers),
+  };
+}
+
+function campaignScorecardCompleteness(form: CampaignScorecardForm) {
+  const checks = [
+    form.must_have_skills.trim(),
+    form.min_years_experience.trim(),
+    form.seniority.trim(),
+    form.location_preference.trim(),
+    form.dealbreakers.trim(),
+  ];
+  return Math.round((checks.filter(Boolean).length / checks.length) * 100);
+}
+
+function campaignListInput(value: unknown) {
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean).join("\n");
+  if (value == null) return "";
+  return String(value);
+}
+
+function campaignInputList(value: string) {
+  return value
+    .split(/[\n,;]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function CampaignColumn({
