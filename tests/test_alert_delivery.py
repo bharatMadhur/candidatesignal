@@ -19,7 +19,7 @@ class AlertDeliveryTests(unittest.TestCase):
             }
         )
 
-        self.assertEqual(payload["product"], "candidatSignal.ai")
+        self.assertEqual(payload["product"], "candidateSignal.ai")
         self.assertEqual(payload["alert_id"], "alert-1")
         self.assertEqual(payload["severity"], "critical")
 

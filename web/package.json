@@ -1,11 +1,12 @@
 {
-  "name": "resume-intel-ui",
+  "name": "candidate-signal-ui",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "smoke": "node tests/smoke.mjs"
   },
   "dependencies": {
     "better-auth": "^1.6.9",

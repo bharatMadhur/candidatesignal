@@ -31,7 +31,7 @@ import {
   CopilotMessage,
   CopilotThread,
   CurrentUser,
-  EntityMatch,
+  CandidateVersionMatch,
   CandidateVersionDiff,
   GovernancePolicy,
   JobCampaign,
@@ -88,7 +88,7 @@ import {
   listCampaigns,
   listCopilotThreads,
   listAuditLogs,
-  listEntityClusters,
+  listCandidateVersionClusters,
   listOperationalAlertDeliveries,
   listOperationalAlerts,
   listPiiAccessEvents,
@@ -125,6 +125,8 @@ import {
   disableMember,
 } from "../lib/api";
 import { authClient, signInWithBetterAuth } from "../lib/auth-client";
+import { BrandMark } from "./components/brand";
+import { DOCUMENT_FILE_ACCEPT, DOCUMENT_FORMAT_LABEL, resolveLoginIdentifier } from "./lib/login";
 
 type View = "dashboard" | "copilot" | "database" | "upload" | "operations" | "candidate" | "requirement" | "matches" | "campaigns" | "versions" | "team" | "admin";
 
@@ -163,107 +165,8 @@ type HomeAppProps = {
   showPublicHome?: boolean;
 };
 
-const LOCAL_LOGIN_ALIASES: Record<string, string> = {
-  admin: "admin@example.com",
-  platform: "admin@example.com",
-  platform_admin: "admin@example.com",
-  recruiter: "recruiter@example.com",
-  company: "recruiter@example.com",
-  tenant: "recruiter@example.com",
-};
-
-function BrandMark({ className = "" }: { className?: string }) {
-  return <span className={["brandMark", className].filter(Boolean).join(" ")} aria-hidden="true"><i /><i /><i /></span>;
-}
-
-const DOCUMENT_FILE_ACCEPT = ".pdf,.docx,.txt,.md,.jpg,.jpeg,.png,.webp,.tif,.tiff,.bmp";
-const DOCUMENT_FORMAT_LABEL = "PDF, DOCX, TXT, MD, JPG, PNG, WEBP, TIFF, BMP";
-
-function resolveLoginIdentifier(value: string, mode: "company" | "admin") {
-  const normalized = value.trim().toLowerCase();
-  if (!normalized) throw new Error("Enter an email or username.");
-  if (normalized.includes("@")) return normalized;
-  const mapped = LOCAL_LOGIN_ALIASES[normalized];
-  if (mapped) return mapped;
-  const expected = mode === "admin" ? "admin" : "recruiter";
-  throw new Error(`Unknown username. Use a full email address or local username "${expected}".`);
-}
-
 export default function Home() {
   return <HomeApp showPublicHome />;
-}
-
-function LandingPage() {
-  return (
-    <main className="publicHome">
-      <header className="publicNav">
-        <a className="publicBrand" href="/">
-          <BrandMark />
-          <strong>candidateSignal.ai</strong>
-        </a>
-        <nav>
-          <a href="#platform">Solutions</a>
-          <a href="#privacy">Privacy</a>
-          <a href="#security">Security</a>
-        </nav>
-        <div>
-          <a className="adminNavLink" href="/?login=admin">Platform Admin</a>
-          <a className="plainLink" href="/?login=company">Company Login</a>
-        </div>
-      </header>
-      <section className="homeHero">
-        <div className="homeHeroCopy">
-          <h1>
-            <span>Upload resumes.</span>
-            <span>Understand candidates.</span>
-            <em>Find the right fit faster.</em>
-          </h1>
-          <p>candidateSignal.ai turns resumes, notes, raw CV text, and job campaigns into evidence-backed recruiter decisions without mixing company data.</p>
-          <div className="homeHeroActions">
-            <a className="primaryLink large" href="/?login=company">Company Login</a>
-            <a className="plainLink large" href="/?login=company&invite=1">Accept Invite</a>
-          </div>
-          <a className="adminHeroLink" href="/?login=admin">Platform Admin Portal</a>
-        </div>
-      </section>
-      <section className="homeFeatureGrid" id="platform">
-        <article className="wideFeature">
-          <FileSearch size={34} />
-          <strong>Intelligence-First Parsing</strong>
-          <span>Upload documents and let the system extract skills, experience, location signals, PII links, and candidate evidence without rigid formatting requirements.</span>
-          <div className="featureSkeleton" aria-hidden="true"><i /><i /><b /><i /></div>
-        </article>
-        <article>
-          <CheckCircle2 size={38} />
-          <strong>Evidence-Backed Matching</strong>
-          <span>Every match score is supported by source-linked evidence. Recruiters see exactly why a candidate fits or misses a role.</span>
-          <div className="matchCallout">Found direct matches for required senior leadership experience.</div>
-        </article>
-        <article>
-          <Search size={38} />
-          <strong>Search Copilot</strong>
-          <span>Ask complex questions about the company talent pool and get precise, filtered candidate results.</span>
-        </article>
-        <article className="wideFeature" id="privacy">
-          <ShieldCheck size={40} />
-          <strong>Absolute Privacy & Data Isolation</strong>
-          <span>Your company data stays strictly isolated. Platform admins manage tenants and seats, not recruiter candidate data.</span>
-        </article>
-      </section>
-      <footer className="publicFooter" id="security">
-        <div>
-          <strong>candidateSignal.ai</strong>
-          <span>(c) 2026 candidateSignal.ai. Built for calm, evidence-backed hiring.</span>
-        </div>
-        <nav>
-          <a href="#privacy">Privacy Policy</a>
-          <a href="#security">Security Commitment</a>
-          <a href="#platform">Terms of Service</a>
-          <a href="#platform">Contact Support</a>
-        </nav>
-      </footer>
-    </main>
-  );
 }
 
 export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicHome = false }: HomeAppProps = {}) {
@@ -284,7 +187,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   const [matchRunChanges, setMatchRunChanges] = useState<RequirementMatchRunChange[]>([]);
   const [campaigns, setCampaigns] = useState<JobCampaign[]>([]);
   const [campaign, setCampaign] = useState<JobCampaign | null>(null);
-  const [clusters, setClusters] = useState<EntityMatch[]>([]);
+  const [clusters, setClusters] = useState<CandidateVersionMatch[]>([]);
   const [parseBatches, setParseBatches] = useState<ParseBatch[]>([]);
   const [parseDeadLetters, setParseDeadLetters] = useState<ParseDeadLetter[]>([]);
   const [operationalAlerts, setOperationalAlerts] = useState<OperationalAlert[]>([]);
@@ -426,7 +329,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
       listCandidates(activeToken),
       listRequirements(activeToken),
       listCampaigns(activeToken),
-      listEntityClusters(activeToken),
+      listCandidateVersionClusters(activeToken),
       listParseBatches(activeToken),
       getTeam(activeToken),
       listCopilotThreads(activeToken),
@@ -739,19 +642,23 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     await refresh();
   }
 
-  async function handleSendCopilotMessage() {
-    const message = copilotInput.trim();
+  async function handleSendCopilotMessage(messageOverride?: string, limitOverride?: number) {
+    const message = (messageOverride ?? copilotInput).trim();
     if (!message || !token) return;
-    const nextHistory: WorkspaceChatMessage[] = [...copilotMessages, { role: "user", content: message }];
+    const isShowMoreRequest = Boolean(messageOverride && limitOverride);
+    const nextHistory: WorkspaceChatMessage[] = [
+      ...copilotMessages,
+      { role: "user", content: isShowMoreRequest ? `Show more results for: ${message}` : message },
+    ];
     setCopilotMessages(nextHistory);
-    setCopilotInput("");
+    if (!messageOverride) setCopilotInput("");
     try {
       const response = await run("Searching workspace with Copilot", () =>
         chatCopilot(
           token,
           message,
           nextHistory.map((item) => ({ role: item.role, content: item.content })),
-          copilotResultLimit,
+          limitOverride ?? copilotResultLimit,
           copilotThread?.id
         )
       );
@@ -1050,10 +957,10 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     setView("requirement");
   }
 
-  async function handleEntityDecision(matchId: string, decision: "versioned" | "separate" | "review-later") {
+  async function handleCandidateVersionDecision(matchId: string, decision: "versioned" | "separate" | "review-later") {
     if (decision !== "review-later" && !window.confirm(`Save candidate-version decision: ${decision}? This is non-destructive and keeps every uploaded resume copy.`)) return;
     await run("Saving decision", () => decideCandidateVersion(token, matchId, decision));
-    const result = await listEntityClusters(token);
+    const result = await listCandidateVersionClusters(token);
     setClusters(result.clusters);
   }
 
@@ -1547,7 +1454,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
             />
           ) : null}
 
-          {workspaceMode === "tenant" && view === "versions" ? <CandidateVersionReview clusters={clusters} decide={handleEntityDecision} /> : null}
+          {workspaceMode === "tenant" && view === "versions" ? <CandidateVersionReview clusters={clusters} decide={handleCandidateVersionDecision} /> : null}
 
           {workspaceMode === "tenant" && view === "team" ? (
             canManageWorkspaceSettings ? (
@@ -1729,7 +1636,7 @@ function Dashboard({
   candidates: CandidateSummary[];
   requirements: Requirement[];
   campaigns: JobCampaign[];
-  clusters: EntityMatch[];
+  clusters: CandidateVersionMatch[];
   deadLetterCount: number;
   setView: (view: View) => void;
   openCandidate: (id: string) => void;
@@ -1910,7 +1817,7 @@ function RecruiterCopilot({
   selectCampaign: (id: string) => void;
   shortlistToCampaign: (candidateId: string) => void;
   openCampaign: (id: string) => void;
-  send: () => void;
+  send: (messageOverride?: string, limitOverride?: number) => void;
   newThread: () => void;
   openThread: (id: string) => void;
   archiveThread: (id: string) => void;
@@ -1964,12 +1871,19 @@ function RecruiterCopilot({
       .filter((candidate) => !ignoredCandidateIds.includes(candidate.document_id));
   }, [filters, ignoredCandidateIds, latestCandidateMessage?.candidates, latestQuery]);
   const queryInsights = useMemo(() => buildCopilotQueryInsights(latestQuery, latestCandidateMessage?.candidates ?? latestFilteredCandidates, latestQueryIntent), [latestQuery, latestCandidateMessage?.candidates, latestFilteredCandidates, latestQueryIntent]);
+  const isSearching = busy && activeTab === "search";
+  const canShowMore = Boolean(latestQuery.trim()) && !isSearching && (latestCandidateMessage?.candidates?.length ?? 0) >= resultLimit;
+  function showMoreResults() {
+    const nextLimit = Math.min(100, resultLimit + 10);
+    setResultLimit(nextLimit);
+    send(latestQuery, nextLimit);
+  }
   return (
     <section className="copilotPage">
       <div className="copilotModeBar">
         <div className="copilotTabs">
           <button className={activeTab === "search" ? "active" : ""} onClick={() => setActiveTab("search")}><MessageSquare size={16} /> Search Copilot</button>
-          <button className={activeTab === "requirement" ? "active" : ""} onClick={() => setActiveTab("requirement")}><FileSearch size={16} /> Requirement Upload</button>
+          <button className={activeTab === "requirement" ? "active" : ""} onClick={() => setActiveTab("requirement")}><FileSearch size={16} /> Requirement HITL</button>
         </div>
         <div className="copilotModeActions">
           <label className="copilotCampaignSelector">
@@ -2002,6 +1916,16 @@ function RecruiterCopilot({
             />
             <button disabled={busy || !input.trim()} type="submit">Search</button>
           </form>
+          {isSearching ? (
+            <section className="copilotSearchingBanner" aria-live="polite">
+              <Loader2 size={18} />
+              <div>
+                <strong>Searching candidate database</strong>
+                <span>Checking structured fields, raw CV text, recruiter notes, and semantic evidence.</span>
+              </div>
+              <i />
+            </section>
+          ) : null}
           <section className="stitchSignals">
             <div className="stitchSignalsHead">
               <div>
@@ -2058,7 +1982,16 @@ function RecruiterCopilot({
                 <button className={latestQueryIntent.location_requirement === "ignored" ? "active" : ""} type="button" onClick={() => setInput(rewriteCopilotLocationPreference(latestQuery, "ignored"))}>Ignore location</button>
               </div>
             </div>
-            <div className="copilotResultList">
+            <div className={isSearching ? "copilotResultList searching" : "copilotResultList"}>
+              {isSearching && !latestFilteredCandidates.length ? (
+                Array.from({ length: 4 }).map((_, index) => (
+                  <article className="stitchCandidateCard copilotCompactCard copilotSkeletonCard" key={`loading-${index}`}>
+                    <div><i /><i /><b /></div>
+                    <span />
+                    <p />
+                  </article>
+                ))
+              ) : null}
               {latestFilteredCandidates.map((candidate, index) => {
                 const reason = copilotResultReason(candidate, latestQuery);
                 const evidenceItems = (candidate.evidence ?? []).filter((item) => item.snippet).slice(0, 2);
@@ -2106,8 +2039,19 @@ function RecruiterCopilot({
                   </article>
                 );
               })}
-              {!latestFilteredCandidates.length ? <EmptyPanel title="No candidate results yet" body="Write what you are looking for and click Search to review the company candidate database." /> : null}
+              {!latestFilteredCandidates.length && !isSearching ? <EmptyPanel title="No candidate results yet" body="Write what you are looking for and click Search to review the company candidate database." /> : null}
             </div>
+            {latestFilteredCandidates.length ? (
+              <div className="copilotShowMoreBar">
+                <div>
+                  <strong>{latestFilteredCandidates.length} candidates visible</strong>
+                  <span>Current search asks for up to {resultLimit} results. Increase recall without changing the query.</span>
+                </div>
+                <button className="secondary" disabled={!canShowMore} onClick={showMoreResults}>
+                  {canShowMore ? `Show 10 more` : "All returned results shown"}
+                </button>
+              </div>
+            ) : null}
           </section>
         </section> : (
           <section className="panel copilotThread">
@@ -2171,6 +2115,10 @@ function RecruiterCopilot({
           </header>
           <h3>Editable Query Analysis</h3>
           <div className="queryAnalysisCard editableQueryAnalysis">
+            <div className="queryAnalysisSummary">
+              <span>Interpreted search</span>
+              <strong>{latestQuery.trim() || "Start with a hiring question"}</strong>
+            </div>
             <label>
               <span>Role intent</span>
               <input
@@ -2194,9 +2142,10 @@ function RecruiterCopilot({
                 placeholder="New York, remote, USA"
               />
             </label>
-            <div>
-              <span>Current result set</span>
-              <strong>{latestFilteredCandidates.length} visible candidates</strong>
+            <div className="queryAnalysisFooter">
+              <span>Visible candidates</span>
+              <strong>{latestFilteredCandidates.length}</strong>
+              <em>{locationRequirementLabel(latestQueryIntent.location_requirement)}</em>
             </div>
           </div>
           <h3>Quick Refinements</h3>
@@ -2341,7 +2290,6 @@ function UploadResumeView(props: {
   uploadCampaignRequirement: (id: string, file: File) => Promise<void>;
   busy: boolean;
 }) {
-  const [uploadMode, setUploadMode] = useState<"resumes" | "requirement">("resumes");
   const [requirementTextDraft, setRequirementTextDraft] = useState("");
   const [campaignRequirementFile, setCampaignRequirementFile] = useState<File | null>(null);
   const selectedCampaign = props.campaigns.find((item) => item.id === props.bulkCampaignId);
@@ -2371,12 +2319,13 @@ function UploadResumeView(props: {
         <h2>Upload Center</h2>
         <p>Add resumes to the database, or add a requirement directly inside a campaign. Both flows stay attached to the recruiter workflow.</p>
       </header>
-      <nav className="uploadModeTabs" aria-label="Upload type">
-        <button className={uploadMode === "resumes" ? "active" : ""} onClick={() => setUploadMode("resumes")}>Resume upload</button>
-        <button className={uploadMode === "requirement" ? "active" : ""} onClick={() => setUploadMode("requirement")}>Campaign requirement</button>
-      </nav>
-      {uploadMode === "resumes" ? (
-        <>
+      <section className="uploadLandingGrid">
+        <article className="uploadTypePanel resumeUploadPanel">
+          <div className="uploadTypeHeader">
+            <span className="eyebrow">Candidate intake</span>
+            <h3>Upload CVs / resumes</h3>
+            <p>Add resumes to the company database or directly into a campaign pipeline.</p>
+          </div>
           <label className="stitchDropZone refinedUploadDrop">
             <FileUp size={34} />
             <strong>{props.bulkFiles.length ? `${props.bulkFiles.length} file${props.bulkFiles.length === 1 ? "" : "s"} selected` : "Drop resumes or browse files"}</strong>
@@ -2390,41 +2339,40 @@ function UploadResumeView(props: {
             />
           </label>
           <section className="stitchProgressCard refinedUploadCard">
-        <div>
-          <strong>Batch Parsing Progress</strong>
-          <span>{Math.round(activeProgress)}%</span>
-        </div>
-        <ProgressBar value={activeProgress} />
-        <div className="stitchBatchControls">
-          <div className="autoBatchName">
-            <span>Batch</span>
-            <strong>{shownBatchName}</strong>
-          </div>
-          <input
-            value={props.bulkContextNote}
-            onChange={(event) => {
-              props.setBulkContextNote(event.target.value);
-              props.setBatchName("");
-            }}
-            placeholder="Optional: add note or campaign name"
-          />
-          <select value={props.bulkCampaignId} onChange={(event) => props.setBulkCampaignId(event.target.value)}>
-            <option value="workspace">Unassigned (Workspace)</option>
-            {props.campaigns.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
-          </select>
-          <button className="primary" disabled={!props.bulkFiles.length || props.busy} onClick={props.bulkUpload}>
-            {selectedCampaign ? `Queue into campaign` : "Queue resumes"}
-          </button>
-        </div>
-        <p>
-          {activeBatch
-            ? `Processing ${activeBatch.completed_count + activeBatch.failed_count} of ${activeBatch.total_files} files. Profiles update automatically when parsing completes.`
-            : "Select resumes to create a parsing batch."}
-        </p>
+            <div>
+              <strong>Batch Parsing Progress</strong>
+              <span>{Math.round(activeProgress)}%</span>
+            </div>
+            <ProgressBar value={activeProgress} />
+            <div className="stitchBatchControls">
+              <div className="autoBatchName">
+                <span>Batch</span>
+                <strong>{shownBatchName}</strong>
+              </div>
+              <input
+                value={props.bulkContextNote}
+                onChange={(event) => {
+                  props.setBulkContextNote(event.target.value);
+                  props.setBatchName("");
+                }}
+                placeholder="Optional: add note or campaign name"
+              />
+              <select value={props.bulkCampaignId} onChange={(event) => props.setBulkCampaignId(event.target.value)}>
+                <option value="workspace">Unassigned (Workspace)</option>
+                {props.campaigns.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
+              </select>
+              <button className="primary" disabled={!props.bulkFiles.length || props.busy} onClick={props.bulkUpload}>
+                {selectedCampaign ? "Queue into campaign" : "Queue resumes"}
+              </button>
+            </div>
+            <p>
+              {activeBatch
+                ? `Processing ${activeBatch.completed_count + activeBatch.failed_count} of ${activeBatch.total_files} files. Profiles update automatically when parsing completes.`
+                : "Select resumes to create a parsing batch."}
+            </p>
           </section>
-        </>
-      ) : (
-        <section className="campaignRequirementUploadTab">
+        </article>
+        <article className="uploadTypePanel campaignRequirementUploadTab">
           <div>
             <span className="eyebrow">Campaign requirement</span>
             <h3>Attach the requirement to a campaign</h3>
@@ -2449,10 +2397,8 @@ function UploadResumeView(props: {
             <button className="primary" disabled={!requirementCampaignReady || !requirementTextDraft.trim() || props.busy} onClick={submitRequirementText}>Extract pasted requirement</button>
           </div>
           {!props.campaigns.length ? <p className="muted">Create a campaign first, then attach requirements here.</p> : null}
-        </section>
-      )}
-      {uploadMode === "resumes" ? (
-        <>
+        </article>
+      </section>
       <section className="stitchQueueTable">
         <div className="stitchQueueHead">
           <h3>Parsing Queue</h3>
@@ -2501,8 +2447,6 @@ function UploadResumeView(props: {
           <button className="plain small" disabled={!props.resumeFile || props.busy} onClick={props.upload}>Queue single resume</button>
         </div>
       </details>
-        </>
-      ) : null}
     </section>
   );
 }
@@ -2993,7 +2937,7 @@ function CandidateDetail({
   const locationChips = candidateLocationChips(locationSignals, currentLocation);
   const primaryLinkedIn = linkedinProfileUrls[0];
   const primaryPortfolio = portfolioUrls[0];
-  const versionMatches = candidate.candidate_versions?.matches ?? candidate.entity_resolution?.matches ?? [];
+  const versionMatches = candidate.candidate_versions?.matches ?? [];
   const versionCount = candidateVersionLinks(candidate, versionMatches).length;
   const reparseStatusBatch = latestCandidateReparseBatch(reparseBatches, sourceName);
   const reparseProgress = reparseStatusBatch ? Number(reparseStatusBatch.progress_percent ?? batchProgress(reparseStatusBatch)) : 0;
@@ -3565,7 +3509,7 @@ function NoteTypeButtons({ setNoteName }: { setNoteName: (value: string) => void
   );
 }
 
-function CandidateVersionRail({ candidate, matches, openCandidate }: { candidate: Candidate; matches: EntityMatch[]; openCandidate: (id: string) => void }) {
+function CandidateVersionRail({ candidate, matches, openCandidate }: { candidate: Candidate; matches: CandidateVersionMatch[]; openCandidate: (id: string) => void }) {
   const versions = candidateVersionLinks(candidate, matches);
   const activeDocument = candidateVersionDocumentLabel(candidate);
   return (
@@ -3618,7 +3562,7 @@ function CandidateVersionRail({ candidate, matches, openCandidate }: { candidate
   );
 }
 
-function candidateVersionLinks(candidate: Candidate, matches: EntityMatch[]) {
+function candidateVersionLinks(candidate: Candidate, matches: CandidateVersionMatch[]) {
   const currentId = candidate.document_id;
   const rows: Array<{
     documentId: string;
@@ -4213,7 +4157,8 @@ function CampaignsView({
   const [campaignRequirementFile, setCampaignRequirementFile] = useState<File | null>(null);
   const [campaignMatchThreshold, setCampaignMatchThreshold] = useState(0.65);
   const [matchResultLimit, setMatchResultLimit] = useState(50);
-  const campaignStages: Array<{ id: CampaignPipelineStatus; label: string }> = [
+  const [activePipelineStage, setActivePipelineStage] = useState<CampaignPipelineStatus>("recommended");
+  const campaignStages = useMemo<Array<{ id: CampaignPipelineStatus; label: string }>>(() => [
     { id: "recommended", label: "Matched" },
     { id: "shortlisted", label: "Shortlisted" },
     { id: "contacted", label: "Contacted" },
@@ -4224,19 +4169,23 @@ function CampaignsView({
     { id: "offer", label: "Offer" },
     { id: "placed", label: "Placed" },
     { id: "rejected", label: "Rejected" },
-  ];
+  ], []);
   const pipelineCandidates = useMemo(
     () => selectedCandidates.filter((item) => campaignCandidateVisibleInPipeline(item, campaignMatchThreshold)),
     [selectedCandidates, campaignMatchThreshold],
   );
   const hiddenPipelineCandidates = selectedCandidates.length - pipelineCandidates.length;
-  const stageBuckets = campaignStages.map((stage) => ({
-    ...stage,
-    candidates: pipelineCandidates.filter((item) => stageCandidateStatus(item.status) === stage.id),
-  }));
-  const shortlisted = selectedCandidates.filter((item) => item.status === "shortlisted").length;
-  const rejected = selectedCandidates.filter((item) => item.status === "rejected").length;
-  const selectedCampaignCandidate = pipelineCandidates.find((item) => item.candidate_id === selectedCandidateId) ?? pipelineCandidates[0];
+  const stageBuckets = useMemo(
+    () => campaignStages.map((stage) => ({
+      ...stage,
+      candidates: pipelineCandidates.filter((item) => stageCandidateStatus(item.status) === stage.id),
+    })),
+    [campaignStages, pipelineCandidates],
+  );
+  const activeStageBucket = stageBuckets.find((stage) => stage.id === activePipelineStage) ?? stageBuckets[0];
+  const activeStageCandidates = activeStageBucket?.candidates ?? [];
+  const nonEmptyStageCount = stageBuckets.filter((stage) => stage.candidates.length).length;
+  const selectedCampaignCandidate = activeStageCandidates.find((item) => item.candidate_id === selectedCandidateId) ?? activeStageCandidates[0] ?? null;
   const campaignProgress = campaignProgressStats(activeCampaign, selectedCandidates);
   const campaignTimeline = useMemo(() => campaignTimelineItems(activeCampaign, selectedCandidates), [activeCampaign, selectedCandidates]);
   const rankedCandidates = useMemo(() => [...selectedCandidates].sort((left, right) => Number(right.score ?? 0) - Number(left.score ?? 0)), [selectedCandidates]);
@@ -4250,10 +4199,24 @@ function CampaignsView({
       setSelectedCandidateId("");
       return;
     }
-    if (!pipelineCandidates.some((item) => item.candidate_id === selectedCandidateId)) {
-      setSelectedCandidateId(pipelineCandidates[0].candidate_id);
+    const currentStageHasCandidates = stageBuckets.some((stage) => stage.id === activePipelineStage && stage.candidates.length);
+    if (!currentStageHasCandidates) {
+      const firstNonEmptyStage = stageBuckets.find((stage) => stage.candidates.length);
+      if (firstNonEmptyStage && firstNonEmptyStage.id !== activePipelineStage) {
+        setActivePipelineStage(firstNonEmptyStage.id);
+      }
     }
-  }, [pipelineCandidates, selectedCandidateId]);
+  }, [activePipelineStage, pipelineCandidates.length, stageBuckets]);
+
+  useEffect(() => {
+    if (!activeStageCandidates.length) {
+      setSelectedCandidateId("");
+      return;
+    }
+    if (!activeStageCandidates.some((item) => item.candidate_id === selectedCandidateId)) {
+      setSelectedCandidateId(activeStageCandidates[0].candidate_id);
+    }
+  }, [activeStageCandidates, selectedCandidateId]);
 
   useEffect(() => {
     setMatchResultLimit(50);
@@ -4627,12 +4590,12 @@ function CampaignsView({
           </section> : null}
 
           {activeTab === "pipeline" && selectedCandidates.length ? (
-            <div className="campaignBoardShell">
+            <div className="campaignPipelineFocus">
               <section className="campaignPipelineGuardrail">
                 <div>
                   <span className="eyebrow">Pipeline guardrail</span>
-                  <strong>{pipelineCandidates.length} visible in pipeline</strong>
-                  <p>{hiddenPipelineCandidates > 0 ? `${hiddenPipelineCandidates} weak or below-threshold candidates are hidden. Use Matches to change the threshold or review more.` : "Only actionable campaign candidates are shown here."}</p>
+                  <strong>{pipelineCandidates.length} actionable candidates across {nonEmptyStageCount || 0} active stage{nonEmptyStageCount === 1 ? "" : "s"}</strong>
+                  <p>{hiddenPipelineCandidates > 0 ? `${hiddenPipelineCandidates} weak or below-threshold candidates are hidden from the working pipeline. Use Matches to lower the threshold or review the long tail.` : "The pipeline only shows candidates worth recruiter action at the current threshold."}</p>
                 </div>
                 <div className="pipelineThresholdButtons">
                   {campaignMatchBuckets.map((bucket) => (
@@ -4642,68 +4605,118 @@ function CampaignsView({
                   ))}
                 </div>
               </section>
-              <div className="campaignBoard campaignPipelineBoard">
+
+              <section className="campaignStageStrip" aria-label="Campaign stages">
                 {stageBuckets.map((stage) => (
-                  <CampaignColumn
+                  <button
+                    className={activePipelineStage === stage.id ? "active" : stage.candidates.length ? "" : "empty"}
                     key={stage.id}
-                    title={stage.label}
-                    count={stage.candidates.length}
-                    candidates={stage.candidates}
-                    selectedId={selectedCampaignCandidate?.candidate_id}
-                    selectCandidate={setSelectedCandidateId}
-                    maxCards={8}
-                  />
+                    onClick={() => {
+                      setActivePipelineStage(stage.id);
+                      setStageNote("");
+                    }}
+                    type="button"
+                  >
+                    <span>{stage.label}</span>
+                    <strong>{stage.candidates.length}</strong>
+                  </button>
                 ))}
-              </div>
-              <aside className="campaignCandidatePanel">
-                {selectedCampaignCandidate ? (
-                  <>
-                    <span className="eyebrow">Selected candidate</span>
-                    <h3>{selectedCampaignCandidate.candidate?.name ?? selectedCampaignCandidate.candidate_id}</h3>
-                    <p>{selectedCampaignCandidate.candidate?.current_title ?? "No title"} {selectedCampaignCandidate.candidate?.current_company ? `at ${selectedCampaignCandidate.candidate.current_company}` : ""}</p>
-                    <div className="scoreBadge">{Math.round((selectedCampaignCandidate.score ?? 0) * 100)}% match</div>
-                    <div className="campaignScoreBreakdown">
-                      {campaignScoreBreakdownItems(selectedCampaignCandidate).map((item) => (
-                        <span key={item.label}><strong>{item.value}%</strong>{item.label}</span>
+              </section>
+
+              <div className="campaignPipelineWorkspace">
+                <section className="campaignStageListPanel">
+                  <div className="campaignStageHeader">
+                    <div>
+                      <span className="eyebrow">Selected stage</span>
+                      <h3>{activeStageBucket?.label ?? "Pipeline"}</h3>
+                      <p>{activeStageCandidates.length ? "Work this focused stage without scrolling through empty pipeline columns." : "No candidates are currently in this stage at the selected threshold."}</p>
+                    </div>
+                    <button className="secondary small" onClick={() => setActiveTab("matches")}>Review all matches</button>
+                  </div>
+
+                  {activeStageCandidates.length ? (
+                    <div className="campaignStageCandidateList">
+                      {activeStageCandidates.map((item, index) => (
+                        <button
+                          className={selectedCampaignCandidate?.candidate_id === item.candidate_id ? "campaignStageCandidate active" : "campaignStageCandidate"}
+                          key={item.candidate_id}
+                          onClick={() => setSelectedCandidateId(item.candidate_id)}
+                          type="button"
+                        >
+                          <div className="campaignStageScore">
+                            <strong>{Math.round((item.score ?? 0) * 100)}%</strong>
+                            <span>#{index + 1}</span>
+                          </div>
+                          <div className="campaignStageCandidateBody">
+                            <strong>{item.candidate?.name ?? item.candidate_id}</strong>
+                            <span>{item.candidate?.current_title ?? "No title"} {item.candidate?.current_company ? `at ${item.candidate.current_company}` : ""}</span>
+                            <p>{campaignReasonItems(item)[0] ?? item.evidence?.recommendation ?? "Open the candidate report to inspect source-backed evidence."}</p>
+                            {campaignGapItems(item)[0] ? <em>Verify: {campaignGapItems(item)[0]}</em> : null}
+                          </div>
+                          <div className="campaignStageMeta">
+                            <span>{domainLabel(item.evidence?.fit_type ?? item.evidence?.llm_judge?.fit_type ?? item.source)}</span>
+                            {item.candidate && candidateRoleFactsNeedReview(item.candidate) ? <b>Facts need review</b> : null}
+                          </div>
+                        </button>
                       ))}
                     </div>
-                    {campaignHardFilterFailures(selectedCampaignCandidate).length ? (
-                      <div className="campaignHardFilters">
-                        <strong>Hard filters need review</strong>
-                        {campaignHardFilterFailures(selectedCampaignCandidate).slice(0, 3).map((failure, failureIndex) => <span key={`${failure}-${failureIndex}`}>{failure}</span>)}
+                  ) : (
+                    <EmptyPanel title={`No ${activeStageBucket?.label?.toLowerCase() ?? "stage"} candidates`} body="Pick another stage, lower the review threshold, or run matching again after updating the scorecard." />
+                  )}
+                </section>
+
+                <aside className="campaignCandidatePanel campaignPipelineCandidatePanel">
+                  {selectedCampaignCandidate ? (
+                    <>
+                      <span className="eyebrow">Candidate action panel</span>
+                      <h3>{selectedCampaignCandidate.candidate?.name ?? selectedCampaignCandidate.candidate_id}</h3>
+                      <p>{selectedCampaignCandidate.candidate?.current_title ?? "No title"} {selectedCampaignCandidate.candidate?.current_company ? `at ${selectedCampaignCandidate.candidate.current_company}` : ""}</p>
+                      <div className="scoreBadge">{Math.round((selectedCampaignCandidate.score ?? 0) * 100)}% match</div>
+                      <div className="campaignScoreBreakdown">
+                        {campaignScoreBreakdownItems(selectedCampaignCandidate).map((item) => (
+                          <span key={item.label}><strong>{item.value}%</strong>{item.label}</span>
+                        ))}
                       </div>
-                    ) : <div className="campaignHardFilterPass">Hard filters passed</div>}
-                    <strong className="campaignPanelSubhead">Why this candidate</strong>
-                    <div className="campaignEvidence">
-                      {campaignReasonItems(selectedCampaignCandidate).slice(0, 5).map((reason, reasonIndex) => <span key={`${selectedCampaignCandidate.candidate_id}-side-${reasonIndex}`}>{reason}</span>)}
-                    </div>
-                    {campaignGapItems(selectedCampaignCandidate).length ? (
-                      <div className="campaignGaps">
-                        {campaignGapItems(selectedCampaignCandidate).slice(0, 5).map((gap, gapIndex) => <span key={`${gap}-${gapIndex}`}>{gap}</span>)}
+                      {campaignHardFilterFailures(selectedCampaignCandidate).length ? (
+                        <div className="campaignHardFilters">
+                          <strong>Hard filters need review</strong>
+                          {campaignHardFilterFailures(selectedCampaignCandidate).slice(0, 3).map((failure, failureIndex) => <span key={`${failure}-${failureIndex}`}>{failure}</span>)}
+                        </div>
+                      ) : <div className="campaignHardFilterPass">Hard filters passed</div>}
+                      <strong className="campaignPanelSubhead">Why this candidate</strong>
+                      <div className="campaignEvidence">
+                        {campaignReasonItems(selectedCampaignCandidate).slice(0, 4).map((reason, reasonIndex) => <span key={`${selectedCampaignCandidate.candidate_id}-side-${reasonIndex}`}>{reason}</span>)}
                       </div>
-                    ) : null}
-                    <div className="draftBox">
-                      <strong>Draft reachout angle</strong>
-                      <span>{selectedCampaignCandidate.evidence?.recommendation ?? "Open the candidate report to tailor outreach from resume evidence and recruiter notes."}</span>
-                    </div>
-                    <div className="campaignStageEditor">
-                      <label>
-                        <span>Move stage</span>
-                        <select value={stageCandidateStatus(selectedCampaignCandidate.status)} onChange={(event) => updateCandidateStatus(selectedCampaignCandidate.candidate_id, event.target.value as CampaignPipelineStatus, stageNote)}>
-                          {campaignStages.map((stage) => <option key={stage.id} value={stage.id}>{stage.label}</option>)}
-                        </select>
-                      </label>
-                      <textarea value={stageNote} onChange={(event) => setStageNote(event.target.value)} placeholder="Optional stage note, feedback, or next action" />
-                    </div>
-                    <div className="jobActions">
-                      <button className="plain small" onClick={() => openCandidate(selectedCampaignCandidate.candidate_id)}>Open report</button>
-                      <button className="secondary small" onClick={() => updateCandidateStatus(selectedCampaignCandidate.candidate_id, "shortlisted", stageNote)} disabled={selectedCampaignCandidate.status === "shortlisted"}>Shortlist</button>
-                      <button className="plain small" onClick={() => updateCandidateStatus(selectedCampaignCandidate.candidate_id, "submitted", stageNote)} disabled={selectedCampaignCandidate.status === "submitted"}>Submit</button>
-                      <button className="plain small danger" onClick={() => updateCandidateStatus(selectedCampaignCandidate.candidate_id, "rejected", stageNote)} disabled={selectedCampaignCandidate.status === "rejected"}>Reject</button>
-                    </div>
-                  </>
-                ) : null}
-              </aside>
+                      {campaignGapItems(selectedCampaignCandidate).length ? (
+                        <div className="campaignGaps">
+                          {campaignGapItems(selectedCampaignCandidate).slice(0, 4).map((gap, gapIndex) => <span key={`${gap}-${gapIndex}`}>{gap}</span>)}
+                        </div>
+                      ) : null}
+                      <div className="draftBox">
+                        <strong>Draft reachout angle</strong>
+                        <span>{selectedCampaignCandidate.evidence?.recommendation ?? "Open the candidate report to tailor outreach from resume evidence and recruiter notes."}</span>
+                      </div>
+                      <div className="campaignStageEditor">
+                        <label>
+                          <span>Move stage</span>
+                          <select value={stageCandidateStatus(selectedCampaignCandidate.status)} onChange={(event) => updateCandidateStatus(selectedCampaignCandidate.candidate_id, event.target.value as CampaignPipelineStatus, stageNote)}>
+                            {campaignStages.map((stage) => <option key={stage.id} value={stage.id}>{stage.label}</option>)}
+                          </select>
+                        </label>
+                        <textarea value={stageNote} onChange={(event) => setStageNote(event.target.value)} placeholder="Optional stage note, feedback, or next action" />
+                      </div>
+                      <div className="jobActions">
+                        <button className="plain small" onClick={() => openCandidate(selectedCampaignCandidate.candidate_id)}>Open report</button>
+                        <button className="secondary small" onClick={() => updateCandidateStatus(selectedCampaignCandidate.candidate_id, "shortlisted", stageNote)} disabled={selectedCampaignCandidate.status === "shortlisted"}>Shortlist</button>
+                        <button className="plain small" onClick={() => updateCandidateStatus(selectedCampaignCandidate.candidate_id, "submitted", stageNote)} disabled={selectedCampaignCandidate.status === "submitted"}>Submit</button>
+                        <button className="plain small danger" onClick={() => updateCandidateStatus(selectedCampaignCandidate.candidate_id, "rejected", stageNote)} disabled={selectedCampaignCandidate.status === "rejected"}>Reject</button>
+                      </div>
+                    </>
+                  ) : (
+                    <EmptyPanel title="No selected candidate" body="Select a stage with candidates to see evidence, stage controls, and next actions." />
+                  )}
+                </aside>
+              </div>
             </div>
           ) : null}
           {activeTab === "pipeline" && !selectedCandidates.length ? <EmptyPanel title="No campaign candidates yet" body="Run matching to rank the existing database, or upload resumes directly into this campaign." /> : null}
@@ -4875,39 +4888,6 @@ function campaignInputList(value: string) {
     .filter(Boolean);
 }
 
-function CampaignColumn({
-  title,
-  count,
-  candidates,
-  selectedId,
-  selectCandidate,
-  maxCards = 8,
-}: {
-  title: string;
-  count: number;
-  candidates: JobCampaignCandidate[];
-  selectedId?: string;
-  selectCandidate: (candidateId: string) => void;
-  maxCards?: number;
-}) {
-  const visibleCards = candidates.slice(0, maxCards);
-  const hiddenCount = Math.max(0, candidates.length - visibleCards.length);
-  return (
-    <section className="campaignColumn">
-      <div className="campaignColumnHead"><strong>{title}</strong><span>{count}</span></div>
-      {visibleCards.length ? visibleCards.map((item) => (
-        <button className={selectedId === item.candidate_id ? "campaignMiniCard active" : "campaignMiniCard"} key={item.candidate_id} onClick={() => selectCandidate(item.candidate_id)}>
-          <strong>{item.candidate?.name ?? item.candidate_id}</strong>
-          <span>{item.candidate?.current_title ?? "No title"} | {item.candidate?.current_company ?? "No company"}</span>
-          {item.candidate && candidateRoleFactsNeedReview(item.candidate) ? <span className="factReviewText">Role facts need review</span> : null}
-          <em>{Math.round((item.score ?? 0) * 100)}% match | {domainLabel(item.source)}</em>
-        </button>
-      )) : <div className="campaignColumnEmpty">No candidates</div>}
-      {hiddenCount ? <div className="campaignColumnMore">+{hiddenCount} more in this stage. Use Matches for full review.</div> : null}
-    </section>
-  );
-}
-
 function campaignEvidenceItems(item: JobCampaignCandidate) {
   return [
     ...toTextList(item.evidence?.top_reasons),
@@ -5052,7 +5032,7 @@ function campaignTimelineItems(campaign: JobCampaign | null, candidates: JobCamp
     .sort((left, right) => new Date(right.date ?? 0).getTime() - new Date(left.date ?? 0).getTime());
 }
 
-function CandidateVersionReview({ clusters, decide }: { clusters: EntityMatch[]; decide: (id: string, decision: "versioned" | "separate" | "review-later") => void }) {
+function CandidateVersionReview({ clusters, decide }: { clusters: CandidateVersionMatch[]; decide: (id: string, decision: "versioned" | "separate" | "review-later") => void }) {
   const [filter, setFilter] = useState<ResolutionFilter>("all");
   const [selectedId, setSelectedId] = useState<string | undefined>(clusters[0]?.id);
   const filteredClusters = clusters.filter((cluster) => filter === "all" || (cluster.status ?? "suggested") === filter);
@@ -5119,7 +5099,7 @@ function CandidateVersionReview({ clusters, decide }: { clusters: EntityMatch[];
                 <strong>Field</strong>
                 <strong>{selected.left_name ?? "Candidate A"}</strong>
                 <strong>{selected.right_name ?? "Candidate B"}</strong>
-                {entityCompareRows(selected).map((row) => (
+                {candidateVersionCompareRows(selected).map((row) => (
                   <div className={`compareRow ${row.status ?? "different"}`} key={row.label}>
                     <span>
                       {row.label}
@@ -5153,7 +5133,7 @@ function CandidateVersionReview({ clusters, decide }: { clusters: EntityMatch[];
   );
 }
 
-function VersionMetadataCard({ label, version }: { label: string; version?: EntityMatch["left_version"] }) {
+function VersionMetadataCard({ label, version }: { label: string; version?: CandidateVersionMatch["left_version"] }) {
   const latest = version?.latest_document;
   const pageMethods = version?.page_methods ?? [];
   return (
@@ -6122,7 +6102,7 @@ function profileAnswerValue(
   return "";
 }
 
-function entityCompareRows(match: EntityMatch) {
+function candidateVersionCompareRows(match: CandidateVersionMatch) {
   if (match.field_diffs?.length) {
     return match.field_diffs.map((row) => ({
       label: row.label,

@@ -186,11 +186,11 @@ def list_candidates_db(tenant_id: str | None = None) -> list[dict[str, Any]]:
                    ))[1] as duplicate_status
             from (
               select left_document_id as document_id, score, status
-              from entity_resolution_matches
+              from candidate_version_matches
               where tenant_id=%s and status in ('suggested', 'review_later', 'same_person', 'versioned')
               union all
               select right_document_id as document_id, score, status
-              from entity_resolution_matches
+              from candidate_version_matches
               where tenant_id=%s and status in ('suggested', 'review_later', 'same_person', 'versioned')
             ) risks
             group by document_id

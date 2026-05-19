@@ -1,0 +1,531 @@
+/* Public homepage and merged login styles. */
+
+.publicHome {
+  min-height: 100vh;
+  display: grid;
+  align-content: start;
+  gap: 0;
+  background: #fbf9ff;
+}
+
+.publicNav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  min-height: 134px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.42);
+  padding: 0 48px;
+}
+
+.publicBrand {
+  display: inline-flex;
+  align-items: center;
+  gap: 18px;
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.publicNav strong {
+  color: var(--primary);
+  font-size: 31px;
+  line-height: 40px;
+  letter-spacing: -0.035em;
+}
+
+.brandMark {
+  width: 44px;
+  height: 44px;
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+}
+
+.brandMark::before,
+.brandMark::after {
+  content: "";
+  position: absolute;
+  left: 24%;
+  top: 52%;
+  width: 39%;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--primary);
+  opacity: 0.74;
+  transform-origin: left center;
+  z-index: 0;
+}
+
+.brandMark::before {
+  transform: rotate(-54deg);
+}
+
+.brandMark::after {
+  left: 42%;
+  transform: rotate(54deg);
+}
+
+.brandMark i {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 4px solid var(--primary);
+  border-radius: 999px;
+  background: var(--background);
+  z-index: 1;
+}
+
+.brandMark i:nth-child(1) {
+  left: 15px;
+  top: 0;
+}
+
+.brandMark i:nth-child(2) {
+  left: 0;
+  bottom: 4px;
+}
+
+.brandMark i:nth-child(3) {
+  right: 0;
+  bottom: 4px;
+}
+
+.publicNav nav,
+.publicNav div,
+.homeHeroActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.publicNav nav {
+  gap: 64px;
+}
+
+.publicNav a,
+.plainLink,
+.primaryLink,
+.adminNavLink,
+.adminHeroLink {
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 800;
+}
+
+.publicNav nav a {
+  color: #475569;
+  font-size: 22px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.publicNav div {
+  gap: 32px;
+}
+
+.adminNavLink,
+.adminHeroLink {
+  color: #475569;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.plainLink,
+.primaryLink {
+  min-height: 68px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0 32px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.primaryLink {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: white;
+}
+
+.plainLink {
+  background: var(--surface);
+}
+
+.primaryLink.large,
+.plainLink.large {
+  min-width: 294px;
+  min-height: 82px;
+  font-size: 20px;
+}
+
+.homeHero {
+  display: grid;
+  place-items: center;
+  min-height: 620px;
+  border-bottom: 0;
+  padding: 92px 24px 70px;
+  text-align: center;
+}
+
+.homeHeroCopy {
+  max-width: 1320px;
+  display: grid;
+  justify-items: center;
+}
+
+.homeHero h1 {
+  display: grid;
+  gap: 6px;
+  color: #181b25;
+  font-size: clamp(60px, 7vw, 104px);
+  line-height: 1.05;
+  letter-spacing: -0.055em;
+}
+
+.homeHero h1 span,
+.homeHero h1 em {
+  display: block;
+  font-style: normal;
+}
+
+.homeHero h1 em {
+  color: var(--primary);
+}
+
+.homeHero p {
+  max-width: 1050px;
+  margin-top: 52px;
+  color: #475569;
+  font-size: 34px;
+  line-height: 52px;
+}
+
+.homeHeroActions {
+  justify-content: center;
+  gap: 32px;
+  margin-top: 86px;
+}
+
+.adminHeroLink {
+  display: inline-flex;
+  margin-top: 22px;
+  border-bottom: 2px solid #475569;
+  color: #475569;
+  font-size: 20px;
+}
+
+.homeFeatureGrid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 32px;
+  padding: 50px 48px 96px;
+}
+
+.homeFeatureGrid article {
+  min-height: 360px;
+  display: grid;
+  align-content: start;
+  gap: 22px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.86);
+  padding: 66px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.homeFeatureGrid article svg {
+  color: var(--primary);
+}
+
+.homeFeatureGrid article:nth-child(2) svg {
+  color: #10b981;
+}
+
+.homeFeatureGrid article:nth-child(3) svg {
+  color: #bc4800;
+}
+
+.homeFeatureGrid strong {
+  color: #181b25;
+  font-family: Manrope, Inter, sans-serif;
+  font-size: 42px;
+  line-height: 52px;
+  letter-spacing: -0.035em;
+}
+
+.homeFeatureGrid span {
+  color: #475569;
+  font-size: 27px;
+  line-height: 42px;
+}
+
+.wideFeature {
+  grid-column: span 1;
+}
+
+.featureSkeleton {
+  min-height: 230px;
+  display: grid;
+  align-content: center;
+  gap: 16px;
+  margin-top: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 38px 18%;
+}
+
+.featureSkeleton i,
+.featureSkeleton b {
+  height: 16px;
+  display: block;
+  border-radius: 999px;
+  background: #d9deea;
+}
+
+.featureSkeleton i:nth-child(1),
+.featureSkeleton i:nth-child(4) {
+  width: 100%;
+}
+
+.featureSkeleton i:nth-child(2) {
+  width: 82%;
+}
+
+.featureSkeleton b {
+  width: 66%;
+  background: #83a9e8;
+}
+
+.matchCallout {
+  align-self: end;
+  margin-top: 84px;
+  border: 1px solid #bae6fd;
+  background: #eff8ff;
+  color: #0ea5e9;
+  padding: 18px;
+  font-size: 24px;
+  line-height: 34px;
+  text-align: center;
+}
+
+.publicFooter {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 32px;
+  border-top: 1px solid var(--line);
+  background: #f8fafc;
+  padding: 70px 48px;
+}
+
+.publicFooter div {
+  display: grid;
+  gap: 18px;
+}
+
+.publicFooter strong,
+.publicFooter a {
+  color: #475569;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.publicFooter span {
+  color: #475569;
+  font-size: 24px;
+}
+
+.publicFooter nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 46px;
+}
+
+.publicFooter a {
+  text-decoration: none;
+}
+
+.publicHome {
+  background: var(--background);
+}
+
+.publicNav {
+  min-height: 76px;
+  gap: 18px;
+  background: rgba(255, 255, 255, 0.68);
+  padding: 0 32px;
+}
+
+.publicBrand {
+  gap: 12px;
+}
+
+.publicNav strong {
+  font-size: 21px;
+  line-height: 28px;
+  letter-spacing: -0.025em;
+}
+
+.brandMark {
+  width: 30px;
+  height: 30px;
+}
+
+.brandMark i {
+  width: 10px;
+  height: 10px;
+  border-width: 3px;
+}
+
+.brandMark i:nth-child(1) {
+  left: 10px;
+}
+
+.brandMark i:nth-child(2) {
+  bottom: 3px;
+}
+
+.brandMark i:nth-child(3) {
+  bottom: 3px;
+}
+
+.brandMark::before,
+.brandMark::after {
+  height: 3px;
+}
+
+.publicNav nav {
+  gap: 28px;
+}
+
+.publicNav nav a,
+.adminNavLink,
+.adminHeroLink {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+
+.publicNav div {
+  gap: 14px;
+}
+
+.plainLink,
+.primaryLink {
+  min-height: 42px;
+  border-radius: 7px;
+  padding: 0 18px;
+  letter-spacing: 0.045em;
+}
+
+.primaryLink.large,
+.plainLink.large {
+  min-width: 190px;
+  min-height: 50px;
+  font-size: 13px;
+}
+
+.homeHero {
+  min-height: 420px;
+  padding: 62px 24px 48px;
+}
+
+.homeHero h1 {
+  gap: 3px;
+  font-size: clamp(40px, 5.5vw, 72px);
+  letter-spacing: -0.045em;
+}
+
+.homeHero p {
+  max-width: 760px;
+  margin-top: 24px;
+  font-size: 18px;
+  line-height: 29px;
+}
+
+.homeHeroActions {
+  gap: 14px;
+  margin-top: 38px;
+}
+
+.adminHeroLink {
+  margin-top: 14px;
+  border-bottom-width: 1px;
+  font-size: 12px;
+}
+
+.homeFeatureGrid {
+  gap: 18px;
+  padding: 28px 32px 56px;
+}
+
+.homeFeatureGrid article {
+  min-height: 230px;
+  gap: 14px;
+  border-radius: 8px;
+  padding: 30px;
+  box-shadow: none;
+}
+
+.homeFeatureGrid article svg {
+  width: 28px;
+  height: 28px;
+}
+
+.homeFeatureGrid strong {
+  font-size: 25px;
+  line-height: 32px;
+  letter-spacing: -0.025em;
+}
+
+.homeFeatureGrid span {
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.featureSkeleton {
+  min-height: 120px;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 22px 14%;
+}
+
+.featureSkeleton i,
+.featureSkeleton b {
+  height: 9px;
+}
+
+.featureSkeleton b {
+  background: #a9b7c8;
+}
+
+.matchCallout {
+  margin-top: 20px;
+  border-color: #d7e2ea;
+  background: #f4f8fa;
+  color: var(--primary);
+  padding: 12px;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.publicFooter {
+  padding: 34px 32px;
+}
+
+.publicFooter div {
+  gap: 8px;
+}
+
+.publicFooter span {
+  font-size: 13px;
+}
+
+.publicFooter nav {
+  gap: 20px;
+}

@@ -158,6 +158,26 @@ def tenant_admin_detail(tenant_id: str) -> dict[str, Any]:
             """,
             (tenant_id,),
         ).fetchall()
+        candidates = conn.execute(
+            """
+            select document_id, name, source_file, updated_at
+            from candidates
+            where tenant_id=%s and deleted_at is null
+            order by updated_at desc
+            limit 10
+            """,
+            (tenant_id,),
+        ).fetchall()
+        requirements = conn.execute(
+            """
+            select id, title, status, source_type, updated_at
+            from requirements
+            where tenant_id=%s
+            order by updated_at desc
+            limit 10
+            """,
+            (tenant_id,),
+        ).fetchall()
         usage = conn.execute(
             """
             select
@@ -172,12 +192,29 @@ def tenant_admin_detail(tenant_id: str) -> dict[str, Any]:
         "tenant": tenant,
         "members": list_members(tenant_id),
         "invitations": list_invitations(tenant_id),
-        "recent_candidates": [],
-        "recent_requirements": [],
+        "recent_candidates": [
+            {
+                "id": row["document_id"],
+                "name": row["name"] or "Unnamed candidate",
+                "source_file": row["source_file"],
+                "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
+            }
+            for row in candidates
+        ],
+        "recent_requirements": [
+            {
+                "id": str(row["id"]),
+                "title": row["title"] or "Untitled requirement",
+                "status": row["status"],
+                "source_type": row["source_type"],
+                "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
+            }
+            for row in requirements
+        ],
         "recent_parse_jobs": [
             {
                 "id": str(row["id"]),
-                "original_filename": f"Parse job {str(row['id'])[:8]}",
+                "original_filename": row["original_filename"] or f"Parse job {str(row['id'])[:8]}",
                 "status": row["status"],
                 "stage": row["stage"],
                 "progress_percent": _parse_job_progress(row["status"], row["stage"]),

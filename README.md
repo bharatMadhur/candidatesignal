@@ -1,4 +1,4 @@
-# candidatSignal.ai
+# candidateSignal.ai
 
 Production-style HR resume intelligence system for tenant-isolated resume parsing, recruiter notes, semantic search, candidate versioning, job campaigns, and requirement matching.
 
@@ -135,9 +135,12 @@ Once a platform admin exists, `/auth/bootstrap` is rejected unless `RESUME_INTEL
 Login split:
 
 ```text
-/admin/login   Platform admin only. Company workspace access is denied.
-/login         Company tenant users only.
+/              Single public homepage with embedded login.
+/?login=admin  Platform admin mode for company/seat management only.
+/?login=company Company workspace mode for recruiter workflows.
 ```
+
+There are no standalone `/login` or `/admin/login` pages. Admin and company users share the homepage entry surface, then route to separate post-login workspaces by role.
 
 Local dev credentials are seeded only for localhost/non-production runs:
 
@@ -466,9 +469,13 @@ DELETE /candidates/{id}/notes/{note_id}
 
 ```bash
 .venv/bin/python -m compileall -q src scripts
+.venv/bin/python -m pytest
 cd web
 npm run build
+npm run smoke
 ```
+
+`npm run smoke` expects the Next.js UI to be running and defaults to `http://127.0.0.1:3001`. Override with `SMOKE_BASE_URL=https://your-host`.
 
 Smoke endpoints:
 
@@ -529,7 +536,7 @@ Backups are database-only. Uploaded document storage depends on the configured `
 Restore:
 
 ```bash
-CONFIRM_RESTORE=yes DATABASE_URL=postgresql://... scripts/restore_postgres.sh backups/candidatSignal_YYYYMMDDTHHMMSSZ.dump
+CONFIRM_RESTORE=yes DATABASE_URL=postgresql://... scripts/restore_postgres.sh backups/candidateSignal_YYYYMMDDTHHMMSSZ.dump
 ```
 
 Production config check:
@@ -554,7 +561,7 @@ Run migrations with:
 
 ## Remaining Production Hardening
 
-- Add Playwright/API test suites.
+- Expand browser smoke tests into full Playwright/API suites.
 - Add OCR page-level confidence if LightOnOCR exposes calibrated confidence.
 - Add billing/seat enforcement dashboard.
 - Add external error tracking provider integration.

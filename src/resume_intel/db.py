@@ -239,7 +239,7 @@ def migrate() -> None:
               unique (candidate_document_id, page_number)
             );
 
-            create table if not exists entity_resolution_matches (
+            create table if not exists candidate_version_matches (
               id uuid primary key default gen_random_uuid(),
               tenant_id uuid references tenants(id) on delete cascade,
               left_document_id text not null references candidates(document_id) on delete cascade,
@@ -253,12 +253,12 @@ def migrate() -> None:
               unique (left_document_id, right_document_id)
             );
 
-            create table if not exists candidate_merge_events (
+            create table if not exists candidate_version_events (
               id uuid primary key default gen_random_uuid(),
               tenant_id uuid not null references tenants(id) on delete cascade,
               canonical_document_id text not null,
               merged_document_id text not null,
-              match_id uuid references entity_resolution_matches(id) on delete set null,
+              match_id uuid references candidate_version_matches(id) on delete set null,
               decided_by uuid references users(id) on delete set null,
               metadata jsonb not null default '{}'::jsonb,
               created_at timestamptz not null default now()
@@ -347,7 +347,8 @@ def migrate() -> None:
               tenant_id uuid references tenants(id) on delete cascade,
               requirement_id uuid not null references requirements(id) on delete cascade,
               chunk_text text not null,
-              embedding vector(384) not null,
+              embedding_model text not null default 'unknown',
+              embedding vector(1536) not null,
               created_at timestamptz not null default now()
             );
 
@@ -651,7 +652,7 @@ def migrate() -> None:
         conn.execute("alter table notes add column if not exists tenant_id uuid references tenants(id) on delete cascade;")
         conn.execute("alter table notes add column if not exists updated_at timestamptz not null default now();")
         conn.execute("alter table notes add column if not exists deleted_at timestamptz;")
-        conn.execute("alter table entity_resolution_matches add column if not exists tenant_id uuid references tenants(id) on delete cascade;")
+        conn.execute("alter table candidate_version_matches add column if not exists tenant_id uuid references tenants(id) on delete cascade;")
         conn.execute("alter table requirements add column if not exists tenant_id uuid references tenants(id) on delete cascade;")
         conn.execute("alter table requirements add column if not exists created_by_user_id uuid references users(id) on delete set null;")
         conn.execute("alter table requirement_matches add column if not exists tenant_id uuid references tenants(id) on delete cascade;")
@@ -725,7 +726,7 @@ def migrate() -> None:
             """
             update candidates set tenant_id = (select id from tenants where slug='local-dev') where tenant_id is null;
             update notes set tenant_id = (select id from tenants where slug='local-dev') where tenant_id is null;
-            update entity_resolution_matches set tenant_id = (select id from tenants where slug='local-dev') where tenant_id is null;
+            update candidate_version_matches set tenant_id = (select id from tenants where slug='local-dev') where tenant_id is null;
             update requirements set tenant_id = (select id from tenants where slug='local-dev') where tenant_id is null;
             update requirement_matches set tenant_id = (select id from tenants where slug='local-dev') where tenant_id is null;
             update requirement_embeddings set tenant_id = (select id from tenants where slug='local-dev') where tenant_id is null;
@@ -828,7 +829,7 @@ def migrate() -> None:
         conn.execute("create index if not exists pii_access_events_tenant_doc_idx on pii_access_events (tenant_id, document_id, created_at desc);")
         conn.execute("create index if not exists operational_alerts_tenant_status_idx on operational_alerts (tenant_id, status, severity, created_at desc);")
         conn.execute("create index if not exists operational_alert_deliveries_alert_idx on operational_alert_deliveries (tenant_id, alert_id, created_at desc);")
-        conn.execute("create index if not exists candidate_merge_events_tenant_idx on candidate_merge_events (tenant_id, canonical_document_id, created_at desc);")
+        conn.execute("create index if not exists candidate_version_events_tenant_idx on candidate_version_events (tenant_id, canonical_document_id, created_at desc);")
         conn.execute(
             """
             insert into model_prices (model, input_per_million, output_per_million)

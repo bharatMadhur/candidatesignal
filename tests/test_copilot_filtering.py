@@ -1,23 +1,23 @@
 import unittest
 
-from resume_intel.web import (
-    _apply_copilot_direct_evidence_policy,
-    _candidate_has_direct_evidence,
-    _copilot_clarifying_questions,
-    _copilot_query_intent,
-    _rank_and_filter_copilot_candidates,
-    _promote_direct_evidence,
-    _should_require_direct_evidence,
-    _significant_query_terms,
+from resume_intel.matching import (
+    apply_copilot_direct_evidence_policy,
+    candidate_has_direct_evidence,
+    copilot_clarifying_questions,
+    copilot_query_intent,
+    promote_direct_evidence,
+    rank_and_filter_copilot_candidates,
+    should_require_direct_evidence,
+    significant_query_terms,
 )
 
 
 class CopilotFilteringTest(unittest.TestCase):
     def test_short_company_query_requires_direct_evidence(self):
-        terms = _significant_query_terms("cerner")
+        terms = significant_query_terms("cerner")
 
         self.assertEqual(terms, ["cerner"])
-        self.assertTrue(_should_require_direct_evidence("cerner", terms))
+        self.assertTrue(should_require_direct_evidence("cerner", terms))
 
     def test_candidate_direct_evidence_detects_company_snippet(self):
         candidate = {
@@ -28,7 +28,7 @@ class CopilotFilteringTest(unittest.TestCase):
             ],
         }
 
-        self.assertTrue(_candidate_has_direct_evidence(candidate, ["cerner"]))
+        self.assertTrue(candidate_has_direct_evidence(candidate, ["cerner"]))
 
     def test_direct_evidence_is_promoted_above_semantic_noise(self):
         candidate = {
@@ -39,12 +39,12 @@ class CopilotFilteringTest(unittest.TestCase):
             ],
         }
 
-        promoted = _promote_direct_evidence(candidate, ["cerner"])
+        promoted = promote_direct_evidence(candidate, ["cerner"])
 
         self.assertEqual(promoted["evidence"][0]["snippet"], "Cerner Healthcare Big Data Engineer")
 
     def test_short_query_does_not_fallback_to_semantic_noise(self):
-        results = _apply_copilot_direct_evidence_policy(
+        results = apply_copilot_direct_evidence_policy(
             "cerner",
             ["cerner"],
             [
@@ -56,7 +56,7 @@ class CopilotFilteringTest(unittest.TestCase):
         self.assertEqual([item["name"] for item in results], ["Direct Evidence"])
 
     def test_short_query_returns_empty_when_no_direct_evidence_exists(self):
-        results = _apply_copilot_direct_evidence_policy(
+        results = apply_copilot_direct_evidence_policy(
             "cerner",
             ["cerner"],
             [{"name": "No Evidence", "evidence": [{"snippet": "Healthcare analytics"}]}],
@@ -65,7 +65,7 @@ class CopilotFilteringTest(unittest.TestCase):
         self.assertEqual(results, [])
 
     def test_location_intent_scores_preferred_city_above_wrong_city(self):
-        results = _rank_and_filter_copilot_candidates(
+        results = rank_and_filter_copilot_candidates(
             "find me data engineer from new york",
             [
                 {
@@ -94,7 +94,7 @@ class CopilotFilteringTest(unittest.TestCase):
         )
 
     def test_required_location_intent_filters_out_wrong_city_when_explicit(self):
-        results = _rank_and_filter_copilot_candidates(
+        results = rank_and_filter_copilot_candidates(
             "find me data engineer who must be in new york",
             [
                 {
@@ -119,19 +119,19 @@ class CopilotFilteringTest(unittest.TestCase):
         self.assertEqual([item["name"] for item in results], ["New York Candidate"])
 
     def test_data_engineer_intent_matches_data_engineering_domain(self):
-        intent = _copilot_query_intent("find me data engineer from new york")
+        intent = copilot_query_intent("find me data engineer from new york")
 
         self.assertIn(["new york", "new york city", "nyc", "ny"], intent["location_groups"])
         self.assertIn("data engineering", intent["role_groups"][0])
         self.assertEqual(intent["location_requirement"], "preferred")
 
     def test_explicit_location_requirement_is_detected(self):
-        intent = _copilot_query_intent("find me data engineer who must be in new york")
+        intent = copilot_query_intent("find me data engineer who must be in new york")
 
         self.assertEqual(intent["location_requirement"], "required")
 
     def test_copilot_does_not_ask_location_when_city_is_present(self):
-        questions = _copilot_clarifying_questions("find me data engineer from new york")
+        questions = copilot_clarifying_questions("find me data engineer from new york")
 
         self.assertFalse(any("countries, locations" in question for question in questions))
 

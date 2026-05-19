@@ -149,8 +149,7 @@ export type Candidate = {
     critical_missing_count?: number;
     enrichment_missing_keys?: string[];
   };
-  candidate_versions?: { matches: EntityMatch[] };
-  entity_resolution?: { matches: EntityMatch[] };
+  candidate_versions?: { matches: CandidateVersionMatch[] };
   _metadata?: any;
 };
 
@@ -236,7 +235,7 @@ export type RequirementMatchRunChange = {
   current_score?: number | null;
 };
 
-export type EntityMatch = {
+export type CandidateVersionMatch = {
   id?: string;
   document_id?: string;
   left_document_id?: string;
@@ -983,7 +982,7 @@ export async function rejectMatch(token: string, requirementId: string, candidat
   return request(`/requirements/${requirementId}/matches/${candidateId}/reject`, { method: "POST", token });
 }
 
-export async function listEntityClusters(token: string): Promise<{ clusters: EntityMatch[] }> {
+export async function listCandidateVersionClusters(token: string): Promise<{ clusters: CandidateVersionMatch[] }> {
   return request("/candidate-versions/clusters", { token });
 }
 

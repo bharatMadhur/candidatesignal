@@ -48,7 +48,7 @@ def deliver_operational_alert(alert: dict[str, Any]) -> None:
 
 def _webhook_payload(alert: dict[str, Any]) -> dict[str, Any]:
     return {
-        "product": "candidatSignal.ai",
+        "product": "candidateSignal.ai",
         "alert_id": alert["id"],
         "tenant_id": alert.get("tenant_id"),
         "severity": alert.get("severity"),

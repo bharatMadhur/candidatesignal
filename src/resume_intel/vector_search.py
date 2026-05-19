@@ -180,6 +180,7 @@ def _split_raw_text(text: str) -> list[str]:
 
 
 def upsert_requirement_embedding(requirement_id: str, text: str, tenant_id: str | None = None) -> None:
+    embedding, model = embed_text_real(text)
     with db() as conn:
         if tenant_id:
             conn.execute("delete from requirement_embeddings where tenant_id=%s and requirement_id=%s", (tenant_id, requirement_id))
@@ -187,10 +188,10 @@ def upsert_requirement_embedding(requirement_id: str, text: str, tenant_id: str 
             conn.execute("delete from requirement_embeddings where requirement_id=%s", (requirement_id,))
         conn.execute(
             """
-            insert into requirement_embeddings (tenant_id, requirement_id, chunk_text, embedding)
-            values (%s, %s, %s, %s::vector)
+            insert into requirement_embeddings (tenant_id, requirement_id, chunk_text, embedding_model, embedding)
+            values (%s, %s, %s, %s, %s::vector)
             """,
-            (tenant_id, requirement_id, text, vector_literal(embed_text(text))),
+            (tenant_id, requirement_id, text, model, vector_literal(_normalize_dim(embedding, OPENAI_EMBEDDING_DIMENSIONS))),
         )
         conn.commit()
 

@@ -14,7 +14,7 @@ from .pii import redact_contact_pii_text
 from .settings import Settings
 
 
-COPILOT_SYNTHESIS_PROMPT = """You are candidatSignal.ai's recruiter copilot synthesis engine.
+COPILOT_SYNTHESIS_PROMPT = """You are candidateSignal.ai's recruiter copilot synthesis engine.
 Use only the provided tenant-scoped search results and evidence snippets.
 Do not invent candidate facts, employers, dates, countries, or skills.
 Never reveal hidden IDs unless needed for technical support.

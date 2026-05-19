@@ -1,1 +1,1 @@
-"""Versioned database migrations for candidatSignal.ai."""
+"""Versioned database migrations for candidateSignal.ai."""

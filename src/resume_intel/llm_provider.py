@@ -23,7 +23,7 @@ class GenerateResult:
 
 
 class NormalizedProvider:
-    """Small LiteLLM bridge for all candidatSignal.ai LLM calls."""
+    """Small LiteLLM bridge for all candidateSignal.ai LLM calls."""
 
     def __init__(
         self,

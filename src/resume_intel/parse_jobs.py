@@ -8,7 +8,7 @@ from psycopg.types.json import Jsonb
 
 from .db import db
 from .db_store import add_note_db, llm_usage_cost_for_document, save_candidate_db
-from .entity_resolution import find_matches_for_record, persist_matches
+from .candidate_versions import find_matches_for_record, persist_matches
 from .pipeline import SUPPORTED_EXTENSIONS, parse_file
 from .settings import load_settings
 from .storage import document_storage
@@ -26,7 +26,7 @@ STAGE_PROGRESS = {
     "running": (35, "Parsing resume"),
     "saving": (78, "Saving candidate and metadata"),
     "embedding": (88, "Indexing semantic search"),
-    "entity_resolution": (94, "Checking candidate versions"),
+    "candidate_versions": (94, "Checking candidate versions"),
     "succeeded": (100, "Completed"),
     "completed": (100, "Completed"),
     "failed": (100, "Failed"),
@@ -494,9 +494,9 @@ def run_job(job_id: str, tenant_id: str, worker_id: str | None = None) -> dict[s
                 score=0.0,
                 evidence={"parse_job_id": job_id, "batch_id": job.get("batch_id"), "original_filename": job.get("original_filename")},
             )
-        _set_job_stage(job_id, tenant_id, "running", "entity_resolution")
+        _set_job_stage(job_id, tenant_id, "running", "candidate_versions")
         if worker_id:
-            record_worker_heartbeat(worker_id, status="entity_resolution", tenant_id=tenant_id, current_job_id=job_id)
+            record_worker_heartbeat(worker_id, status="candidate_versions", tenant_id=tenant_id, current_job_id=job_id)
         matches = find_matches_for_record(record, tenant_id=tenant_id)
         persist_matches(record, matches, tenant_id)
         totals = record.get("llm_usage_totals") or {}

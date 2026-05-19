@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from resume_intel.entity_resolution import build_version_diffs, merge_match
+from resume_intel.candidate_versions import build_version_diffs, merge_match
 
 
 class CandidateVersionDiffTests(unittest.TestCase):
