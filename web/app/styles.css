@@ -3499,11 +3499,30 @@ button:disabled {
   margin-bottom: 18px;
 }
 
+.candidateReviewWorkspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(310px, 340px);
+  gap: 18px;
+  align-items: start;
+}
+
+.candidateReviewMain {
+  min-width: 0;
+  display: grid;
+  gap: 18px;
+}
+
 .candidateCleanLayout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(360px, 0.46fr);
   gap: 18px;
   align-items: start;
+}
+
+.candidateOverviewStack {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
 }
 
 .candidateCleanPrimary,
@@ -3547,10 +3566,26 @@ button:disabled {
 }
 
 .candidateContextRail {
-  position: static;
-  top: auto;
+  position: sticky;
+  top: 126px;
   max-height: none;
   overflow: visible;
+}
+
+.candidatePersistentRail {
+  grid-template-columns: 1fr;
+  align-self: start;
+}
+
+.railCardHeader {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.railCardHeader h3 {
+  margin: 2px 0 0;
 }
 
 .recruiterQuickNotes input,
@@ -3563,8 +3598,29 @@ button:disabled {
 }
 
 .recruiterQuickNotes textarea {
-  min-height: 116px;
+  min-height: 88px;
+  max-height: 132px;
   resize: vertical;
+}
+
+.candidateRailActions {
+  gap: 12px;
+}
+
+.candidateRailActions > div {
+  display: grid;
+  gap: 8px;
+}
+
+.candidateRailActions button {
+  width: 100%;
+  justify-content: center;
+}
+
+.candidateRailVersions p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 19px;
 }
 
 .recentNotesCompact {
@@ -9349,16 +9405,20 @@ h3 {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.candidateReviewWorkspace {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 330px);
+}
+
 .candidateContextRail {
   display: grid;
-  grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.2fr) minmax(220px, 0.7fr);
+  grid-template-columns: 1fr;
   align-items: start;
   max-height: none;
   overflow: visible;
 }
 
 .candidateContextRail .coverageSummary {
-  grid-column: 1 / -1;
+  grid-column: auto;
 }
 
 .candidateCleanMainShell {
@@ -9646,6 +9706,14 @@ h3 {
     flex-wrap: wrap;
   }
 
+  .candidateReviewWorkspace {
+    grid-template-columns: 1fr;
+  }
+
+  .candidateContextRail {
+    position: static;
+  }
+
   .candidateCleanHeader {
     flex-direction: column;
     padding: 16px;
@@ -9659,10 +9727,6 @@ h3 {
 
   .candidateCleanMainShell {
     padding: 16px;
-  }
-
-  .candidateContextRail {
-    position: static;
   }
 
   .timelineRow > p,

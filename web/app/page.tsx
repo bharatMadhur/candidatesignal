@@ -3082,8 +3082,10 @@ function CandidateDetail({
           ))}
         </nav>
 
+        <section className="candidateReviewWorkspace">
+          <div className="candidateReviewMain">
         {activeTab === "overview" ? (
-          <section className="candidateCleanLayout">
+          <section className="candidateOverviewStack">
             <div className="candidateCleanPrimary">
               <article className="candidateReportHeroCard">
                 <span className="reportLabel">Recruiter Summary</span>
@@ -3140,78 +3142,6 @@ function CandidateDetail({
                 </div>
               </article>
             </div>
-
-            <aside className="candidateContextRail">
-              <article className="briefCard recruiterQuickNotes">
-                <h3>Recruiter Notes</h3>
-                <NoteTypeButtons setNoteName={setNoteName} />
-                <input value={noteName} onChange={(event) => setNoteName(event.target.value)} placeholder="Note title" />
-                <textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Write a quick recruiter note. It becomes searchable context." />
-                <button className="secondary" onClick={saveNote} disabled={!note.trim()}>Save Note</button>
-                <div className="recentNotesCompact">
-                  {(candidate.notes ?? []).slice(0, 3).map((item, index) => (
-                    <article key={`${item.id ?? item.created_at}-${index}`}>
-                      <strong>{item.name}</strong>
-                      <span>{item.created_at ? new Date(item.created_at).toLocaleDateString() : "Saved"}</span>
-                      <p>{item.content}</p>
-                      {item.id ? (
-                        <div className="noteMiniActions">
-                          <button className="plain small" onClick={() => {
-                            setEditingNoteId(item.id ?? "");
-                            setEditingNoteName(item.name);
-                            setEditingNoteContent(item.content);
-                            setActiveTab("notes");
-                          }}>Edit</button>
-                          <button className="plain small danger" onClick={() => item.id && deleteSavedNote(item.id)}>Delete</button>
-                        </div>
-                      ) : null}
-                    </article>
-                  ))}
-                  {!(candidate.notes ?? []).length ? <p className="muted">No recruiter notes yet.</p> : null}
-                </div>
-              </article>
-
-              <article className="briefCard">
-                <h3>Contact & Location</h3>
-                <div className="currentLocationCallout">
-                  <span>Latest role location</span>
-                  <strong>{currentLocation || "Not stated in latest role"}</strong>
-                  {resumeHeaderLocation && resumeHeaderLocation !== currentLocation ? <em>Resume header: {resumeHeaderLocation}</em> : null}
-                </div>
-                <div className="locationChipList">
-                  {locationChips.length ? locationChips.map((item, index) => (
-                    <span className={item.current ? "currentLocationChip" : ""} key={`${item.label}-${index}`}>{item.label}</span>
-                  )) : <span>No country or location signals found</span>}
-                </div>
-                <div className="piiList clean">
-                  <PiiGroup label="Email" values={piiIntel.emails ?? (candidate.contact?.email ? [candidate.contact.email] : [])} />
-                  <PiiGroup label="Phone" values={piiIntel.phones ?? (candidate.contact?.phone ? [candidate.contact.phone] : [])} />
-                  <PiiGroup label="LinkedIn profile" values={linkedinProfileUrls} />
-                  {otherLinkedinUrls.length ? <PiiGroup label="Other LinkedIn links" values={otherLinkedinUrls} compact /> : null}
-                  <PiiGroup label="Portfolio" values={portfolioUrls} />
-                </div>
-                <div className="profileVerificationList">
-                  <div className="profileVerificationHead">
-                    <strong>Application Profile Verification</strong>
-                    <span>{domainLabel(profileVerification.external_verification_status ?? "not_configured")}</span>
-                  </div>
-                  <VerificationRow label="LinkedIn" item={profileVerification.linkedin} />
-                  <VerificationRow label="Portfolio" item={profileVerification.portfolio} />
-                  <VerificationRow label="GitHub" item={profileVerification.github} />
-                </div>
-              </article>
-
-              <article className="briefCard">
-                <h3>Quick Facts</h3>
-                <div className="compactMetaList">
-                  <div><span>Coverage</span><strong>{coverage ? `${Math.round(coverage.score * 100)}%` : "Unknown"}</strong></div>
-                  <div><span>Experience</span><strong>{formatYears(accounting?.total_years_unique ?? hr?.total_years_experience)}</strong></div>
-                  <div><span>Top domain</span><strong>{domainRows[0] ? domainLabel(domainRows[0].domain) : "Not found"}</strong></div>
-                  <div><span>Versions</span><strong>{versionCount || "None"}</strong></div>
-                </div>
-              </article>
-              <CoverageSummary coverage={coverage} />
-            </aside>
           </section>
         ) : null}
 
@@ -3405,6 +3335,104 @@ function CandidateDetail({
             <CandidateVersionRail candidate={candidate} matches={versionMatches} openCandidate={openCandidate} />
           </section>
         ) : null}
+          </div>
+
+          <aside className="candidateContextRail candidatePersistentRail" aria-label="Candidate recruiter context">
+            <article className="briefCard recruiterQuickNotes">
+              <div className="railCardHeader">
+                <div>
+                  <span className="reportLabel">Recruiter Context</span>
+                  <h3>Notes</h3>
+                </div>
+                <button className="plain small" type="button" onClick={() => setActiveTab("notes")}>All Notes</button>
+              </div>
+              <NoteTypeButtons setNoteName={setNoteName} />
+              <input value={noteName} onChange={(event) => setNoteName(event.target.value)} placeholder="Note title" />
+              <textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Write a quick recruiter note. It becomes searchable context." />
+              <button className="secondary" onClick={saveNote} disabled={!note.trim()}>Save Note</button>
+              <div className="recentNotesCompact">
+                {(candidate.notes ?? []).slice(0, 3).map((item, index) => (
+                  <article key={`${item.id ?? item.created_at}-${index}`}>
+                    <strong>{item.name}</strong>
+                    <span>{item.created_at ? new Date(item.created_at).toLocaleDateString() : "Saved"}</span>
+                    <p>{item.content}</p>
+                    {item.id ? (
+                      <div className="noteMiniActions">
+                        <button className="plain small" onClick={() => {
+                          setEditingNoteId(item.id ?? "");
+                          setEditingNoteName(item.name);
+                          setEditingNoteContent(item.content);
+                          setActiveTab("notes");
+                        }}>Edit</button>
+                        <button className="plain small danger" onClick={() => item.id && deleteSavedNote(item.id)}>Delete</button>
+                      </div>
+                    ) : null}
+                  </article>
+                ))}
+                {!(candidate.notes ?? []).length ? <p className="muted">No recruiter notes yet.</p> : null}
+              </div>
+            </article>
+
+            <article className="briefCard candidateRailActions">
+              <h3>Next Action</h3>
+              <div>
+                <button className="primary" onClick={match}>Match to Role</button>
+                <button className="plain" onClick={() => setActiveTab("cv")}>View Resume</button>
+                <button className="plain" onClick={() => setShowCorrectionPanel((value) => !value)}>Edit Fields</button>
+              </div>
+            </article>
+
+            <article className="briefCard">
+              <h3>Contact & Location</h3>
+              <div className="currentLocationCallout">
+                <span>Latest role location</span>
+                <strong>{currentLocation || "Not stated in latest role"}</strong>
+                {resumeHeaderLocation && resumeHeaderLocation !== currentLocation ? <em>Resume header: {resumeHeaderLocation}</em> : null}
+              </div>
+              <div className="locationChipList">
+                {locationChips.length ? locationChips.map((item, index) => (
+                  <span className={item.current ? "currentLocationChip" : ""} key={`${item.label}-${index}`}>{item.label}</span>
+                )) : <span>No country or location signals found</span>}
+              </div>
+              <div className="piiList clean">
+                <PiiGroup label="Email" values={piiIntel.emails ?? (candidate.contact?.email ? [candidate.contact.email] : [])} />
+                <PiiGroup label="Phone" values={piiIntel.phones ?? (candidate.contact?.phone ? [candidate.contact.phone] : [])} />
+                <PiiGroup label="LinkedIn profile" values={linkedinProfileUrls} />
+                {otherLinkedinUrls.length ? <PiiGroup label="Other LinkedIn links" values={otherLinkedinUrls} compact /> : null}
+                <PiiGroup label="Portfolio" values={portfolioUrls} />
+              </div>
+              <div className="profileVerificationList">
+                <div className="profileVerificationHead">
+                  <strong>Application Profile Verification</strong>
+                  <span>{domainLabel(profileVerification.external_verification_status ?? "not_configured")}</span>
+                </div>
+                <VerificationRow label="LinkedIn" item={profileVerification.linkedin} />
+                <VerificationRow label="Portfolio" item={profileVerification.portfolio} />
+                <VerificationRow label="GitHub" item={profileVerification.github} />
+              </div>
+            </article>
+
+            <article className="briefCard">
+              <h3>Quick Facts</h3>
+              <div className="compactMetaList">
+                <div><span>Coverage</span><strong>{coverage ? `${Math.round(coverage.score * 100)}%` : "Unknown"}</strong></div>
+                <div><span>Experience</span><strong>{formatYears(accounting?.total_years_unique ?? hr?.total_years_experience)}</strong></div>
+                <div><span>Top domain</span><strong>{domainRows[0] ? domainLabel(domainRows[0].domain) : "Not found"}</strong></div>
+                <div><span>Versions</span><strong>{versionCount || "None"}</strong></div>
+              </div>
+            </article>
+
+            {versionCount ? (
+              <article className="briefCard candidateRailVersions">
+                <div className="railCardHeader">
+                  <h3>Versions</h3>
+                  <button className="plain small" type="button" onClick={() => setActiveTab("versions")}>Review</button>
+                </div>
+                <p>{versionCount} related resume version{versionCount === 1 ? "" : "s"} found. Use this before deleting or correcting candidate data.</p>
+              </article>
+            ) : null}
+          </aside>
+        </section>
 
       </main>
     </section>
