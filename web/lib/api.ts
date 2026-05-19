@@ -494,6 +494,7 @@ export type CampaignPipelineStatus =
   | "recommended"
   | "uploaded"
   | "matched"
+  | "below_threshold"
   | "shortlisted"
   | "contacted"
   | "replied"
@@ -813,8 +814,12 @@ export async function updateCampaignScorecard(token: string, campaignId: string,
   });
 }
 
-export async function matchCampaign(token: string, id: string): Promise<JobCampaign> {
-  return request(`/campaigns/${id}/match`, { method: "POST", token });
+export async function matchCampaign(token: string, id: string, mode: "full" | "incremental" = "full", candidateIds: string[] = []): Promise<JobCampaign> {
+  return request(`/campaigns/${id}/match`, {
+    method: "POST",
+    token,
+    body: JSON.stringify({ mode, candidate_ids: candidateIds }),
+  });
 }
 
 export async function uploadCampaignResumes(token: string, campaignId: string, files: File[], contextNote = "", batchName = ""): Promise<{ campaign: JobCampaign; batch: ParseBatch }> {

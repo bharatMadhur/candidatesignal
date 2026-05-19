@@ -510,12 +510,14 @@ def run_job(job_id: str, tenant_id: str, worker_id: str | None = None) -> dict[s
             total_tokens=int(totals.get("total_tokens") or 0),
         )
         _refresh_batch_counts(job["batch_id"], tenant_id)
+        _maybe_run_completed_campaign_batch_match(job["batch_id"], tenant_id, job["created_by_user_id"])
         if worker_id:
             record_worker_heartbeat(worker_id, status="idle", tenant_id=tenant_id, processed_delta=1)
         return get_parse_job(job_id, tenant_id)
     except Exception as exc:
         _fail_job(job_id, tenant_id, str(exc))
         _refresh_batch_counts(job["batch_id"], tenant_id)
+        _maybe_run_completed_campaign_batch_match(job["batch_id"], tenant_id, job["created_by_user_id"])
         if worker_id:
             record_worker_heartbeat(worker_id, status="idle", tenant_id=tenant_id, last_error=str(exc), processed_delta=1)
         return get_parse_job(job_id, tenant_id)
@@ -860,6 +862,133 @@ def _refresh_batch_counts(batch_id: str | None, tenant_id: str) -> None:
             where id=%s and tenant_id=%s
             """,
             (total, queued, processing, completed, failed, status, completed + failed + cancelled_count == total, estimated_cost, batch_id, tenant_id),
+        )
+        conn.commit()
+
+
+def _maybe_run_completed_campaign_batch_match(batch_id: str | None, tenant_id: str, user_id: str | None) -> None:
+    if not batch_id or not user_id:
+        return
+    try:
+        match_payload = _completed_campaign_batch_match_payload(batch_id, tenant_id)
+        if not match_payload:
+            return
+        from .campaigns import run_campaign_match
+
+        result = run_campaign_match(
+            match_payload["campaign_id"],
+            tenant_id,
+            user_id,
+            mode="incremental",
+            candidate_ids=match_payload["candidate_ids"],
+            batch_id=batch_id,
+        )
+        _record_campaign_batch_match_result(
+            batch_id,
+            tenant_id,
+            user_id,
+            match_payload["campaign_id"],
+            status="succeeded",
+            metadata={
+                "candidate_count": len(match_payload["candidate_ids"]),
+                "match_count": len(result.get("matches") or []),
+            },
+        )
+    except Exception as exc:
+        try:
+            _record_campaign_batch_match_result(
+                batch_id,
+                tenant_id,
+                user_id,
+                campaign_id=None,
+                status="failed",
+                metadata={"error": f"{exc.__class__.__name__}: {str(exc)[:500]}"},
+            )
+        except Exception:
+            # Campaign rematch observability should never turn a successful
+            # resume parse into a failed parse job.
+            return
+
+
+def _completed_campaign_batch_match_payload(batch_id: str, tenant_id: str) -> dict[str, Any] | None:
+    with db() as conn:
+        batch = conn.execute(
+            """
+            select id, campaign_id, status
+            from parse_batches
+            where id=%s and tenant_id=%s
+            """,
+            (batch_id, tenant_id),
+        ).fetchone()
+        if not batch or not batch.get("campaign_id") or batch.get("status") not in {"succeeded", "completed_with_errors"}:
+            return None
+        campaign_id = str(batch["campaign_id"])
+        lock = conn.execute("select pg_try_advisory_xact_lock(hashtext(%s)) as locked", (f"campaign-batch-match:{tenant_id}:{batch_id}",)).fetchone()
+        if not lock or not lock.get("locked"):
+            return None
+        existing = conn.execute(
+            """
+            select id
+            from audit_logs
+            where tenant_id=%s
+              and action='campaign.incremental_batch_matched'
+              and entity_type='job_campaign'
+              and entity_id=%s
+              and metadata->>'batch_id'=%s
+              and metadata->>'status' in ('succeeded', 'skipped_no_candidates')
+            limit 1
+            """,
+            (tenant_id, campaign_id, batch_id),
+        ).fetchone()
+        if existing:
+            return None
+        rows = conn.execute(
+            """
+            select distinct document_id
+            from parse_jobs
+            where batch_id=%s
+              and tenant_id=%s
+              and campaign_id=%s
+              and status in ('completed', 'succeeded')
+              and document_id is not null
+            order by document_id
+            """,
+            (batch_id, tenant_id, campaign_id),
+        ).fetchall()
+        candidate_ids = [str(row["document_id"]) for row in rows if row.get("document_id")]
+        if not candidate_ids:
+            conn.execute(
+                """
+                insert into audit_logs (tenant_id, user_id, action, entity_type, entity_id, metadata)
+                values (%s, null, 'campaign.incremental_batch_matched', 'job_campaign', %s, %s)
+                """,
+                (tenant_id, campaign_id, Jsonb({"batch_id": batch_id, "candidate_count": 0, "match_count": 0, "status": "skipped_no_candidates"})),
+            )
+            conn.commit()
+            return None
+        conn.commit()
+    return {"campaign_id": campaign_id, "candidate_ids": candidate_ids}
+
+
+def _record_campaign_batch_match_result(
+    batch_id: str,
+    tenant_id: str,
+    user_id: str | None,
+    campaign_id: str | None,
+    *,
+    status: str,
+    metadata: dict[str, Any],
+) -> None:
+    with db() as conn:
+        if not campaign_id:
+            row = conn.execute("select campaign_id from parse_batches where id=%s and tenant_id=%s", (batch_id, tenant_id)).fetchone()
+            campaign_id = str(row["campaign_id"]) if row and row.get("campaign_id") else None
+        conn.execute(
+            """
+            insert into audit_logs (tenant_id, user_id, action, entity_type, entity_id, metadata)
+            values (%s, %s, 'campaign.incremental_batch_matched', 'job_campaign', %s, %s)
+            """,
+            (tenant_id, user_id, campaign_id, Jsonb({"batch_id": batch_id, "status": status, **metadata})),
         )
         conn.commit()
 

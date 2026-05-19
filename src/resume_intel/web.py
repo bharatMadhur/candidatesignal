@@ -280,6 +280,11 @@ class CampaignCandidateStatusRequest(BaseModel):
     note: str | None = None
 
 
+class CampaignMatchRequest(BaseModel):
+    mode: str = "full"
+    candidate_ids: list[str] = Field(default_factory=list)
+
+
 class GovernancePolicyRequest(BaseModel):
     external_llm_synthesis_enabled: bool | None = None
     redact_pii_before_external_llm: bool | None = None
@@ -1048,10 +1053,11 @@ def save_campaign_scorecard(campaign_id: str, request: CampaignScorecardRequest,
 
 
 @app.post("/campaigns/{campaign_id}/match")
-def match_job_campaign(campaign_id: str, user: dict = Depends(current_user)) -> dict:
+def match_job_campaign(campaign_id: str, request: CampaignMatchRequest | None = None, user: dict = Depends(current_user)) -> dict:
     require_tenant_write(user)
     try:
-        campaign = run_campaign_match(campaign_id, _tenant_id(user), user["id"])
+        request = request or CampaignMatchRequest()
+        campaign = run_campaign_match(campaign_id, _tenant_id(user), user["id"], mode=request.mode, candidate_ids=request.candidate_ids)
         if not _can_view_pii(user):
             campaign = _redact_campaign_pii(campaign)
         return campaign

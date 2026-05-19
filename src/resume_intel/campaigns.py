@@ -16,6 +16,7 @@ CAMPAIGN_PIPELINE_STATUSES = {
     "recommended",
     "uploaded",
     "matched",
+    "below_threshold",
     "shortlisted",
     "contacted",
     "replied",
@@ -206,6 +207,18 @@ def update_campaign_scorecard(
     return campaign
 
 
+def _dedupe_ids(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        candidate_id = str(value or "").strip()
+        if not candidate_id or candidate_id in seen:
+            continue
+        seen.add(candidate_id)
+        result.append(candidate_id)
+    return result
+
+
 def list_campaigns(tenant_id: str) -> list[dict[str, Any]]:
     with db() as conn:
         rows = conn.execute(
@@ -301,22 +314,39 @@ def get_campaign(campaign_id: str, tenant_id: str) -> dict[str, Any]:
     return campaign
 
 
-def run_campaign_match(campaign_id: str, tenant_id: str, user_id: str) -> dict[str, Any]:
+def run_campaign_match(
+    campaign_id: str,
+    tenant_id: str,
+    user_id: str,
+    *,
+    mode: str = "full",
+    candidate_ids: list[str] | None = None,
+    batch_id: str | None = None,
+) -> dict[str, Any]:
     campaign = get_campaign(campaign_id, tenant_id)
     requirement_id = campaign.get("requirement_id")
     if not requirement_id:
         raise ValueError("campaign has no requirement profile")
+    match_mode = (mode or "full").strip().lower()
+    if match_mode not in {"full", "incremental"}:
+        raise ValueError(f"unsupported campaign match mode: {mode}")
+    scoped_candidate_ids = _dedupe_ids(candidate_ids or [])
     existing_candidate_ids = [str(item["candidate_id"]) for item in campaign.get("candidates") or [] if item.get("candidate_id")]
+    extra_candidate_ids = scoped_candidate_ids if match_mode == "incremental" else existing_candidate_ids
+    if match_mode == "incremental" and not scoped_candidate_ids:
+        return campaign | {"matches": [], "match_mode": "incremental"}
     matches = match_requirement(
         requirement_id,
         tenant_id,
         deep_judge=True,
-        extra_candidate_ids=existing_candidate_ids,
+        extra_candidate_ids=extra_candidate_ids,
         minimum_score=CAMPAIGN_MATCH_VISIBILITY_THRESHOLD,
+        candidate_ids_only=match_mode == "incremental",
     )
     visible_candidate_ids = [str(match["candidate_id"]) for match in matches]
+    hidden_incremental_ids = [candidate_id for candidate_id in scoped_candidate_ids if candidate_id not in set(visible_candidate_ids)]
     with db() as conn:
-        if visible_candidate_ids:
+        if match_mode == "full" and visible_candidate_ids:
             conn.execute(
                 """
                 delete from campaign_candidates
@@ -328,7 +358,7 @@ def run_campaign_match(campaign_id: str, tenant_id: str, user_id: str) -> dict[s
                 """,
                 (campaign_id, tenant_id, visible_candidate_ids),
             )
-        else:
+        elif match_mode == "full":
             conn.execute(
                 """
                 delete from campaign_candidates
@@ -348,7 +378,7 @@ def run_campaign_match(campaign_id: str, tenant_id: str, user_id: str) -> dict[s
                   source=case when campaign_candidates.source='uploaded' then campaign_candidates.source else 'matched' end,
                   status=case when campaign_candidates.status = any(%s) then campaign_candidates.status else 'recommended' end,
                   score=excluded.score,
-                  evidence=excluded.evidence,
+                  evidence=coalesce(campaign_candidates.evidence, '{}'::jsonb) || excluded.evidence,
                   updated_at=now()
                 """,
                 (
@@ -356,8 +386,35 @@ def run_campaign_match(campaign_id: str, tenant_id: str, user_id: str) -> dict[s
                     campaign_id,
                     match["candidate_id"],
                     float(match.get("total_score") or 0),
-                    Jsonb(_campaign_match_evidence_payload(match)),
+                    Jsonb(_campaign_match_evidence_payload(match) | {"match_mode": match_mode, "batch_id": batch_id}),
                     list(LOCKED_MATCH_STATUSES),
+                ),
+            )
+        if match_mode == "incremental" and hidden_incremental_ids:
+            conn.execute(
+                """
+                update campaign_candidates
+                set status=case when status = any(%s) then status else 'below_threshold' end,
+                    evidence=coalesce(evidence, '{}'::jsonb) || %s,
+                    updated_at=now()
+                where campaign_id=%s
+                  and tenant_id=%s
+                  and candidate_id = any(%s::text[])
+                """,
+                (
+                    list(LOCKED_MATCH_STATUSES),
+                    Jsonb({
+                        "match_mode": "incremental",
+                        "batch_id": batch_id,
+                        "incremental_match": {
+                            "status": "below_threshold",
+                            "visibility_threshold": CAMPAIGN_MATCH_VISIBILITY_THRESHOLD,
+                            "reason": "Candidate did not clear the campaign review threshold after deterministic/semantic scoring.",
+                        },
+                    }),
+                    campaign_id,
+                    tenant_id,
+                    hidden_incremental_ids,
                 ),
             )
         conn.execute("update job_campaigns set updated_at=now() where id=%s and tenant_id=%s", (campaign_id, tenant_id))
@@ -366,10 +423,22 @@ def run_campaign_match(campaign_id: str, tenant_id: str, user_id: str) -> dict[s
             insert into audit_logs (tenant_id, user_id, action, entity_type, entity_id, metadata)
             values (%s, %s, 'campaign.matched', 'job_campaign', %s, %s)
             """,
-            (tenant_id, user_id, campaign_id, Jsonb({"requirement_id": requirement_id, "match_count": len(matches)})),
+            (
+                tenant_id,
+                user_id,
+                campaign_id,
+                Jsonb({
+                    "requirement_id": requirement_id,
+                    "match_count": len(matches),
+                    "mode": match_mode,
+                    "candidate_count": len(scoped_candidate_ids) if match_mode == "incremental" else None,
+                    "below_threshold_count": len(hidden_incremental_ids),
+                    "batch_id": batch_id,
+                }),
+            ),
         )
         conn.commit()
-    return get_campaign(campaign_id, tenant_id) | {"matches": matches}
+    return get_campaign(campaign_id, tenant_id) | {"matches": matches, "match_mode": match_mode}
 
 
 def set_campaign_candidate_status(campaign_id: str, candidate_id: str, status: str, tenant_id: str, user_id: str, note: str | None = None) -> dict[str, Any]:

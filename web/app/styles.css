@@ -9386,6 +9386,72 @@ h3 {
   padding: 12px;
 }
 
+.campaignPipelineGuardrail {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  padding: 14px 16px;
+}
+
+.campaignPipelineGuardrail strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.campaignPipelineGuardrail p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.pipelineThresholdButtons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.pipelineThresholdButtons button {
+  min-height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #f8faf9;
+  color: var(--muted);
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.pipelineThresholdButtons button.active {
+  border-color: #22364a;
+  background: #eef3f5;
+  color: #22364a;
+}
+
+.campaignColumnMore {
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: #f8faf9;
+  color: var(--muted);
+  padding: 9px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 17px;
+}
+
+.loadMoreMatches {
+  justify-self: center;
+  min-width: 220px;
+}
+
 .campaignCandidatePanel,
 .campaignMatchesList,
 .campaignUploadsPane,
@@ -9708,6 +9774,15 @@ h3 {
 
   .candidateReviewWorkspace {
     grid-template-columns: 1fr;
+  }
+
+  .campaignPipelineGuardrail {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .pipelineThresholdButtons {
+    justify-content: flex-start;
   }
 
   .candidateContextRail {

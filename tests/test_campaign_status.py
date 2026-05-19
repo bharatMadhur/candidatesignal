@@ -50,9 +50,13 @@ class _FakeDb:
 class CampaignCandidateStatusTests(unittest.TestCase):
     def setUp(self) -> None:
         self.original_db = campaigns.db
+        self.original_get_campaign = campaigns.get_campaign
+        self.original_match_requirement = campaigns.match_requirement
 
     def tearDown(self) -> None:
         campaigns.db = self.original_db
+        campaigns.get_campaign = self.original_get_campaign
+        campaigns.match_requirement = self.original_match_requirement
 
     def test_status_change_upserts_candidate_into_tenant_campaign(self) -> None:
         row = {
@@ -118,6 +122,85 @@ class CampaignCandidateStatusTests(unittest.TestCase):
         self.assertTrue(payload["hard_filter_pass"])
         self.assertIn("Must-have matched: Python", payload["top_reasons"])
         self.assertIn("Missing nice-to-have: Airflow", payload["top_gaps"])
+
+    def test_incremental_campaign_match_scores_only_new_candidates_without_full_delete(self) -> None:
+        connection = _FakeConnection(None)
+        campaigns.db = lambda: _FakeDb(connection)
+        campaigns.get_campaign = lambda campaign_id, tenant_id: {
+            "id": campaign_id,
+            "requirement_id": "requirement-1",
+            "candidates": [
+                {"candidate_id": "existing-1", "status": "shortlisted"},
+                {"candidate_id": "new-1", "status": "uploaded"},
+            ],
+        }
+        captured: dict[str, Any] = {}
+
+        def fake_match_requirement(*args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+            captured["args"] = args
+            captured["kwargs"] = kwargs
+            return [
+                {
+                    "candidate_id": "new-1",
+                    "candidate": {"name": "New Candidate"},
+                    "total_score": 0.74,
+                    "must_have_score": 0.8,
+                    "nice_to_have_score": 0.6,
+                    "years_score": 1,
+                    "domain_score": 0.7,
+                    "location_score": 0.4,
+                    "evidence": {"must_have_hits": ["Python"], "hard_filter_failures": []},
+                    "gaps": {"missing_preferred_locations": ["New York"]},
+                    "recommendation": "Review-worthy fit",
+                }
+            ]
+
+        campaigns.match_requirement = fake_match_requirement
+
+        result = campaigns.run_campaign_match(
+            "campaign-1",
+            "tenant-1",
+            "user-1",
+            mode="incremental",
+            candidate_ids=["new-1", "new-1", "new-2"],
+            batch_id="batch-1",
+        )
+
+        self.assertEqual(result["match_mode"], "incremental")
+        self.assertEqual(captured["args"][:2], ("requirement-1", "tenant-1"))
+        self.assertTrue(captured["kwargs"]["candidate_ids_only"])
+        self.assertEqual(captured["kwargs"]["extra_candidate_ids"], ["new-1", "new-2"])
+        self.assertFalse(
+            any(
+                "delete from campaign_candidates" in sql
+                and "source='matched'" in sql
+                and "status='recommended'" in sql
+                for sql, _params in connection.executed
+            )
+        )
+        self.assertTrue(any("insert into campaign_candidates" in sql for sql, _params in connection.executed))
+        below_threshold_updates = [
+            params
+            for sql, params in connection.executed
+            if "update campaign_candidates" in sql and "candidate_id = any" in sql
+        ]
+        self.assertEqual(len(below_threshold_updates), 1)
+        self.assertEqual(below_threshold_updates[0][4], ["new-2"])
+
+    def test_empty_incremental_campaign_match_returns_without_database_writes(self) -> None:
+        connection = _FakeConnection(None)
+        campaigns.db = lambda: _FakeDb(connection)
+        campaigns.get_campaign = lambda campaign_id, tenant_id: {
+            "id": campaign_id,
+            "requirement_id": "requirement-1",
+            "candidates": [],
+        }
+
+        result = campaigns.run_campaign_match("campaign-1", "tenant-1", "user-1", mode="incremental", candidate_ids=[])
+
+        self.assertEqual(result["matches"], [])
+        self.assertEqual(result["match_mode"], "incremental")
+        self.assertEqual(connection.executed, [])
 
 
 if __name__ == "__main__":

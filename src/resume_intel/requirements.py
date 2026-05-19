@@ -11,7 +11,7 @@ from .extractors import extract_document
 from .llm import extract_requirement_profile, judge_requirement_candidate_matches
 from .pii import redact_contact_pii_text
 from .settings import Settings, load_settings
-from .vector_search import semantic_candidate_scores, upsert_requirement_embedding
+from .vector_search import semantic_candidate_scores, semantic_candidate_scores_for_ids, upsert_requirement_embedding
 
 
 DOMAIN_ALIASES = {
@@ -323,13 +323,20 @@ def match_requirement(
     deep_judge: bool = False,
     extra_candidate_ids: list[str] | None = None,
     minimum_score: float = MATCH_VISIBILITY_THRESHOLD,
+    candidate_ids_only: bool = False,
 ) -> list[dict[str, Any]]:
     req = get_requirement(requirement_id, tenant_id)
     tenant_id = tenant_id or req.get("tenant_id")
     profile = req.get("final_requirement_profile") or req["extracted_requirement_json"]
     requirement_text = _requirement_text(profile, req["original_text"])
-    semantic_scores = semantic_candidate_scores(requirement_text, limit=RECALL_LIMIT, tenant_id=tenant_id)
-    recall_ids = _broad_recall_candidate_ids(profile, requirement_text, semantic_scores, tenant_id, extra_candidate_ids)
+    if candidate_ids_only:
+        recall_ids = _dedupe_ids([str(candidate_id) for candidate_id in (extra_candidate_ids or []) if candidate_id])[:RECALL_LIMIT]
+        semantic_scores = semantic_candidate_scores_for_ids(requirement_text, recall_ids, tenant_id=tenant_id)
+    else:
+        semantic_scores = semantic_candidate_scores(requirement_text, limit=RECALL_LIMIT, tenant_id=tenant_id)
+        recall_ids = _broad_recall_candidate_ids(profile, requirement_text, semantic_scores, tenant_id, extra_candidate_ids)
+    if candidate_ids_only and not recall_ids:
+        return []
     with db() as conn:
         if recall_ids:
             candidates = conn.execute(
@@ -384,7 +391,7 @@ def match_requirement(
         match.pop("_raw_text", None)
     visible_threshold = max(MATCH_VISIBILITY_THRESHOLD, min(0.95, float(minimum_score)))
     visible_matches = [item for item in matches if float(item.get("total_score") or 0) >= visible_threshold]
-    _persist_matches(requirement_id, visible_matches, tenant_id)
+    _persist_matches(requirement_id, visible_matches, tenant_id, replace_all=not candidate_ids_only, candidate_scope_ids=recall_ids if candidate_ids_only else None)
     _persist_match_run(requirement_id, profile, visible_matches, tenant_id)
     with db() as conn:
         conn.execute(
@@ -1258,10 +1265,18 @@ def _save_requirement(user_id: str, source_type: str, text: str, profile: dict[s
     return requirement
 
 
-def _persist_matches(requirement_id: str, matches: list[dict[str, Any]], tenant_id: str | None) -> None:
+def _persist_matches(
+    requirement_id: str,
+    matches: list[dict[str, Any]],
+    tenant_id: str | None,
+    *,
+    replace_all: bool = True,
+    candidate_scope_ids: list[str] | None = None,
+) -> None:
     visible_candidate_ids = [str(match["candidate_id"]) for match in matches]
+    scope_ids = [str(candidate_id) for candidate_id in (candidate_scope_ids or []) if candidate_id]
     with db() as conn:
-        if visible_candidate_ids:
+        if replace_all and visible_candidate_ids:
             conn.execute(
                 """
                 delete from requirement_matches
@@ -1271,7 +1286,7 @@ def _persist_matches(requirement_id: str, matches: list[dict[str, Any]], tenant_
                 """,
                 (requirement_id, tenant_id, tenant_id, visible_candidate_ids),
             )
-        else:
+        elif replace_all:
             conn.execute(
                 """
                 delete from requirement_matches
@@ -1279,6 +1294,27 @@ def _persist_matches(requirement_id: str, matches: list[dict[str, Any]], tenant_
                   and (%s::uuid is null or tenant_id=%s)
                 """,
                 (requirement_id, tenant_id, tenant_id),
+            )
+        elif scope_ids and visible_candidate_ids:
+            conn.execute(
+                """
+                delete from requirement_matches
+                where requirement_id=%s
+                  and (%s::uuid is null or tenant_id=%s)
+                  and candidate_id = any(%s::text[])
+                  and not (candidate_id = any(%s::text[]))
+                """,
+                (requirement_id, tenant_id, tenant_id, scope_ids, visible_candidate_ids),
+            )
+        elif scope_ids:
+            conn.execute(
+                """
+                delete from requirement_matches
+                where requirement_id=%s
+                  and (%s::uuid is null or tenant_id=%s)
+                  and candidate_id = any(%s::text[])
+                """,
+                (requirement_id, tenant_id, tenant_id, scope_ids),
             )
         for match in matches:
             conn.execute(

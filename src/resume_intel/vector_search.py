@@ -256,6 +256,70 @@ def semantic_candidate_scores(query_text: str, limit: int = 100, tenant_id: str 
     }
 
 
+def semantic_candidate_scores_for_ids(query_text: str, candidate_ids: list[str], tenant_id: str | None = None) -> dict[str, dict[str, Any]]:
+    ids = [str(candidate_id) for candidate_id in candidate_ids if candidate_id]
+    if not ids:
+        return {}
+    query_embedding, model = embed_text_real(query_text)
+    query_vector = vector_literal(_normalize_dim(query_embedding, OPENAI_EMBEDDING_DIMENSIONS))
+    with db() as conn:
+        if tenant_id:
+            rows = conn.execute(
+                """
+                select candidate_search_chunks.document_id, max(1 - (embedding <=> %s::vector)) as score,
+                       (array_agg(chunk_type order by embedding <=> %s::vector))[1:5] as top_chunks,
+                       (array_agg(jsonb_build_object(
+                         'chunk_type', chunk_type,
+                         'source_label', source_label,
+                         'page_number', page_number,
+                         'snippet', left(chunk_text, 420),
+                         'embedding_model', embedding_model
+                       ) order by embedding <=> %s::vector))[1:5] as evidence
+                from candidate_search_chunks
+                join candidates on candidates.document_id = candidate_search_chunks.document_id
+                  and candidates.tenant_id = candidate_search_chunks.tenant_id
+                where candidate_search_chunks.tenant_id=%s
+                  and candidate_search_chunks.document_id = any(%s::text[])
+                  and candidate_search_chunks.embedding_model=%s
+                  and candidates.deleted_at is null
+                group by candidate_search_chunks.document_id
+                order by score desc
+                """,
+                (query_vector, query_vector, query_vector, tenant_id, ids, model),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                select candidate_search_chunks.document_id, max(1 - (embedding <=> %s::vector)) as score,
+                       (array_agg(chunk_type order by embedding <=> %s::vector))[1:5] as top_chunks,
+                       (array_agg(jsonb_build_object(
+                         'chunk_type', chunk_type,
+                         'source_label', source_label,
+                         'page_number', page_number,
+                         'snippet', left(chunk_text, 420),
+                         'embedding_model', embedding_model
+                       ) order by embedding <=> %s::vector))[1:5] as evidence
+                from candidate_search_chunks
+                join candidates on candidates.document_id = candidate_search_chunks.document_id
+                  and candidates.tenant_id = candidate_search_chunks.tenant_id
+                where candidate_search_chunks.document_id = any(%s::text[])
+                  and candidate_search_chunks.embedding_model=%s
+                  and candidates.deleted_at is null
+                group by candidate_search_chunks.document_id
+                order by score desc
+                """,
+                (query_vector, query_vector, query_vector, ids, model),
+            ).fetchall()
+    return {
+        row["document_id"]: {
+            "semantic_score": max(0.0, min(1.0, float(row["score"] or 0))),
+            "top_chunks": list(row["top_chunks"] or []),
+            "evidence": list(row["evidence"] or []),
+        }
+        for row in rows
+    }
+
+
 def semantic_candidate_search(query_text: str, limit: int = 25, tenant_id: str | None = None) -> list[dict[str, Any]]:
     scores = semantic_candidate_scores(query_text, limit, tenant_id)
     if not scores:

@@ -4212,6 +4212,7 @@ function CampaignsView({
   const [requirementDraft, setRequirementDraft] = useState("");
   const [campaignRequirementFile, setCampaignRequirementFile] = useState<File | null>(null);
   const [campaignMatchThreshold, setCampaignMatchThreshold] = useState(0.65);
+  const [matchResultLimit, setMatchResultLimit] = useState(50);
   const campaignStages: Array<{ id: CampaignPipelineStatus; label: string }> = [
     { id: "recommended", label: "Matched" },
     { id: "shortlisted", label: "Shortlisted" },
@@ -4224,29 +4225,39 @@ function CampaignsView({
     { id: "placed", label: "Placed" },
     { id: "rejected", label: "Rejected" },
   ];
+  const pipelineCandidates = useMemo(
+    () => selectedCandidates.filter((item) => campaignCandidateVisibleInPipeline(item, campaignMatchThreshold)),
+    [selectedCandidates, campaignMatchThreshold],
+  );
+  const hiddenPipelineCandidates = selectedCandidates.length - pipelineCandidates.length;
   const stageBuckets = campaignStages.map((stage) => ({
     ...stage,
-    candidates: selectedCandidates.filter((item) => stageCandidateStatus(item.status) === stage.id),
+    candidates: pipelineCandidates.filter((item) => stageCandidateStatus(item.status) === stage.id),
   }));
   const shortlisted = selectedCandidates.filter((item) => item.status === "shortlisted").length;
   const rejected = selectedCandidates.filter((item) => item.status === "rejected").length;
-  const selectedCampaignCandidate = selectedCandidates.find((item) => item.candidate_id === selectedCandidateId) ?? selectedCandidates[0];
+  const selectedCampaignCandidate = pipelineCandidates.find((item) => item.candidate_id === selectedCandidateId) ?? pipelineCandidates[0];
   const campaignProgress = campaignProgressStats(activeCampaign, selectedCandidates);
   const campaignTimeline = useMemo(() => campaignTimelineItems(activeCampaign, selectedCandidates), [activeCampaign, selectedCandidates]);
   const rankedCandidates = useMemo(() => [...selectedCandidates].sort((left, right) => Number(right.score ?? 0) - Number(left.score ?? 0)), [selectedCandidates]);
   const campaignMatchBuckets = matchDistribution(rankedCandidates);
   const visibleRankedCandidates = rankedCandidates.filter((item) => Number(item.score ?? 0) >= campaignMatchThreshold);
+  const visibleRankedCandidatePage = visibleRankedCandidates.slice(0, matchResultLimit);
   const scorecardCompleteness = campaignScorecardCompleteness(scorecardForm);
 
   useEffect(() => {
-    if (!selectedCandidates.length) {
+    if (!pipelineCandidates.length) {
       setSelectedCandidateId("");
       return;
     }
-    if (!selectedCandidates.some((item) => item.candidate_id === selectedCandidateId)) {
-      setSelectedCandidateId(selectedCandidates[0].candidate_id);
+    if (!pipelineCandidates.some((item) => item.candidate_id === selectedCandidateId)) {
+      setSelectedCandidateId(pipelineCandidates[0].candidate_id);
     }
-  }, [selectedCandidates, selectedCandidateId]);
+  }, [pipelineCandidates, selectedCandidateId]);
+
+  useEffect(() => {
+    setMatchResultLimit(50);
+  }, [activeCampaign?.id, campaignMatchThreshold]);
 
   useEffect(() => {
     const firstCampaignId = campaigns[0]?.id;
@@ -4411,6 +4422,7 @@ function CampaignsView({
                 <div>
                   <span className="eyebrow">Ranked candidates</span>
                   <h3>{visibleRankedCandidates.length} candidates above {Math.round(campaignMatchThreshold * 100)}%</h3>
+                  <p>{visibleRankedCandidates.length > matchResultLimit ? `Showing top ${matchResultLimit}. Raise the threshold or load more to review the rest.` : "Showing the actionable ranked set for this threshold."}</p>
                 </div>
                 <button className="secondary" onClick={() => matchCampaign(activeCampaign.id)} disabled={busy || !activeCampaign.requirement_id}>Refresh matches</button>
               </div>
@@ -4431,7 +4443,7 @@ function CampaignsView({
                   </div>
                 </section>
               ) : null}
-              {visibleRankedCandidates.length ? visibleRankedCandidates.map((item, index) => (
+              {visibleRankedCandidatePage.length ? visibleRankedCandidatePage.map((item, index) => (
                 <article className="campaignMatchRow" key={item.candidate_id}>
                   <b>{index + 1}</b>
                   <button onClick={() => openCandidate(item.candidate_id)}>
@@ -4450,6 +4462,11 @@ function CampaignsView({
                   </div>
                 </article>
               )) : <EmptyPanel title={rankedCandidates.length ? "No candidates above this threshold" : "No matches yet"} body={rankedCandidates.length ? "Lower the threshold bucket or adjust the scorecard." : "Run matching to rank existing candidates, or upload resumes into this campaign."} />}
+              {visibleRankedCandidates.length > visibleRankedCandidatePage.length ? (
+                <button className="plain loadMoreMatches" type="button" onClick={() => setMatchResultLimit((value) => value + 50)}>
+                  Load 50 more candidates
+                </button>
+              ) : null}
             </section>
           ) : null}
 
@@ -4611,6 +4628,20 @@ function CampaignsView({
 
           {activeTab === "pipeline" && selectedCandidates.length ? (
             <div className="campaignBoardShell">
+              <section className="campaignPipelineGuardrail">
+                <div>
+                  <span className="eyebrow">Pipeline guardrail</span>
+                  <strong>{pipelineCandidates.length} visible in pipeline</strong>
+                  <p>{hiddenPipelineCandidates > 0 ? `${hiddenPipelineCandidates} weak or below-threshold candidates are hidden. Use Matches to change the threshold or review more.` : "Only actionable campaign candidates are shown here."}</p>
+                </div>
+                <div className="pipelineThresholdButtons">
+                  {campaignMatchBuckets.map((bucket) => (
+                    <button className={campaignMatchThreshold === bucket.minimum ? "active" : ""} key={bucket.label} onClick={() => setCampaignMatchThreshold(bucket.minimum)}>
+                      {bucket.label} <b>{bucket.count}</b>
+                    </button>
+                  ))}
+                </div>
+              </section>
               <div className="campaignBoard campaignPipelineBoard">
                 {stageBuckets.map((stage) => (
                   <CampaignColumn
@@ -4620,6 +4651,7 @@ function CampaignsView({
                     candidates={stage.candidates}
                     selectedId={selectedCampaignCandidate?.candidate_id}
                     selectCandidate={setSelectedCandidateId}
+                    maxCards={8}
                   />
                 ))}
               </div>
@@ -4849,17 +4881,21 @@ function CampaignColumn({
   candidates,
   selectedId,
   selectCandidate,
+  maxCards = 8,
 }: {
   title: string;
   count: number;
   candidates: JobCampaignCandidate[];
   selectedId?: string;
   selectCandidate: (candidateId: string) => void;
+  maxCards?: number;
 }) {
+  const visibleCards = candidates.slice(0, maxCards);
+  const hiddenCount = Math.max(0, candidates.length - visibleCards.length);
   return (
     <section className="campaignColumn">
       <div className="campaignColumnHead"><strong>{title}</strong><span>{count}</span></div>
-      {candidates.length ? candidates.map((item) => (
+      {visibleCards.length ? visibleCards.map((item) => (
         <button className={selectedId === item.candidate_id ? "campaignMiniCard active" : "campaignMiniCard"} key={item.candidate_id} onClick={() => selectCandidate(item.candidate_id)}>
           <strong>{item.candidate?.name ?? item.candidate_id}</strong>
           <span>{item.candidate?.current_title ?? "No title"} | {item.candidate?.current_company ?? "No company"}</span>
@@ -4867,6 +4903,7 @@ function CampaignColumn({
           <em>{Math.round((item.score ?? 0) * 100)}% match | {domainLabel(item.source)}</em>
         </button>
       )) : <div className="campaignColumnEmpty">No candidates</div>}
+      {hiddenCount ? <div className="campaignColumnMore">+{hiddenCount} more in this stage. Use Matches for full review.</div> : null}
     </section>
   );
 }
@@ -4881,6 +4918,7 @@ function campaignEvidenceItems(item: JobCampaignCandidate) {
 
 function stageCandidateStatus(status: string): CampaignPipelineStatus {
   if (status === "uploaded" || status === "matched" || status === "reviewing") return "recommended";
+  if (status === "below_threshold") return "below_threshold";
   if (
     [
       "recommended",
@@ -4899,6 +4937,14 @@ function stageCandidateStatus(status: string): CampaignPipelineStatus {
     return status as CampaignPipelineStatus;
   }
   return "recommended";
+}
+
+function campaignCandidateVisibleInPipeline(item: JobCampaignCandidate, threshold: number) {
+  if (item.status === "below_threshold") return false;
+  if (["shortlisted", "contacted", "replied", "screened", "submitted", "interviewing", "offer", "placed", "rejected", "archived"].includes(item.status)) {
+    return true;
+  }
+  return Number(item.score ?? 0) >= threshold;
 }
 
 function campaignScoreBreakdownItems(item: JobCampaignCandidate) {
