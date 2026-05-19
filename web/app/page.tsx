@@ -3082,6 +3082,50 @@ function CandidateDetail({
           ))}
         </nav>
 
+        <section className="candidateNotesFlow" id="candidate-notes-flow">
+          <header>
+            <div>
+              <span className="reportLabel">Recruiter Notes</span>
+              <h3>Recruiter context follows this candidate</h3>
+              <p>Notes are saved to the profile, included in search/matching, and stay visible while reviewing the CV.</p>
+            </div>
+            <button className="plain" type="button" onClick={() => setActiveTab("notes")}>Open Full Notes</button>
+          </header>
+          <div className="candidateNotesFlowBody">
+            <div className="candidateNotesInlineComposer">
+              <NoteTypeButtons setNoteName={setNoteName} />
+              <div>
+                <input value={noteName} onChange={(event) => setNoteName(event.target.value)} placeholder="Note title" />
+                <textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Add recruiter context, screening feedback, compensation, availability, or concern." />
+                <button className="secondary" onClick={saveNote} disabled={!note.trim()}>Save Note</button>
+              </div>
+            </div>
+            <div className="candidateNotesFlowList">
+              {(candidate.notes ?? []).slice(0, 4).map((item, index) => (
+                <article key={`${item.id ?? item.created_at}-${index}`}>
+                  <div>
+                    <strong>{item.name}</strong>
+                    <span>{item.created_at ? new Date(item.created_at).toLocaleDateString() : "Saved"}</span>
+                  </div>
+                  <p>{item.content}</p>
+                  {item.id ? (
+                    <div className="noteMiniActions">
+                      <button className="plain small" onClick={() => {
+                        setEditingNoteId(item.id ?? "");
+                        setEditingNoteName(item.name);
+                        setEditingNoteContent(item.content);
+                        setActiveTab("notes");
+                      }}>Edit</button>
+                      <button className="plain small danger" onClick={() => item.id && deleteSavedNote(item.id)}>Delete</button>
+                    </div>
+                  ) : null}
+                </article>
+              ))}
+              {!(candidate.notes ?? []).length ? <p className="muted">No recruiter notes yet. Add the first note before screening or shortlisting.</p> : null}
+            </div>
+          </div>
+        </section>
+
         {activeTab === "overview" ? (
           <section className="candidateCleanLayout">
             <div className="candidateCleanPrimary">
@@ -3142,35 +3186,6 @@ function CandidateDetail({
             </div>
 
             <aside className="candidateContextRail">
-              <article className="briefCard recruiterQuickNotes">
-                <h3>Recruiter Notes</h3>
-                <NoteTypeButtons setNoteName={setNoteName} />
-                <input value={noteName} onChange={(event) => setNoteName(event.target.value)} placeholder="Note title" />
-                <textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Write a quick recruiter note. It becomes searchable context." />
-                <button className="secondary" onClick={saveNote} disabled={!note.trim()}>Save Note</button>
-                <div className="recentNotesCompact">
-                  {(candidate.notes ?? []).slice(0, 3).map((item, index) => (
-                    <article key={`${item.id ?? item.created_at}-${index}`}>
-                      <strong>{item.name}</strong>
-                      <span>{item.created_at ? new Date(item.created_at).toLocaleDateString() : "Saved"}</span>
-                      <p>{item.content}</p>
-                      {item.id ? (
-                        <div className="noteMiniActions">
-                          <button className="plain small" onClick={() => {
-                            setEditingNoteId(item.id ?? "");
-                            setEditingNoteName(item.name);
-                            setEditingNoteContent(item.content);
-                            setActiveTab("notes");
-                          }}>Edit</button>
-                          <button className="plain small danger" onClick={() => item.id && deleteSavedNote(item.id)}>Delete</button>
-                        </div>
-                      ) : null}
-                    </article>
-                  ))}
-                  {!(candidate.notes ?? []).length ? <p className="muted">No recruiter notes yet.</p> : null}
-                </div>
-              </article>
-
               <article className="briefCard">
                 <h3>Contact & Location</h3>
                 <div className="currentLocationCallout">
@@ -4183,7 +4198,7 @@ function CampaignsView({
   const [scorecardForm, setScorecardForm] = useState<CampaignScorecardForm>(emptyCampaignScorecardForm());
   const [requirementDraft, setRequirementDraft] = useState("");
   const [campaignRequirementFile, setCampaignRequirementFile] = useState<File | null>(null);
-  const [campaignMatchThreshold, setCampaignMatchThreshold] = useState(0.3);
+  const [campaignMatchThreshold, setCampaignMatchThreshold] = useState(0.65);
   const campaignStages: Array<{ id: CampaignPipelineStatus; label: string }> = [
     { id: "recommended", label: "Matched" },
     { id: "shortlisted", label: "Shortlisted" },

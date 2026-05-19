@@ -43,7 +43,12 @@ SKILL_ALIASES = {
 
 MATCH_VISIBILITY_THRESHOLD = 0.30
 RECALL_LIMIT = 250
-LLM_JUDGE_LIMIT = 20
+STRUCTURED_RECALL_LIMIT = 500
+LEXICAL_RECALL_LIMIT = 250
+DETERMINISTIC_SCORE_POOL_LIMIT = 120
+LLM_JUDGE_LIMIT = 15
+LLM_JUDGE_MIN_SCORE = 0.58
+CAMPAIGN_MATCH_VISIBILITY_THRESHOLD = 0.50
 
 MATCH_STOPWORDS = {
     "ability",
@@ -317,6 +322,7 @@ def match_requirement(
     *,
     deep_judge: bool = False,
     extra_candidate_ids: list[str] | None = None,
+    minimum_score: float = MATCH_VISIBILITY_THRESHOLD,
 ) -> list[dict[str, Any]]:
     req = get_requirement(requirement_id, tenant_id)
     tenant_id = tenant_id or req.get("tenant_id")
@@ -370,11 +376,14 @@ def match_requirement(
         matches.append(match)
     matches.sort(key=lambda item: item["total_score"], reverse=True)
     if deep_judge:
+        matches = _deterministic_match_pool(matches)
+    if deep_judge:
         _apply_llm_match_judgement(matches, profile, requirement_text, tenant_id)
     for match in matches:
         match.pop("_candidate_record", None)
         match.pop("_raw_text", None)
-    visible_matches = [item for item in matches if float(item.get("total_score") or 0) >= MATCH_VISIBILITY_THRESHOLD]
+    visible_threshold = max(MATCH_VISIBILITY_THRESHOLD, min(0.95, float(minimum_score)))
+    visible_matches = [item for item in matches if float(item.get("total_score") or 0) >= visible_threshold]
     _persist_matches(requirement_id, visible_matches, tenant_id)
     _persist_match_run(requirement_id, profile, visible_matches, tenant_id)
     with db() as conn:
@@ -508,6 +517,7 @@ def score_candidate(profile: dict[str, Any], candidate: dict[str, Any], raw_text
     nice = [str(item) for item in profile.get("nice_to_have_skills", []) if item]
     title_terms = _field_list(profile.get("title")) + _field_list(profile.get("role_intent"))
     responsibility_terms = _field_list(profile.get("responsibilities"))[:8]
+    has_role_terms = bool(title_terms or responsibility_terms)
     domain_text = _domain_text(candidate)
     must_hits = [item for item in must if _requirement_item_hit(item, candidate_text, domain_text)]
     nice_hits = [item for item in nice if _requirement_item_hit(item, candidate_text, domain_text)]
@@ -533,6 +543,7 @@ def score_candidate(profile: dict[str, Any], candidate: dict[str, Any], raw_text
     location_score = len(all_location_hits) / len(scored_locations) if scored_locations else 1.0
     seniority_score = _seniority_score(profile, candidate_text)
     recency_score = _recency_score(profile, candidate)
+    has_recency_terms = bool(_recall_terms(profile, ""))
     notes_hits = _notes_relevance(profile, candidate)
     notes_score = 1.0 if notes_hits else 0.65
 
@@ -570,8 +581,10 @@ def score_candidate(profile: dict[str, Any], candidate: dict[str, Any], raw_text
         "candidate_years": candidate_years,
         "hard_filter_failures": hard_filter_failures,
         "role_score": role_score,
+        "role_terms_present": has_role_terms,
         "seniority_score": seniority_score,
         "recency_score": recency_score,
+        "recency_terms_present": has_recency_terms,
         "notes_relevance": notes_hits,
         "notes_score": notes_score,
         "score_weights": weights,
@@ -613,6 +626,7 @@ def _broad_recall_candidate_ids(
     """Retrieve a broad but bounded candidate set before the expensive judge pass."""
 
     ordered_ids: list[str] = [str(item) for item in (extra_candidate_ids or []) if item]
+    ordered_ids.extend(_structured_recall_candidate_ids(profile, tenant_id, STRUCTURED_RECALL_LIMIT))
     ordered_ids.extend(str(candidate_id) for candidate_id in semantic_scores.keys())
     terms = _recall_terms(profile, requirement_text)
     if not terms:
@@ -631,7 +645,7 @@ def _broad_recall_candidate_ids(
                 order by hit_count desc
                 limit %s
                 """,
-                (tenant_id, patterns, RECALL_LIMIT),
+                (tenant_id, patterns, LEXICAL_RECALL_LIMIT),
             ).fetchall()
             candidate_rows = conn.execute(
                 """
@@ -643,7 +657,7 @@ def _broad_recall_candidate_ids(
                 order by updated_at desc
                 limit %s
                 """,
-                (tenant_id, patterns, patterns, RECALL_LIMIT),
+                (tenant_id, patterns, patterns, LEXICAL_RECALL_LIMIT),
             ).fetchall()
         else:
             chunk_rows = conn.execute(
@@ -655,7 +669,7 @@ def _broad_recall_candidate_ids(
                 order by hit_count desc
                 limit %s
                 """,
-                (patterns, RECALL_LIMIT),
+                (patterns, LEXICAL_RECALL_LIMIT),
             ).fetchall()
             candidate_rows = conn.execute(
                 """
@@ -666,11 +680,136 @@ def _broad_recall_candidate_ids(
                 order by updated_at desc
                 limit %s
                 """,
-                (patterns, patterns, RECALL_LIMIT),
+                (patterns, patterns, LEXICAL_RECALL_LIMIT),
             ).fetchall()
     ordered_ids.extend(str(row["document_id"]) for row in chunk_rows)
     ordered_ids.extend(str(row["document_id"]) for row in candidate_rows)
     return _dedupe_ids(ordered_ids)[:RECALL_LIMIT]
+
+
+def _structured_recall_candidate_ids(profile: dict[str, Any], tenant_id: str | None, limit: int) -> list[str]:
+    """Cheap indexed-ish recall from normalized candidate tables before semantic/LLM work."""
+
+    if not tenant_id:
+        return []
+    skill_terms = _recall_skill_terms(profile)
+    role_terms = _recall_role_terms(profile)
+    domain_terms = [_canonical_domain(item) for item in _field_list(profile.get("domains")) if item]
+    location_terms = [
+        *_field_list(profile.get("required_locations")),
+        *_field_list(profile.get("required_countries")),
+        *_field_list(profile.get("preferred_locations")),
+        *_field_list(profile.get("location_preference")),
+    ]
+    ordered: list[str] = []
+    with db() as conn:
+        skill_patterns = _like_patterns(skill_terms)
+        if skill_patterns:
+            rows = conn.execute(
+                """
+                select candidate_skills.document_id, count(*) as hit_count
+                from candidate_skills
+                join candidates on candidates.document_id=candidate_skills.document_id
+                  and candidates.tenant_id=candidate_skills.tenant_id
+                  and candidates.deleted_at is null
+                where candidate_skills.tenant_id=%s
+                  and lower(candidate_skills.skill) like any(%s::text[])
+                group by candidate_skills.document_id
+                order by hit_count desc
+                limit %s
+                """,
+                (tenant_id, skill_patterns, limit),
+            ).fetchall()
+            ordered.extend(str(row["document_id"]) for row in rows)
+
+        role_patterns = _like_patterns(role_terms)
+        if role_patterns:
+            rows = conn.execute(
+                """
+                select candidate_experience.document_id, min(candidate_experience.sort_index) as best_position, count(*) as hit_count
+                from candidate_experience
+                join candidates on candidates.document_id=candidate_experience.document_id
+                  and candidates.tenant_id=candidate_experience.tenant_id
+                  and candidates.deleted_at is null
+                where candidate_experience.tenant_id=%s
+                  and candidate_experience.sort_index <= 3
+                  and lower(concat_ws(' ', candidate_experience.title, candidate_experience.company)) like any(%s::text[])
+                group by candidate_experience.document_id
+                order by best_position asc, hit_count desc
+                limit %s
+                """,
+                (tenant_id, role_patterns, limit),
+            ).fetchall()
+            ordered.extend(str(row["document_id"]) for row in rows)
+
+        if domain_terms:
+            rows = conn.execute(
+                """
+                select candidate_domain_years.document_id, max(candidate_domain_years.years) as years
+                from candidate_domain_years
+                join candidates on candidates.document_id=candidate_domain_years.document_id
+                  and candidates.tenant_id=candidate_domain_years.tenant_id
+                  and candidates.deleted_at is null
+                where candidate_domain_years.tenant_id=%s
+                  and candidate_domain_years.domain = any(%s::text[])
+                  and candidate_domain_years.years > 0
+                group by candidate_domain_years.document_id
+                order by years desc
+                limit %s
+                """,
+                (tenant_id, domain_terms, limit),
+            ).fetchall()
+            ordered.extend(str(row["document_id"]) for row in rows)
+
+        location_patterns = _like_patterns(location_terms)
+        if location_patterns:
+            rows = conn.execute(
+                """
+                select candidate_locations.document_id, count(*) as hit_count
+                from candidate_locations
+                join candidates on candidates.document_id=candidate_locations.document_id
+                  and candidates.tenant_id=candidate_locations.tenant_id
+                  and candidates.deleted_at is null
+                where candidate_locations.tenant_id=%s
+                  and (
+                    lower(candidate_locations.location) like any(%s::text[])
+                    or lower(coalesce(candidate_locations.country, '')) like any(%s::text[])
+                  )
+                group by candidate_locations.document_id
+                order by hit_count desc
+                limit %s
+                """,
+                (tenant_id, location_patterns, location_patterns, limit),
+            ).fetchall()
+            ordered.extend(str(row["document_id"]) for row in rows)
+    return _dedupe_ids(ordered)[:limit]
+
+
+def _recall_skill_terms(profile: dict[str, Any]) -> list[str]:
+    terms = [*_field_list(profile.get("must_have_skills")), *_field_list(profile.get("nice_to_have_skills"))]
+    for item in list(terms):
+        terms.extend(_aliases_for_item(_norm(item)))
+    return _dedupe_text(terms)
+
+
+def _recall_role_terms(profile: dict[str, Any]) -> list[str]:
+    terms = [
+        *_field_list(profile.get("title")),
+        *_field_list(profile.get("role_intent")),
+        *_field_list(profile.get("seniority")),
+        *_field_list(profile.get("responsibilities"))[:6],
+    ]
+    return _dedupe_text(terms)
+
+
+def _like_patterns(values: list[str]) -> list[str]:
+    patterns = []
+    for value in values:
+        normalized = _norm(value)
+        if len(normalized) < 3 or normalized in MATCH_STOPWORDS:
+            continue
+        patterns.append(f"%{normalized[:80]}%")
+    return _dedupe_text(patterns)[:40]
 
 
 def _recall_terms(profile: dict[str, Any], requirement_text: str) -> list[str]:
@@ -725,7 +864,25 @@ def _apply_llm_match_judgement(
 
     if not matches:
         return
-    judged_matches = matches[:LLM_JUDGE_LIMIT]
+    judged_matches = [
+        match
+        for match in matches
+        if match.get("hard_filter_pass", True)
+        and float(match.get("total_score") or 0) >= LLM_JUDGE_MIN_SCORE
+        and _has_core_match_signal(match)
+    ][:LLM_JUDGE_LIMIT]
+    skipped_count = max(0, len(matches) - len(judged_matches))
+    if not judged_matches:
+        for match in matches[:LLM_JUDGE_LIMIT]:
+            match.setdefault("evidence", {})["llm_judge"] = {"status": "skipped_no_plausible_candidates"}
+        return
+    judged_ids = {str(match.get("candidate_id")) for match in judged_matches}
+    for match in matches:
+        if str(match.get("candidate_id")) not in judged_ids:
+            match.setdefault("evidence", {})["llm_judge"] = {
+                "status": "skipped_deterministic_prescreen",
+                "reason": f"Below LLM judge threshold or missing core evidence; {skipped_count} candidates skipped before LLM.",
+            }
     settings = load_settings()
     if not settings.llm_api_key:
         for match in judged_matches:
@@ -785,6 +942,62 @@ def _apply_llm_match_judgement(
             match.setdefault("gaps", {})["llm_missing_or_unclear"] = _string_list(item.get("missing_or_unclear"))[:8]
         match["llm_score"] = round(llm_score, 3)
     matches.sort(key=lambda item: item["total_score"], reverse=True)
+
+
+def _deterministic_match_pool(matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep only plausible candidates before any LLM spend."""
+
+    plausible: list[dict[str, Any]] = []
+    backups: list[dict[str, Any]] = []
+    for match in matches:
+        score = float(match.get("total_score") or 0)
+        if not match.get("hard_filter_pass", True):
+            continue
+        if score >= 0.45 and _has_core_match_signal(match):
+            plausible.append(match)
+        elif score >= 0.40:
+            backups.append(match)
+    pool = plausible or backups
+    for match in pool:
+        match.setdefault("evidence", {})["deterministic_prescreen"] = {
+            "status": "passed",
+            "score_before_llm": match.get("total_score"),
+            "core_signal": _core_match_signal_reasons(match),
+        }
+    return pool[:DETERMINISTIC_SCORE_POOL_LIMIT]
+
+
+def _has_core_match_signal(match: dict[str, Any]) -> bool:
+    evidence = match.get("evidence") or {}
+    return bool(
+        evidence.get("must_have_hits")
+        or evidence.get("nice_to_have_hits")
+        or evidence.get("domain_hits")
+        or evidence.get("notes_relevance")
+        or float(match.get("semantic_score") or 0) >= 0.58
+        or (evidence.get("role_terms_present") and float(evidence.get("role_score") or 0) >= 0.74)
+        or (evidence.get("recency_terms_present") and float(evidence.get("recency_score") or 0) >= 0.82)
+    )
+
+
+def _core_match_signal_reasons(match: dict[str, Any]) -> list[str]:
+    evidence = match.get("evidence") or {}
+    reasons: list[str] = []
+    if evidence.get("must_have_hits"):
+        reasons.append("must-have evidence")
+    if evidence.get("nice_to_have_hits"):
+        reasons.append("nice-to-have evidence")
+    if evidence.get("domain_hits"):
+        reasons.append("domain evidence")
+    if float(match.get("semantic_score") or 0) >= 0.58:
+        reasons.append("semantic evidence")
+    if evidence.get("role_terms_present") and float(evidence.get("role_score") or 0) >= 0.74:
+        reasons.append("role relevance")
+    if evidence.get("recency_terms_present") and float(evidence.get("recency_score") or 0) >= 0.82:
+        reasons.append("recent experience")
+    if evidence.get("notes_relevance"):
+        reasons.append("recruiter notes")
+    return reasons or ["weak signal"]
 
 
 def _candidate_llm_packet(match: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:

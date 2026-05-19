@@ -8,7 +8,7 @@ from psycopg.types.json import Jsonb
 from .candidate_facts import factual_current_company, factual_current_title
 from .db import db
 from .geo import current_job_location
-from .requirements import create_requirement_from_text, match_requirement, update_requirement_scorecard
+from .requirements import CAMPAIGN_MATCH_VISIBILITY_THRESHOLD, create_requirement_from_text, match_requirement, update_requirement_scorecard
 from .settings import load_settings
 
 
@@ -312,6 +312,7 @@ def run_campaign_match(campaign_id: str, tenant_id: str, user_id: str) -> dict[s
         tenant_id,
         deep_judge=True,
         extra_candidate_ids=existing_candidate_ids,
+        minimum_score=CAMPAIGN_MATCH_VISIBILITY_THRESHOLD,
     )
     visible_candidate_ids = [str(match["candidate_id"]) for match in matches]
     with db() as conn:

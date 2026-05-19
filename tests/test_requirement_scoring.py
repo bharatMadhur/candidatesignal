@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from resume_intel.requirements import _apply_structured_answers, score_candidate
+from resume_intel.requirements import _apply_structured_answers, _deterministic_match_pool, score_candidate
 
 
 class RequirementScoringTests(unittest.TestCase):
@@ -101,6 +101,36 @@ class RequirementScoringTests(unittest.TestCase):
 
         self.assertTrue(result["hard_filter_pass"])
         self.assertEqual(result["hard_filter_failures"], [])
+
+    def test_deterministic_pool_drops_weak_candidates_before_llm(self) -> None:
+        matches = [
+            {
+                "candidate_id": "strong",
+                "total_score": 0.67,
+                "hard_filter_pass": True,
+                "semantic_score": 0.61,
+                "evidence": {"must_have_hits": ["Spark"], "role_terms_present": True, "role_score": 0.9},
+            },
+            {
+                "candidate_id": "weak",
+                "total_score": 0.62,
+                "hard_filter_pass": True,
+                "semantic_score": 0.2,
+                "evidence": {"role_terms_present": False, "role_score": 1.0, "recency_terms_present": False, "recency_score": 1.0},
+            },
+            {
+                "candidate_id": "blocked",
+                "total_score": 0.9,
+                "hard_filter_pass": False,
+                "semantic_score": 0.9,
+                "evidence": {"must_have_hits": ["Spark"]},
+            },
+        ]
+
+        pool = _deterministic_match_pool(matches)
+
+        self.assertEqual([item["candidate_id"] for item in pool], ["strong"])
+        self.assertEqual(pool[0]["evidence"]["deterministic_prescreen"]["status"], "passed")
 
     def test_structured_recruiter_answers_update_matchable_profile(self) -> None:
         profile = {
