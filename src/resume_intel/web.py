@@ -259,6 +259,7 @@ class CampaignRequirementTextRequest(BaseModel):
 
 class CampaignScorecardRequest(BaseModel):
     title: str | None = None
+    role_intent: str | None = None
     location_preference: list[str] = Field(default_factory=list)
     seniority: str | None = None
     min_years_experience: float | int | None = None
@@ -266,6 +267,12 @@ class CampaignScorecardRequest(BaseModel):
     nice_to_have_skills: list[str] = Field(default_factory=list)
     dealbreakers: list[str] = Field(default_factory=list)
     domains: list[str] = Field(default_factory=list)
+    industry_preferences: list[str] = Field(default_factory=list)
+    soft_preferences: list[str] = Field(default_factory=list)
+    hidden_intent: list[str] = Field(default_factory=list)
+    strict_must_haves: bool = False
+    strict_min_years: bool = False
+    score_weights: dict[str, float] = Field(default_factory=dict)
 
 
 class CampaignCandidateStatusRequest(BaseModel):

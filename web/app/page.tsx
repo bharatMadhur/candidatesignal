@@ -2834,6 +2834,9 @@ function CandidateDetail({
   const timeline = intelligence?.timeline ?? candidate.derived?.timeline;
   const locationIntel = candidate.derived?.location_intelligence;
   const piiIntel = candidate.derived?.pii_contact_intelligence ?? {};
+  const linkedinProfileUrls = toTextList(piiIntel.linkedin_urls ?? []);
+  const otherLinkedinUrls = toTextList(piiIntel.other_linkedin_urls ?? []);
+  const portfolioUrls = toTextList(piiIntel.portfolio_websites ?? []);
   const profileVerification = candidate.derived?.profile_verification ?? {};
   const factVerification = candidate.derived?.fact_verification ?? {};
   const roleFactNeedsReview = factVerification.current_role_status && factVerification.current_role_status !== "verified";
@@ -2881,8 +2884,8 @@ function CandidateDetail({
     candidate.name ? { label: "Name", value: candidate.name, source: "Parsed identity field", query: [candidate.name] } : null,
     candidate.contact?.email ? { label: "Email", value: candidate.contact.email, source: "Parsed contact field", query: [candidate.contact.email] } : null,
     candidate.contact?.phone ? { label: "Phone", value: candidate.contact.phone, source: "Parsed contact field", query: [candidate.contact.phone] } : null,
-    piiIntel?.linkedin_urls?.length ? { label: "LinkedIn", value: piiIntel.linkedin_urls[0], source: "Deterministic PII/link extraction", query: piiIntel.linkedin_urls.slice(0, 2) } : null,
-    piiIntel?.portfolio_websites?.length ? { label: "Portfolio", value: piiIntel.portfolio_websites[0], source: "Deterministic PII/link extraction", query: piiIntel.portfolio_websites.slice(0, 2) } : null,
+    linkedinProfileUrls.length ? { label: "LinkedIn", value: linkedinProfileUrls[0], source: "Deterministic PII/link extraction", query: linkedinProfileUrls.slice(0, 2) } : null,
+    portfolioUrls.length ? { label: "Portfolio", value: portfolioUrls[0], source: "Deterministic PII/link extraction", query: portfolioUrls.slice(0, 2) } : null,
     currentLocation ? { label: "Latest job location", value: currentLocation, source: "Latest experience location", query: [currentLocation] } : null,
     resumeHeaderLocation ? { label: "Resume header location", value: resumeHeaderLocation, source: "Resume contact/header location", query: [resumeHeaderLocation] } : null,
     hr?.current_title ? { label: "Current title", value: hr.current_title, source: "Derived HR profile", query: [hr.current_title] } : null,
@@ -2988,8 +2991,8 @@ function CandidateDetail({
     { id: "versions", label: "Versions" },
   ];
   const locationChips = candidateLocationChips(locationSignals, currentLocation);
-  const primaryLinkedIn = toTextList(piiIntel.linkedin_urls ?? [])[0];
-  const primaryPortfolio = toTextList(piiIntel.portfolio_websites ?? [])[0];
+  const primaryLinkedIn = linkedinProfileUrls[0];
+  const primaryPortfolio = portfolioUrls[0];
   const versionMatches = candidate.candidate_versions?.matches ?? candidate.entity_resolution?.matches ?? [];
   const versionCount = candidateVersionLinks(candidate, versionMatches).length;
   const reparseStatusBatch = latestCandidateReparseBatch(reparseBatches, sourceName);
@@ -3183,8 +3186,9 @@ function CandidateDetail({
                 <div className="piiList clean">
                   <PiiGroup label="Email" values={piiIntel.emails ?? (candidate.contact?.email ? [candidate.contact.email] : [])} />
                   <PiiGroup label="Phone" values={piiIntel.phones ?? (candidate.contact?.phone ? [candidate.contact.phone] : [])} />
-                  <PiiGroup label="LinkedIn" values={piiIntel.linkedin_urls ?? []} />
-                  <PiiGroup label="Portfolio" values={piiIntel.portfolio_websites ?? []} />
+                  <PiiGroup label="LinkedIn profile" values={linkedinProfileUrls} />
+                  {otherLinkedinUrls.length ? <PiiGroup label="Other LinkedIn links" values={otherLinkedinUrls} compact /> : null}
+                  <PiiGroup label="Portfolio" values={portfolioUrls} />
                 </div>
                 <div className="profileVerificationList">
                   <div className="profileVerificationHead">
@@ -4407,7 +4411,11 @@ function CampaignsView({
                     <span>{item.candidate?.current_title ?? "No title"} {item.candidate?.current_company ? `at ${item.candidate.current_company}` : ""}</span>
                   </button>
                   <em>{Math.round((item.score ?? 0) * 100)}%</em>
-                  <p>{campaignReasonItems(item)[0] ?? item.evidence?.recommendation ?? "Open report for source-backed evidence."}</p>
+                  <p>
+                    <span className="fitTypeBadge">{domainLabel(item.evidence?.fit_type ?? item.evidence?.llm_judge?.fit_type ?? "review_worthy")}</span>
+                    {campaignReasonItems(item)[0] ?? item.evidence?.recommendation ?? "Open report for source-backed evidence."}
+                    {campaignGapItems(item)[0] ? <small>Verify: {campaignGapItems(item)[0]}</small> : null}
+                  </p>
                   <div>
                     <button className="secondary small" onClick={() => updateCandidateStatus(item.candidate_id, "shortlisted")}>Shortlist</button>
                     <button className="plain small danger" onClick={() => updateCandidateStatus(item.candidate_id, "rejected")}>Reject</button>
@@ -4447,6 +4455,10 @@ function CampaignsView({
                   <button className="primary" onClick={saveCurrentScorecard} disabled={busy}>Save Scorecard</button>
                 </div>
                 <div className="campaignScorecardGrid">
+                  <label className="wide">
+                    <span>Role intent</span>
+                    <input value={scorecardForm.role_intent} onChange={(event) => setScorecardForm((value) => ({ ...value, role_intent: event.target.value }))} placeholder="Example: hands-on data engineer for healthcare analytics platform" />
+                  </label>
                   <label>
                     <span>Location preference</span>
                     <input value={scorecardForm.location_preference} onChange={(event) => setScorecardForm((value) => ({ ...value, location_preference: event.target.value }))} placeholder="New York, Remote US, EST" />
@@ -4467,11 +4479,54 @@ function CampaignsView({
                     <span>Nice-to-have skills</span>
                     <textarea value={scorecardForm.nice_to_have_skills} onChange={(event) => setScorecardForm((value) => ({ ...value, nice_to_have_skills: event.target.value }))} placeholder="Healthcare, Azure, Airflow" />
                   </label>
+                  <label>
+                    <span>Domains / industries</span>
+                    <textarea value={scorecardForm.domains} onChange={(event) => setScorecardForm((value) => ({ ...value, domains: event.target.value }))} placeholder="Data engineering, healthcare, AI platform" />
+                  </label>
+                  <label>
+                    <span>Industry preference</span>
+                    <textarea value={scorecardForm.industry_preferences} onChange={(event) => setScorecardForm((value) => ({ ...value, industry_preferences: event.target.value }))} placeholder="Healthcare, fintech, public sector, SaaS" />
+                  </label>
+                  <label>
+                    <span>Hidden intent / soft preferences</span>
+                    <textarea value={scorecardForm.hidden_intent} onChange={(event) => setScorecardForm((value) => ({ ...value, hidden_intent: event.target.value }))} placeholder="Client-facing, startup pace, enterprise data, recent hands-on delivery" />
+                  </label>
+                  <label className="wide">
+                    <span>Soft preferences</span>
+                    <textarea value={scorecardForm.soft_preferences} onChange={(event) => setScorecardForm((value) => ({ ...value, soft_preferences: event.target.value }))} placeholder="Remote East Coast preferred, healthcare data helpful, cloud migration exposure" />
+                  </label>
                   <label className="wide">
                     <span>Dealbreakers</span>
                     <textarea value={scorecardForm.dealbreakers} onChange={(event) => setScorecardForm((value) => ({ ...value, dealbreakers: event.target.value }))} placeholder="No production data engineering experience" />
                   </label>
                 </div>
+                <section className="campaignWeightEditor">
+                  <div>
+                    <h4>Matching brain</h4>
+                    <p>Adjust weightage before ranking. Missing evidence is shown as unclear, not automatic rejection.</p>
+                  </div>
+                  <div className="campaignStrictToggles">
+                    <label><input type="checkbox" checked={scorecardForm.strict_must_haves} onChange={(event) => setScorecardForm((value) => ({ ...value, strict_must_haves: event.target.checked }))} /> Must-haves are hard blockers</label>
+                    <label><input type="checkbox" checked={scorecardForm.strict_min_years} onChange={(event) => setScorecardForm((value) => ({ ...value, strict_min_years: event.target.checked }))} /> Minimum years is hard blocker</label>
+                  </div>
+                  <div className="campaignWeightGrid">
+                    {[
+                      ["Skills", "weight_skills"],
+                      ["Role", "weight_role"],
+                      ["Domain", "weight_domain"],
+                      ["Years", "weight_years"],
+                      ["Location", "weight_location"],
+                      ["Recency", "weight_recency"],
+                      ["Seniority", "weight_seniority"],
+                      ["Notes", "weight_notes"],
+                    ].map(([label, key]) => (
+                      <label key={key}>
+                        <span>{label}</span>
+                        <input value={String(scorecardForm[key as keyof CampaignScorecardForm] ?? "")} onChange={(event) => setScorecardForm((value) => ({ ...value, [key]: event.target.value }))} inputMode="decimal" />
+                      </label>
+                    ))}
+                  </div>
+                </section>
               </article>
             </section>
           ) : null}
@@ -4600,22 +4655,52 @@ function CampaignsView({
 }
 
 type CampaignScorecardForm = {
+  role_intent: string;
   location_preference: string;
   seniority: string;
   min_years_experience: string;
   must_have_skills: string;
   nice_to_have_skills: string;
+  domains: string;
+  industry_preferences: string;
+  soft_preferences: string;
+  hidden_intent: string;
   dealbreakers: string;
+  strict_must_haves: boolean;
+  strict_min_years: boolean;
+  weight_skills: string;
+  weight_role: string;
+  weight_domain: string;
+  weight_years: string;
+  weight_location: string;
+  weight_recency: string;
+  weight_seniority: string;
+  weight_notes: string;
 };
 
 function emptyCampaignScorecardForm(): CampaignScorecardForm {
   return {
+    role_intent: "",
     location_preference: "",
     seniority: "",
     min_years_experience: "",
     must_have_skills: "",
     nice_to_have_skills: "",
+    domains: "",
+    industry_preferences: "",
+    soft_preferences: "",
+    hidden_intent: "",
     dealbreakers: "",
+    strict_must_haves: false,
+    strict_min_years: false,
+    weight_skills: "30",
+    weight_role: "18",
+    weight_domain: "15",
+    weight_years: "12",
+    weight_location: "10",
+    weight_recency: "8",
+    weight_seniority: "5",
+    weight_notes: "2",
   };
 }
 
@@ -4630,12 +4715,27 @@ function campaignScorecardForm(campaign: JobCampaign): CampaignScorecardForm {
     profile.required_countries
   );
   return {
+    role_intent: textValue(scorecard.role_intent ?? profile.role_intent),
     location_preference: campaignListInput(locationPreference),
     seniority: textValue(scorecard.seniority ?? profile.seniority),
     min_years_experience: textValue(scorecard.min_years_experience ?? profile.min_years_experience),
     must_have_skills: campaignListInput(scorecard.must_have_skills ?? profile.must_have_skills),
     nice_to_have_skills: campaignListInput(scorecard.nice_to_have_skills ?? profile.nice_to_have_skills),
+    domains: campaignListInput(scorecard.domains ?? profile.domains),
+    industry_preferences: campaignListInput(scorecard.industry_preferences ?? profile.industry_preferences),
+    soft_preferences: campaignListInput(scorecard.soft_preferences ?? profile.soft_preferences),
+    hidden_intent: campaignListInput(scorecard.hidden_intent ?? profile.hidden_intent),
     dealbreakers: campaignListInput(scorecard.dealbreakers ?? profile.dealbreakers),
+    strict_must_haves: Boolean(scorecard.strict_must_haves ?? profile.strict_must_haves),
+    strict_min_years: Boolean(scorecard.strict_min_years ?? profile.strict_min_years),
+    weight_skills: scoreWeightPercent(scorecard.score_weights?.skills ?? profile.score_weights?.skills, "30"),
+    weight_role: scoreWeightPercent(scorecard.score_weights?.role ?? profile.score_weights?.role, "18"),
+    weight_domain: scoreWeightPercent(scorecard.score_weights?.domain ?? profile.score_weights?.domain, "15"),
+    weight_years: scoreWeightPercent(scorecard.score_weights?.years ?? profile.score_weights?.years, "12"),
+    weight_location: scoreWeightPercent(scorecard.score_weights?.location ?? profile.score_weights?.location, "10"),
+    weight_recency: scoreWeightPercent(scorecard.score_weights?.recency ?? profile.score_weights?.recency, "8"),
+    weight_seniority: scoreWeightPercent(scorecard.score_weights?.seniority ?? profile.score_weights?.seniority, "5"),
+    weight_notes: scoreWeightPercent(scorecard.score_weights?.notes ?? profile.score_weights?.notes, "2"),
   };
 }
 
@@ -4651,24 +4751,55 @@ function campaignScorecardPayload(form: CampaignScorecardForm, campaign: JobCamp
   const years = Number(form.min_years_experience.replace(/[^\d.]/g, ""));
   return {
     title: campaign.requirement_title || campaign.name,
+    role_intent: form.role_intent.trim() || null,
     location_preference: campaignInputList(form.location_preference),
     seniority: form.seniority.trim() || null,
     min_years_experience: Number.isFinite(years) && years > 0 ? years : null,
     must_have_skills: campaignInputList(form.must_have_skills),
     nice_to_have_skills: campaignInputList(form.nice_to_have_skills),
+    domains: campaignInputList(form.domains),
+    industry_preferences: campaignInputList(form.industry_preferences),
+    soft_preferences: campaignInputList(form.soft_preferences),
+    hidden_intent: campaignInputList(form.hidden_intent),
     dealbreakers: campaignInputList(form.dealbreakers),
+    strict_must_haves: form.strict_must_haves,
+    strict_min_years: form.strict_min_years,
+    score_weights: {
+      skills: percentInputToDecimal(form.weight_skills),
+      role: percentInputToDecimal(form.weight_role),
+      domain: percentInputToDecimal(form.weight_domain),
+      years: percentInputToDecimal(form.weight_years),
+      location: percentInputToDecimal(form.weight_location),
+      recency: percentInputToDecimal(form.weight_recency),
+      seniority: percentInputToDecimal(form.weight_seniority),
+      notes: percentInputToDecimal(form.weight_notes),
+    },
   };
 }
 
 function campaignScorecardCompleteness(form: CampaignScorecardForm) {
   const checks = [
+    form.role_intent.trim(),
     form.must_have_skills.trim(),
     form.min_years_experience.trim(),
     form.seniority.trim(),
     form.location_preference.trim(),
+    form.domains.trim() || form.industry_preferences.trim(),
     form.dealbreakers.trim(),
   ];
   return Math.round((checks.filter(Boolean).length / checks.length) * 100);
+}
+
+function scoreWeightPercent(value: unknown, fallback: string) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return fallback;
+  return String(Math.round((numeric <= 1 ? numeric * 100 : numeric) * 10) / 10);
+}
+
+function percentInputToDecimal(value: string) {
+  const numeric = Number(value.replace(/[^\d.]/g, ""));
+  if (!Number.isFinite(numeric) || numeric <= 0) return 0;
+  return Math.max(0, Math.min(1, numeric > 1 ? numeric / 100 : numeric));
 }
 
 function campaignListInput(value: unknown) {

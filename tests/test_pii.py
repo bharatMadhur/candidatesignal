@@ -26,7 +26,7 @@ class PiiExtractionTests(unittest.TestCase):
 
         self.assertEqual(enriched["contact"]["email"], "pranjal@example.com")
         self.assertEqual(enriched["contact"]["phone"], "774.253.7593")
-        self.assertEqual(pii["linkedin_urls"], ["https://linkedin.com/in/pranjal-paliwal"])
+        self.assertEqual(pii["linkedin_urls"], ["https://www.linkedin.com/in/pranjal-paliwal"])
         self.assertEqual(pii["github_urls"], ["https://github.com/pranjal"])
         self.assertEqual(pii["portfolio_websites"], ["https://pranjal.ai"])
         self.assertTrue(pii["coverage"]["has_linkedin"])
@@ -45,9 +45,36 @@ class PiiExtractionTests(unittest.TestCase):
         enriched = enrich_record_pii(record, raw_text)
         pii = enriched["derived"]["pii_contact_intelligence"]
 
-        self.assertEqual(pii["linkedin_urls"], ["https://www.linkedin.com/in/pranjal-paliwal-490/"])
+        self.assertEqual(pii["linkedin_urls"], ["https://www.linkedin.com/in/pranjal-paliwal-490"])
         self.assertEqual(pii["github_urls"], ["https://github.com/Cranial490"])
-        self.assertIn("https://www.linkedin.com/in/pranjal-paliwal-490/", enriched["contact"]["links"])
+        self.assertIn("https://www.linkedin.com/in/pranjal-paliwal-490", enriched["contact"]["links"])
+
+    def test_filters_resume_false_positive_pii_urls_and_dates(self) -> None:
+        record = {
+            "contact": {
+                "links": [
+                    "www.linkedin.com/in/neelabh-ai-mlops-architect",
+                    "mailto:neelabh@example.com",
+                ]
+            },
+            "derived": {},
+        }
+        raw_text = """
+        Neelabh Prajapati
+        neelabh@example.com | +14697772081
+        LinkedIn: http://www.linkedin.com/in/neelabh-ai-mlops-architect?jobid=1234&lipi=tracking
+        Truncated duplicate: https://www.linkedin.com/in/neelabh-ai-
+        Skills: ASP.NET, ADO.Net
+        Education 2005 - 2008 and 2002 - 2005
+        """
+
+        enriched = enrich_record_pii(record, raw_text)
+        pii = enriched["derived"]["pii_contact_intelligence"]
+
+        self.assertEqual(pii["phones"], ["+14697772081"])
+        self.assertEqual(pii["linkedin_urls"], ["https://www.linkedin.com/in/neelabh-ai-mlops-architect"])
+        self.assertEqual(pii["portfolio_websites"], [])
+        self.assertEqual(enriched["contact"]["links"], ["https://www.linkedin.com/in/neelabh-ai-mlops-architect"])
 
     def test_public_candidate_record_redacts_contact_pii_when_role_disallowed(self) -> None:
         record = {

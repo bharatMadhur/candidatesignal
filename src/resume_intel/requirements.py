@@ -8,8 +8,9 @@ from psycopg.types.json import Jsonb
 
 from .db import db
 from .extractors import extract_document
-from .llm import extract_requirement_profile
-from .settings import Settings
+from .llm import extract_requirement_profile, judge_requirement_candidate_matches
+from .pii import redact_contact_pii_text
+from .settings import Settings, load_settings
 from .vector_search import semantic_candidate_scores, upsert_requirement_embedding
 
 
@@ -41,6 +42,8 @@ SKILL_ALIASES = {
 }
 
 MATCH_VISIBILITY_THRESHOLD = 0.30
+RECALL_LIMIT = 250
+LLM_JUDGE_LIMIT = 20
 
 MATCH_STOPWORDS = {
     "ability",
@@ -116,6 +119,9 @@ def update_requirement_scorecard(
         ("nice_to_have_skills", "nice_to_have_skills"),
         ("dealbreakers", "dealbreakers"),
         ("domains", "domains"),
+        ("industry_preferences", "industry_preferences"),
+        ("soft_preferences", "soft_preferences"),
+        ("hidden_intent", "hidden_intent"),
     ):
         if field_key in fields:
             profile[profile_key] = _field_list(fields.get(field_key))
@@ -140,6 +146,24 @@ def update_requirement_scorecard(
         seniority = str(fields.get("seniority") or "").strip()
         profile["seniority"] = seniority or None
         answers["__profile.seniority"] = seniority
+
+    if "role_intent" in fields:
+        role_intent = str(fields.get("role_intent") or "").strip()
+        profile["role_intent"] = role_intent or None
+        answers["__profile.role_intent"] = role_intent
+
+    for key in ("strict_must_haves", "strict_min_years"):
+        if key in fields:
+            profile[key] = bool(fields.get(key))
+            answers[f"__profile.{key}"] = "true" if profile[key] else "false"
+
+    if "score_weights" in fields and isinstance(fields.get("score_weights"), dict):
+        profile["score_weights"] = {
+            key: _score_value(value)
+            for key, value in fields["score_weights"].items()
+            if _score_value(value) > 0
+        }
+        answers["__profile.score_weights"] = ", ".join(f"{key}:{value}" for key, value in profile["score_weights"].items())
 
     title = str(fields.get("title") or profile.get("title") or req.get("title") or "").strip() or None
     if title:
@@ -176,6 +200,9 @@ def _apply_structured_answers(profile: dict[str, Any], answers: dict[str, str]) 
         "__profile.required_countries": "required_countries",
         "__profile.domains": "domains",
         "__profile.dealbreakers": "dealbreakers",
+        "__profile.industry_preferences": "industry_preferences",
+        "__profile.soft_preferences": "soft_preferences",
+        "__profile.hidden_intent": "hidden_intent",
     }
     for answer_key, profile_key in list_fields.items():
         parsed = _answer_list(answers.get(answer_key))
@@ -189,6 +216,7 @@ def _apply_structured_answers(profile: dict[str, Any], answers: dict[str, str]) 
     for answer_key, profile_key in {
         "__profile.seniority": "seniority",
         "__profile.work_authorization": "work_authorization",
+        "__profile.role_intent": "role_intent",
     }.items():
         value = str(answers.get(answer_key) or "").strip()
         if value:
@@ -283,13 +311,40 @@ def list_requirements(tenant_id: str | None = None) -> list[dict[str, Any]]:
     return [_requirement_row(row) for row in rows]
 
 
-def match_requirement(requirement_id: str, tenant_id: str | None = None) -> list[dict[str, Any]]:
+def match_requirement(
+    requirement_id: str,
+    tenant_id: str | None = None,
+    *,
+    deep_judge: bool = False,
+    extra_candidate_ids: list[str] | None = None,
+) -> list[dict[str, Any]]:
     req = get_requirement(requirement_id, tenant_id)
     tenant_id = tenant_id or req.get("tenant_id")
     profile = req.get("final_requirement_profile") or req["extracted_requirement_json"]
-    semantic_scores = semantic_candidate_scores(_requirement_text(profile, req["original_text"]), tenant_id=tenant_id)
+    requirement_text = _requirement_text(profile, req["original_text"])
+    semantic_scores = semantic_candidate_scores(requirement_text, limit=RECALL_LIMIT, tenant_id=tenant_id)
+    recall_ids = _broad_recall_candidate_ids(profile, requirement_text, semantic_scores, tenant_id, extra_candidate_ids)
     with db() as conn:
-        candidates = conn.execute("select document_id, record_json, raw_text from candidates where tenant_id=%s and deleted_at is null", (tenant_id,)).fetchall()
+        if recall_ids:
+            candidates = conn.execute(
+                """
+                select document_id, record_json, raw_text
+                from candidates
+                where tenant_id=%s and deleted_at is null and document_id = any(%s::text[])
+                """,
+                (tenant_id, recall_ids),
+            ).fetchall()
+        else:
+            candidates = conn.execute(
+                """
+                select document_id, record_json, raw_text
+                from candidates
+                where tenant_id=%s and deleted_at is null
+                order by updated_at desc
+                limit %s
+                """,
+                (tenant_id, RECALL_LIMIT),
+            ).fetchall()
     matches = []
     for row in candidates:
         candidate = row["record_json"]
@@ -310,8 +365,15 @@ def match_requirement(requirement_id: str, tenant_id: str | None = None) -> list
         match["evidence"]["visibility_threshold"] = MATCH_VISIBILITY_THRESHOLD
         match["candidate_id"] = row["document_id"]
         match["candidate"] = _candidate_summary(candidate)
+        match["_candidate_record"] = candidate
+        match["_raw_text"] = row.get("raw_text") or ""
         matches.append(match)
     matches.sort(key=lambda item: item["total_score"], reverse=True)
+    if deep_judge:
+        _apply_llm_match_judgement(matches, profile, requirement_text, tenant_id)
+    for match in matches:
+        match.pop("_candidate_record", None)
+        match.pop("_raw_text", None)
     visible_matches = [item for item in matches if float(item.get("total_score") or 0) >= MATCH_VISIBILITY_THRESHOLD]
     _persist_matches(requirement_id, visible_matches, tenant_id)
     _persist_match_run(requirement_id, profile, visible_matches, tenant_id)
@@ -444,11 +506,14 @@ def score_candidate(profile: dict[str, Any], candidate: dict[str, Any], raw_text
     candidate_text = _candidate_text(candidate, raw_text)
     must = [str(item) for item in profile.get("must_have_skills", []) if item]
     nice = [str(item) for item in profile.get("nice_to_have_skills", []) if item]
+    title_terms = _field_list(profile.get("title")) + _field_list(profile.get("role_intent"))
+    responsibility_terms = _field_list(profile.get("responsibilities"))[:8]
     domain_text = _domain_text(candidate)
     must_hits = [item for item in must if _requirement_item_hit(item, candidate_text, domain_text)]
     nice_hits = [item for item in nice if _requirement_item_hit(item, candidate_text, domain_text)]
     must_score = len(must_hits) / len(must) if must else 1.0
     nice_score = len(nice_hits) / len(nice) if nice else 1.0
+    role_score = _term_group_score([*title_terms, *responsibility_terms], candidate_text, default=1.0)
 
     min_years = profile.get("min_years_experience")
     candidate_years = candidate.get("derived", {}).get("hr_profile", {}).get("total_years_experience") or 0
@@ -466,14 +531,22 @@ def score_candidate(profile: dict[str, Any], candidate: dict[str, Any], raw_text
     preferred_location_hits = [item for item in preferred_locations if _location_hit(item, candidate_text)]
     all_location_hits = [*location_hits, *preferred_location_hits]
     location_score = len(all_location_hits) / len(scored_locations) if scored_locations else 1.0
+    seniority_score = _seniority_score(profile, candidate_text)
+    recency_score = _recency_score(profile, candidate)
+    notes_hits = _notes_relevance(profile, candidate)
+    notes_score = 1.0 if notes_hits else 0.65
 
-    weights = _dynamic_match_weights(profile, must, nice, min_years, required_domains, scored_locations)
+    weights = _dynamic_match_weights(profile, must, nice, min_years, required_domains, scored_locations, title_terms, profile.get("seniority"))
     total = (
         (must_score * weights.get("must_have", 0))
         + (nice_score * weights.get("nice_to_have", 0))
+        + (role_score * weights.get("role", 0))
         + (years_score * weights.get("years", 0))
         + (domain_score * weights.get("domain", 0))
         + (location_score * weights.get("location", 0))
+        + (seniority_score * weights.get("seniority", 0))
+        + (recency_score * weights.get("recency", 0))
+        + (notes_score * weights.get("notes", 0))
     )
     gaps = {
         "missing_must_haves": [item for item in must if item not in must_hits],
@@ -482,6 +555,7 @@ def score_candidate(profile: dict[str, Any], candidate: dict[str, Any], raw_text
         "missing_domains": [item for item in required_domains if item not in domain_hits],
         "missing_locations": [item for item in required_locations if item not in location_hits],
         "missing_preferred_locations": [item for item in preferred_locations if item not in preferred_location_hits],
+        "unclear_signals": _unclear_match_signals(profile, candidate, location_score, notes_hits),
     }
     hard_filter_failures = _hard_filter_failures(profile, gaps, candidate_text, candidate_years, min_years)
     hard_filter_pass = not hard_filter_failures
@@ -495,9 +569,24 @@ def score_candidate(profile: dict[str, Any], candidate: dict[str, Any], raw_text
         "preferred_location_hits": preferred_location_hits,
         "candidate_years": candidate_years,
         "hard_filter_failures": hard_filter_failures,
-        "notes_relevance": _notes_relevance(profile, candidate),
+        "role_score": role_score,
+        "seniority_score": seniority_score,
+        "recency_score": recency_score,
+        "notes_relevance": notes_hits,
+        "notes_score": notes_score,
         "score_weights": weights,
-        "match_explanation": _score_explanation(must_score, nice_score, years_score, domain_score, location_score, weights),
+        "match_explanation": _score_explanation(
+            must_score,
+            nice_score,
+            years_score,
+            domain_score,
+            location_score,
+            weights,
+            role_score=role_score,
+            seniority_score=seniority_score,
+            recency_score=recency_score,
+            notes_score=notes_score,
+        ),
     }
     return {
         "total_score": round(total, 3),
@@ -512,6 +601,397 @@ def score_candidate(profile: dict[str, Any], candidate: dict[str, Any], raw_text
         "gaps": gaps,
         "recommendation": _recommendation(total, gaps, hard_filter_failures),
     }
+
+
+def _broad_recall_candidate_ids(
+    profile: dict[str, Any],
+    requirement_text: str,
+    semantic_scores: dict[str, dict[str, Any]],
+    tenant_id: str | None,
+    extra_candidate_ids: list[str] | None = None,
+) -> list[str]:
+    """Retrieve a broad but bounded candidate set before the expensive judge pass."""
+
+    ordered_ids: list[str] = [str(item) for item in (extra_candidate_ids or []) if item]
+    ordered_ids.extend(str(candidate_id) for candidate_id in semantic_scores.keys())
+    terms = _recall_terms(profile, requirement_text)
+    if not terms:
+        return _dedupe_ids(ordered_ids)[:RECALL_LIMIT]
+    patterns = [f"%{term[:96]}%" for term in terms[:40] if len(term) >= 3]
+    if not patterns:
+        return _dedupe_ids(ordered_ids)[:RECALL_LIMIT]
+    with db() as conn:
+        if tenant_id:
+            chunk_rows = conn.execute(
+                """
+                select document_id, count(*) as hit_count
+                from candidate_search_chunks
+                where tenant_id=%s and chunk_text ilike any(%s::text[])
+                group by document_id
+                order by hit_count desc
+                limit %s
+                """,
+                (tenant_id, patterns, RECALL_LIMIT),
+            ).fetchall()
+            candidate_rows = conn.execute(
+                """
+                select document_id
+                from candidates
+                where tenant_id=%s
+                  and deleted_at is null
+                  and (raw_text ilike any(%s::text[]) or record_json::text ilike any(%s::text[]))
+                order by updated_at desc
+                limit %s
+                """,
+                (tenant_id, patterns, patterns, RECALL_LIMIT),
+            ).fetchall()
+        else:
+            chunk_rows = conn.execute(
+                """
+                select document_id, count(*) as hit_count
+                from candidate_search_chunks
+                where chunk_text ilike any(%s::text[])
+                group by document_id
+                order by hit_count desc
+                limit %s
+                """,
+                (patterns, RECALL_LIMIT),
+            ).fetchall()
+            candidate_rows = conn.execute(
+                """
+                select document_id
+                from candidates
+                where deleted_at is null
+                  and (raw_text ilike any(%s::text[]) or record_json::text ilike any(%s::text[]))
+                order by updated_at desc
+                limit %s
+                """,
+                (patterns, patterns, RECALL_LIMIT),
+            ).fetchall()
+    ordered_ids.extend(str(row["document_id"]) for row in chunk_rows)
+    ordered_ids.extend(str(row["document_id"]) for row in candidate_rows)
+    return _dedupe_ids(ordered_ids)[:RECALL_LIMIT]
+
+
+def _recall_terms(profile: dict[str, Any], requirement_text: str) -> list[str]:
+    raw_terms: list[str] = []
+    for key in (
+        "title",
+        "role_intent",
+        "seniority",
+        "work_authorization",
+    ):
+        raw_terms.extend(_field_list(profile.get(key)))
+    for key in (
+        "must_have_skills",
+        "nice_to_have_skills",
+        "domains",
+        "industry_preferences",
+        "required_locations",
+        "preferred_locations",
+        "location_preference",
+        "required_countries",
+        "responsibilities",
+        "soft_preferences",
+        "hidden_intent",
+    ):
+        raw_terms.extend(_field_list(profile.get(key)))
+    for domain in _field_list(profile.get("domains")):
+        raw_terms.extend(DOMAIN_ALIASES.get(_canonical_domain(domain), []))
+    for item in list(raw_terms):
+        raw_terms.extend(_aliases_for_item(_norm(item)))
+    phrase_terms = [
+        term.strip()
+        for term in raw_terms
+        if 3 <= len(term.strip()) <= 96 and not term.strip().isdigit()
+    ]
+    if len(phrase_terms) < 12:
+        normalized_requirement = _norm(requirement_text)
+        phrase_terms.extend(
+            token
+            for token in _meaningful_tokens(normalized_requirement)
+            if len(token) >= 4 and token not in MATCH_STOPWORDS
+        )
+    return _dedupe_text(phrase_terms)[:50]
+
+
+def _apply_llm_match_judgement(
+    matches: list[dict[str, Any]],
+    profile: dict[str, Any],
+    requirement_text: str,
+    tenant_id: str | None,
+) -> None:
+    """Apply an evidence-grounded LLM judgement pass to the top recalled candidates."""
+
+    if not matches:
+        return
+    judged_matches = matches[:LLM_JUDGE_LIMIT]
+    settings = load_settings()
+    if not settings.llm_api_key:
+        for match in judged_matches:
+            match.setdefault("evidence", {})["llm_judge"] = {"status": "skipped_no_llm_api_key"}
+        return
+    candidate_packets = [_candidate_llm_packet(match, profile) for match in judged_matches]
+    try:
+        judgement, usage = judge_requirement_candidate_matches(
+            requirement_profile=profile,
+            requirement_text=redact_contact_pii_text(requirement_text),
+            candidates=candidate_packets,
+            settings=settings,
+        )
+    except Exception as exc:
+        for match in judged_matches:
+            match.setdefault("evidence", {})["llm_judge"] = {
+                "status": "failed",
+                "error": f"{exc.__class__.__name__}: {str(exc)[:220]}",
+            }
+        return
+
+    judgements = {
+        str(item.get("candidate_id")): item
+        for item in judgement.get("candidate_judgements") or []
+        if item.get("candidate_id")
+    }
+    calibration = judgement.get("pairwise_calibration") or {}
+    rank_order = [str(item) for item in calibration.get("rank_order") or []]
+    rank_index = {candidate_id: index for index, candidate_id in enumerate(rank_order)}
+    for match in judged_matches:
+        candidate_id = str(match.get("candidate_id"))
+        item = judgements.get(candidate_id)
+        if not item:
+            continue
+        llm_score = _score_value(item.get("llm_score"))
+        preliminary = _score_value(match.get("total_score"))
+        rank_boost = 0.0
+        if candidate_id in rank_index and rank_order:
+            rank_boost = max(0.0, (len(rank_order) - rank_index[candidate_id] - 1) / max(1, len(rank_order))) * 0.03
+        final_score = min(1.0, max(0.0, (preliminary * 0.55) + (llm_score * 0.45) + rank_boost))
+        evidence = match.setdefault("evidence", {})
+        evidence["llm_judge"] = item | {
+            "status": "completed",
+            "preliminary_score": round(preliminary, 3),
+            "llm_score": round(llm_score, 3),
+            "calibration_boost": round(rank_boost, 3),
+        }
+        evidence["fit_type"] = item.get("fit_type")
+        evidence["would_recruiter_call"] = bool(item.get("would_recruiter_call"))
+        evidence["pairwise_calibration"] = calibration
+        evidence.setdefault("score_weights", {})["llm_judge"] = 0.45
+        evidence["llm_usage"] = usage
+        match["total_score"] = round(final_score, 3)
+        if item.get("recommended_action"):
+            match["recommendation"] = str(item["recommended_action"])[:500]
+        if item.get("missing_or_unclear"):
+            match.setdefault("gaps", {})["llm_missing_or_unclear"] = _string_list(item.get("missing_or_unclear"))[:8]
+        match["llm_score"] = round(llm_score, 3)
+    matches.sort(key=lambda item: item["total_score"], reverse=True)
+
+
+def _candidate_llm_packet(match: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
+    candidate = match.get("_candidate_record") or {}
+    raw_text = str(match.get("_raw_text") or "")
+    candidate_name = str(candidate.get("name") or "")
+    final_profile = (candidate.get("candidate_intelligence") or {}).get("final_candidate_profile") or {}
+    summary_card = final_profile.get("summary_card") or {}
+    hr_profile = candidate.get("derived", {}).get("hr_profile") or {}
+    location_intelligence = candidate.get("derived", {}).get("location_intelligence") or {}
+    terms = _recall_terms(profile, "")
+    snippets = _redacted_snippets(
+        [
+            *[
+                str(item.get("snippet") or "")
+                for item in (match.get("evidence") or {}).get("semantic_evidence") or []
+                if isinstance(item, dict)
+            ],
+            *_raw_text_hits(raw_text, terms),
+        ],
+        names=[candidate_name],
+    )
+    return {
+        "candidate_id": match.get("candidate_id"),
+        "candidate_summary": {
+            "name_redacted": "[candidate]",
+            "current_title": hr_profile.get("current_title") or summary_card.get("current_or_target_title"),
+            "current_company": hr_profile.get("current_company"),
+            "current_location": location_intelligence.get("current_job_location") or (candidate.get("contact") or {}).get("location"),
+            "total_years_experience": hr_profile.get("total_years_experience"),
+            "seniority": hr_profile.get("seniority_level") or summary_card.get("seniority_read"),
+            "summary": _redact_short(candidate.get("summary") or summary_card.get("headline"), names=[candidate_name]),
+        },
+        "skills": _string_list(candidate.get("skills"))[:40],
+        "experience": _experience_packet(candidate, names=[candidate_name]),
+        "education": _education_packet(candidate, names=[candidate_name]),
+        "domains": candidate.get("derived", {}).get("experience_by_domain") or {},
+        "countries_locations": {
+            "countries": candidate.get("derived", {}).get("countries_associated") or [],
+            "location_intelligence": location_intelligence,
+        },
+        "recruiter_notes": _redacted_snippets([note.get("content", "") for note in candidate.get("notes") or []], names=[candidate_name])[:6],
+        "preliminary_scores": {
+            "total": match.get("total_score"),
+            "structured": match.get("rule_score"),
+            "semantic": match.get("semantic_score"),
+            "must_have": match.get("must_have_score"),
+            "nice_to_have": match.get("nice_to_have_score"),
+            "years": match.get("years_score"),
+            "domain": match.get("domain_score"),
+            "location": match.get("location_score"),
+        },
+        "preliminary_evidence": {
+            "hits": {
+                "must_have": (match.get("evidence") or {}).get("must_have_hits") or [],
+                "nice_to_have": (match.get("evidence") or {}).get("nice_to_have_hits") or [],
+                "domains": (match.get("evidence") or {}).get("domain_hits") or [],
+                "locations": (match.get("evidence") or {}).get("location_hits") or [],
+            },
+            "gaps": match.get("gaps") or {},
+            "semantic_snippets": snippets[:8],
+        },
+    }
+
+
+def _experience_packet(candidate: dict[str, Any], *, names: list[str]) -> list[dict[str, Any]]:
+    rows = []
+    for item in (candidate.get("experience") or [])[:8]:
+        if not isinstance(item, dict):
+            continue
+        bullets = _string_list(item.get("bullets"))[:4]
+        rows.append({
+            "company": item.get("company"),
+            "title": item.get("title"),
+            "dates": item.get("dates") or item.get("date"),
+            "location": item.get("location"),
+            "bullets": [_redact_short(bullet, names=names, limit=260) for bullet in bullets],
+            "workstreams": _redacted_snippets([_flatten_text(item.get("workstreams") or [])], names=names)[:3],
+        })
+    return rows
+
+
+def _education_packet(candidate: dict[str, Any], *, names: list[str]) -> list[dict[str, Any]]:
+    rows = []
+    for item in (candidate.get("education") or [])[:5]:
+        if not isinstance(item, dict):
+            continue
+        rows.append({
+            "school": _redact_short(item.get("school"), names=names, limit=120),
+            "degree": item.get("degree"),
+            "field": item.get("field"),
+            "date": item.get("date") or item.get("dates"),
+        })
+    return rows
+
+
+def _raw_text_hits(raw_text: str, terms: list[str]) -> list[str]:
+    flattened = re.sub(r"\s+", " ", raw_text or "").strip()
+    if not flattened:
+        return []
+    lowered = flattened.lower()
+    snippets: list[str] = []
+    for term in terms[:18]:
+        normalized = term.lower().strip()
+        if len(normalized) < 3:
+            continue
+        index = lowered.find(normalized)
+        if index < 0:
+            continue
+        start = max(0, index - 140)
+        end = min(len(flattened), index + len(normalized) + 220)
+        snippets.append(flattened[start:end])
+    return _dedupe_text(snippets)[:10]
+
+
+def _redacted_snippets(values: list[Any], *, names: list[str] | None = None) -> list[str]:
+    result = []
+    for value in values:
+        text = _redact_short(value, names=names, limit=420)
+        if text:
+            result.append(text)
+    return _dedupe_text(result)
+
+
+def _redact_short(value: Any, *, names: list[str] | None = None, limit: int = 420) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    if not text:
+        return ""
+    return redact_contact_pii_text(text[:limit], names=names)
+
+
+def _term_group_score(terms: list[str], candidate_text: str, *, default: float = 1.0) -> float:
+    normalized_terms = _dedupe_text([term for term in terms if str(term).strip()])
+    if not normalized_terms:
+        return default
+    hits = sum(1 for term in normalized_terms if _requirement_item_hit(term, candidate_text))
+    if not hits:
+        return 0.55
+    coverage = hits / len(normalized_terms)
+    return max(0.55, min(1.0, coverage))
+
+
+def _seniority_score(profile: dict[str, Any], candidate_text: str) -> float:
+    seniority = _norm(str(profile.get("seniority") or ""))
+    if not seniority:
+        return 1.0
+    levels = {
+        "intern": ["intern", "trainee"],
+        "junior": ["junior", "associate", "entry"],
+        "mid": ["mid", "engineer", "developer", "analyst", "consultant"],
+        "senior": ["senior", "sr", "lead", "principal", "staff", "architect", "manager"],
+        "lead": ["lead", "principal", "staff", "architect", "manager", "director", "head"],
+        "manager": ["manager", "director", "head", "lead"],
+        "director": ["director", "head", "vp", "vice president"],
+    }
+    requested = next((key for key in levels if key in seniority), seniority)
+    aliases = levels.get(requested, [requested])
+    if any(_norm(alias) in candidate_text for alias in aliases):
+        return 1.0
+    if requested in {"senior", "lead", "manager", "director"} and any(term in candidate_text for term in ("senior", "lead", "architect", "principal", "staff", "manager", "director")):
+        return 0.82
+    return 0.65
+
+
+def _recency_score(profile: dict[str, Any], candidate: dict[str, Any]) -> float:
+    terms = _recall_terms(profile, "")[:20]
+    if not terms:
+        return 1.0
+    experience = candidate.get("experience") or []
+    latest = experience[:2]
+    latest_text = _norm(
+        " ".join(
+            " ".join(filter(None, [
+                item.get("company") if isinstance(item, dict) else "",
+                item.get("title") if isinstance(item, dict) else "",
+                " ".join(item.get("bullets") or []) if isinstance(item, dict) else "",
+                _flatten_text(item.get("workstreams") or []) if isinstance(item, dict) else "",
+            ]))
+            for item in latest
+            if isinstance(item, dict)
+        )
+    )
+    if not latest_text:
+        return 0.7
+    hits = sum(1 for term in terms if _requirement_item_hit(term, latest_text))
+    if hits >= 3:
+        return 1.0
+    if hits:
+        return 0.82
+    return 0.62
+
+
+def _unclear_match_signals(profile: dict[str, Any], candidate: dict[str, Any], location_score: float, notes_hits: list[str]) -> list[str]:
+    signals: list[str] = []
+    locations = [
+        *_field_list(profile.get("required_locations")),
+        *_field_list(profile.get("required_countries")),
+        *_field_list(profile.get("preferred_locations")),
+        *_field_list(profile.get("location_preference")),
+    ]
+    if locations and location_score <= 0:
+        signals.append("Location preference or requirement was not confirmed in candidate evidence.")
+    if profile.get("min_years_experience") and not candidate.get("derived", {}).get("hr_profile", {}).get("total_years_experience"):
+        signals.append("Total years could not be confidently derived from the candidate profile.")
+    if [*profile.get("must_have_skills", []), *profile.get("nice_to_have_skills", [])] and not notes_hits:
+        signals.append("No recruiter-note evidence matched this requirement yet.")
+    return signals
 
 
 def _profile_with_fallback(text: str, settings: Settings) -> dict[str, Any]:
@@ -886,7 +1366,7 @@ def _canonical_domain(value: str) -> str:
 
 
 def _notes_relevance(profile: dict[str, Any], candidate: dict[str, Any]) -> list[str]:
-    terms = [_norm(item) for item in [*profile.get("must_have_skills", []), *profile.get("nice_to_have_skills", [])] if item]
+    terms = [_norm(item) for item in [*_field_list(profile.get("must_have_skills")), *_field_list(profile.get("nice_to_have_skills"))] if item]
     hits = []
     for note in candidate.get("notes") or []:
         note_text = _norm(note.get("content", ""))
@@ -928,23 +1408,82 @@ def _dynamic_match_weights(
     min_years: Any,
     required_domains: list[str],
     scored_locations: list[str],
+    title_terms: list[str] | None = None,
+    seniority: Any = None,
 ) -> dict[str, float]:
+    custom_weights = _custom_match_weights(profile, must, nice)
+    if custom_weights:
+        return custom_weights
     desired: dict[str, float] = {}
     if must:
-        desired["must_have"] = 0.30
+        desired["must_have"] = 0.28
     if nice:
-        desired["nice_to_have"] = 0.14
+        desired["nice_to_have"] = 0.10
+    if title_terms or profile.get("role_intent") or profile.get("responsibilities"):
+        desired["role"] = 0.18
     if min_years:
-        desired["years"] = 0.18
+        desired["years"] = 0.12
     if required_domains:
-        desired["domain"] = 0.22
+        desired["domain"] = 0.14
     if scored_locations:
-        desired["location"] = 0.12
+        desired["location"] = 0.08
+    if seniority:
+        desired["seniority"] = 0.07
+    if profile.get("responsibilities") or profile.get("role_intent") or must:
+        desired["recency"] = 0.08
+    desired["notes"] = 0.03
     if not desired:
-        return {"must_have": 0.2, "nice_to_have": 0.2, "years": 0.2, "domain": 0.2, "location": 0.2}
+        return {
+            "must_have": 0.0,
+            "nice_to_have": 0.0,
+            "role": 0.42,
+            "years": 0.0,
+            "domain": 0.0,
+            "location": 0.0,
+            "seniority": 0.0,
+            "recency": 0.35,
+            "notes": 0.23,
+        }
     total = sum(desired.values()) or 1.0
     normalized = {key: round(value / total, 3) for key, value in desired.items()}
-    for key in ("must_have", "nice_to_have", "years", "domain", "location"):
+    for key in ("must_have", "nice_to_have", "role", "years", "domain", "location", "seniority", "recency", "notes"):
+        normalized.setdefault(key, 0.0)
+    return normalized
+
+
+def _custom_match_weights(profile: dict[str, Any], must: list[str], nice: list[str]) -> dict[str, float]:
+    raw = profile.get("score_weights")
+    if not isinstance(raw, dict):
+        return {}
+    skills_weight = _score_value(raw.get("skills") or raw.get("skill_fit"))
+    desired = {
+        "role": _score_value(raw.get("role") or raw.get("role_relevance")),
+        "domain": _score_value(raw.get("domain")),
+        "years": _score_value(raw.get("years")),
+        "location": _score_value(raw.get("location")),
+        "recency": _score_value(raw.get("recency")),
+        "seniority": _score_value(raw.get("seniority")),
+        "notes": _score_value(raw.get("notes") or raw.get("recruiter_notes")),
+    }
+    if skills_weight:
+        if must and nice:
+            desired["must_have"] = skills_weight * 0.7
+            desired["nice_to_have"] = skills_weight * 0.3
+        elif must:
+            desired["must_have"] = skills_weight
+            desired["nice_to_have"] = 0.0
+        elif nice:
+            desired["must_have"] = 0.0
+            desired["nice_to_have"] = skills_weight
+    else:
+        desired["must_have"] = _score_value(raw.get("must_have"))
+        desired["nice_to_have"] = _score_value(raw.get("nice_to_have"))
+    desired = {key: value for key, value in desired.items() if value > 0}
+    if not desired:
+        return {}
+    total = sum(desired.values()) or 1.0
+    normalized = {key: round(value / total, 3) for key, value in desired.items()}
+    for key in ("must_have", "nice_to_have", "role", "years", "domain", "location", "seniority", "recency", "notes"):
         normalized.setdefault(key, 0.0)
     return normalized
 
@@ -981,13 +1520,22 @@ def _score_explanation(
     domain_score: float,
     location_score: float,
     weights: dict[str, float],
+    *,
+    role_score: float = 1.0,
+    seniority_score: float = 1.0,
+    recency_score: float = 1.0,
+    notes_score: float = 1.0,
 ) -> list[str]:
     rows = [
         ("Must-have", must_score, weights.get("must_have", 0)),
         ("Nice-to-have", nice_score, weights.get("nice_to_have", 0)),
+        ("Role relevance", role_score, weights.get("role", 0)),
         ("Years", years_score, weights.get("years", 0)),
         ("Domain", domain_score, weights.get("domain", 0)),
         ("Location", location_score, weights.get("location", 0)),
+        ("Seniority", seniority_score, weights.get("seniority", 0)),
+        ("Recent evidence", recency_score, weights.get("recency", 0)),
+        ("Recruiter notes", notes_score, weights.get("notes", 0)),
     ]
     return [
         f"{label}: {round(score * 100)}% match with {round(weight * 100)}% weight"
@@ -1036,6 +1584,51 @@ def _default_questions(profile: dict[str, Any]) -> list[str]:
     return questions
 
 
+def _score_value(value: Any) -> float:
+    try:
+        score = float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    if score > 1:
+        score = score / 100
+    return max(0.0, min(1.0, score))
+
+
+def _string_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [item.strip() for item in re.split(r"[\n,;]+", value) if item.strip()]
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _dedupe_text(values: list[str]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        text = re.sub(r"\s+", " ", str(value or "")).strip()
+        if not text:
+            continue
+        key = text.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(text)
+    return result
+
+
+def _dedupe_ids(values: list[str]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        item = str(value or "").strip()
+        if not item or item in seen:
+            continue
+        seen.add(item)
+        result.append(item)
+    return result
+
+
 def _norm(value: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9#+. ]", " ", value.lower())).strip()
 
@@ -1045,12 +1638,16 @@ def _requirement_text(profile: dict[str, Any], original_text: str) -> str:
         [
             original_text,
             str(profile.get("title") or ""),
+            str(profile.get("role_intent") or ""),
             " ".join(profile.get("must_have_skills") or []),
             " ".join(profile.get("nice_to_have_skills") or []),
             " ".join(profile.get("domains") or []),
+            " ".join(profile.get("industry_preferences") or []),
             " ".join(_field_list(profile.get("preferred_locations"))),
             " ".join(_field_list(profile.get("location_preference"))),
             " ".join(profile.get("responsibilities") or []),
+            " ".join(profile.get("soft_preferences") or []),
+            " ".join(profile.get("hidden_intent") or []),
             " ".join(profile.get("dealbreakers") or []),
         ]
     )

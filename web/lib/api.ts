@@ -545,6 +545,7 @@ export type JobCampaign = {
 
 export type CampaignScorecard = {
   title?: string | null;
+  role_intent?: string | null;
   location_preference?: string[];
   seniority?: string | null;
   min_years_experience?: number | string | null;
@@ -552,6 +553,12 @@ export type CampaignScorecard = {
   nice_to_have_skills?: string[];
   dealbreakers?: string[];
   domains?: string[];
+  industry_preferences?: string[];
+  soft_preferences?: string[];
+  hidden_intent?: string[];
+  strict_must_haves?: boolean;
+  strict_min_years?: boolean;
+  score_weights?: Record<string, number>;
 };
 
 export type WorkerStatus = {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from psycopg.types.json import Jsonb
@@ -305,7 +306,13 @@ def run_campaign_match(campaign_id: str, tenant_id: str, user_id: str) -> dict[s
     requirement_id = campaign.get("requirement_id")
     if not requirement_id:
         raise ValueError("campaign has no requirement profile")
-    matches = match_requirement(requirement_id, tenant_id)
+    existing_candidate_ids = [str(item["candidate_id"]) for item in campaign.get("candidates") or [] if item.get("candidate_id")]
+    matches = match_requirement(
+        requirement_id,
+        tenant_id,
+        deep_judge=True,
+        extra_candidate_ids=existing_candidate_ids,
+    )
     visible_candidate_ids = [str(match["candidate_id"]) for match in matches]
     with db() as conn:
         if visible_candidate_ids:
@@ -433,12 +440,20 @@ def _campaign_match_evidence_payload(match: dict[str, Any]) -> dict[str, Any]:
     evidence = match.get("evidence") or {}
     gaps = match.get("gaps") or {}
     hard_filter_failures = evidence.get("hard_filter_failures") or match.get("hard_filter_failures") or []
+    llm_judge = evidence.get("llm_judge") or {}
     return {
         "recommendation": match.get("recommendation"),
         "gaps": gaps,
         "evidence": evidence,
+        "fit_type": evidence.get("fit_type") or llm_judge.get("fit_type"),
+        "would_recruiter_call": evidence.get("would_recruiter_call") or llm_judge.get("would_recruiter_call"),
+        "llm_judge": llm_judge,
+        "pairwise_calibration": evidence.get("pairwise_calibration"),
         "score_breakdown": {
             "total": float(match.get("total_score") or 0),
+            "structured": float(match.get("rule_score") or 0),
+            "semantic": float(match.get("semantic_score") or 0),
+            "llm": float(match.get("llm_score") or 0),
             "must_have": float(match.get("must_have_score") or 0),
             "nice_to_have": float(match.get("nice_to_have_score") or 0),
             "years": float(match.get("years_score") or 0),
@@ -448,13 +463,19 @@ def _campaign_match_evidence_payload(match: dict[str, Any]) -> dict[str, Any]:
         "hard_filter_pass": not bool(hard_filter_failures),
         "hard_filter_failures": hard_filter_failures,
         "top_reasons": _campaign_top_reasons(evidence, gaps, hard_filter_failures),
-        "top_gaps": _campaign_top_gaps(gaps, hard_filter_failures),
+        "top_gaps": _campaign_top_gaps(gaps, hard_filter_failures, evidence),
     }
 
 
 def _campaign_top_reasons(evidence: dict[str, Any], gaps: dict[str, Any], hard_filter_failures: list[Any]) -> list[str]:
     if hard_filter_failures:
         return ["Hard filters need review before outreach."]
+    llm_judge = evidence.get("llm_judge") or {}
+    llm_reasons = _string_items(llm_judge.get("why_fit")) + [
+        f"Evidence: {item}" for item in _string_items(llm_judge.get("evidence_snippets"))[:3]
+    ]
+    if llm_reasons:
+        return llm_reasons[:5]
     reasons: list[str] = []
     reasons.extend(f"Must-have matched: {item}" for item in _string_items(evidence.get("must_have_hits"))[:3])
     reasons.extend(f"Nice-to-have matched: {item}" for item in _string_items(evidence.get("nice_to_have_hits"))[:2])
@@ -465,8 +486,14 @@ def _campaign_top_reasons(evidence: dict[str, Any], gaps: dict[str, Any], hard_f
     return reasons[:5] or ["Matched on available candidate evidence."]
 
 
-def _campaign_top_gaps(gaps: dict[str, Any], hard_filter_failures: list[Any]) -> list[str]:
+def _campaign_top_gaps(gaps: dict[str, Any], hard_filter_failures: list[Any], evidence: dict[str, Any] | None = None) -> list[str]:
     gap_items: list[str] = [str(item) for item in hard_filter_failures if str(item).strip()]
+    llm_gaps = _string_items((gaps or {}).get("llm_missing_or_unclear"))
+    if llm_gaps:
+        gap_items.extend(f"Unclear: {item}" for item in llm_gaps[:4])
+    llm_judge = (evidence or {}).get("llm_judge") if isinstance(evidence, dict) else None
+    if isinstance(llm_judge, dict):
+        gap_items.extend(_string_items(llm_judge.get("risks_gaps"))[:4])
     for label, key in (
         ("Missing must-have", "missing_must_haves"),
         ("Missing nice-to-have", "missing_nice_to_haves"),
@@ -531,6 +558,7 @@ def _scorecard_from_profile(profile: dict[str, Any]) -> dict[str, Any]:
     )
     return {
         "title": profile.get("title"),
+        "role_intent": profile.get("role_intent"),
         "location_preference": preferred_locations,
         "seniority": profile.get("seniority"),
         "min_years_experience": profile.get("min_years_experience"),
@@ -538,6 +566,12 @@ def _scorecard_from_profile(profile: dict[str, Any]) -> dict[str, Any]:
         "nice_to_have_skills": _string_items(profile.get("nice_to_have_skills")),
         "dealbreakers": _string_items(profile.get("dealbreakers")),
         "domains": _string_items(profile.get("domains")),
+        "industry_preferences": _string_items(profile.get("industry_preferences")),
+        "soft_preferences": _string_items(profile.get("soft_preferences")),
+        "hidden_intent": _string_items(profile.get("hidden_intent")),
+        "strict_must_haves": bool(profile.get("strict_must_haves")),
+        "strict_min_years": bool(profile.get("strict_min_years")),
+        "score_weights": profile.get("score_weights") or {},
     }
 
 

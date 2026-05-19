@@ -9233,6 +9233,92 @@ h3 {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.campaignWeightEditor {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
+.campaignWeightEditor h4 {
+  margin: 0 0 4px;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.campaignWeightEditor p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.campaignStrictToggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.campaignStrictToggles label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #f8faf9;
+  color: var(--muted);
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.campaignWeightGrid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(72px, 1fr));
+  gap: 8px;
+}
+
+.campaignWeightGrid label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.campaignWeightGrid input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f8faf9;
+  color: var(--text);
+  padding: 9px 8px;
+}
+
+.fitTypeBadge {
+  display: inline-flex;
+  width: fit-content;
+  margin-right: 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.campaignMatchRow p small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
 .campaignBoardShell {
   gap: 14px;
 }
@@ -9260,12 +9346,42 @@ h3 {
 }
 
 .candidateCleanLayout {
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.46fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .candidateContextRail {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.2fr) minmax(220px, 0.7fr);
+  align-items: start;
   max-height: none;
   overflow: visible;
+}
+
+.candidateContextRail .coverageSummary {
+  grid-column: 1 / -1;
+}
+
+.candidateCleanMainShell {
+  max-width: 1480px;
+}
+
+.recruiterQuickNotes textarea {
+  min-height: 86px;
+  max-height: 140px;
+}
+
+.piiList.clean,
+.piiGroup,
+.piiGroup div {
+  min-width: 0;
+}
+
+.piiGroup a,
+.piiGroup span:not(.muted) {
+  overflow-wrap: anywhere;
+  text-overflow: initial;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .uploadModeTabs {
@@ -9589,6 +9705,9 @@ h3 {
   .campaignRequirementSplit,
   .matchDistributionPanel,
   .matchGaugeBuckets,
+  .candidateContextRail,
+  .campaignWeightGrid,
+  .campaignStrictToggles,
   .candidateCorrectionGrid {
     grid-template-columns: 1fr;
   }
