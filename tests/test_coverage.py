@@ -34,6 +34,9 @@ class CoverageTests(unittest.TestCase):
         self.assertIn("categories", coverage)
         self.assertIn("contact.phone", coverage["critical_missing_keys"])
         self.assertIn("education.history", coverage["enrichment_missing_keys"])
+        self.assertEqual(coverage["review_threshold"], 0.8)
+        self.assertIn(coverage["status"], {"needs_review", "low_confidence"})
+        self.assertTrue(coverage["low_coverage_reasons"])
         identity = next(item for item in coverage["categories"] if item["key"] == "identity")
         self.assertEqual(identity["status"], "critical_missing")
 
@@ -41,6 +44,8 @@ class CoverageTests(unittest.TestCase):
         coverage = primary_key_coverage({"name": "Candidate Two", "contact": None})
         self.assertLess(coverage["score"], 1)
         self.assertIn("contact.email", coverage["missing_keys"])
+        self.assertEqual(coverage["status"], "low_confidence")
+        self.assertEqual(coverage["low_coverage_reasons"][0]["label"], "Below usable profile threshold")
 
 
 if __name__ == "__main__":

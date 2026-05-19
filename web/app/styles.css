@@ -3501,7 +3501,7 @@ button:disabled {
 
 .candidateCleanLayout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 330px;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.46fr);
   gap: 18px;
   align-items: start;
 }
@@ -3547,8 +3547,10 @@ button:disabled {
 }
 
 .candidateContextRail {
-  position: sticky;
-  top: 88px;
+  position: static;
+  top: auto;
+  max-height: none;
+  overflow: visible;
 }
 
 .recruiterQuickNotes input,
@@ -3653,6 +3655,73 @@ button:disabled {
   color: var(--ink);
   font-size: 13px;
   text-align: right;
+}
+
+.candidateBadUploadBanner ul {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 0 18px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.candidateCorrectionPanel {
+  display: grid;
+  gap: 16px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+  padding: 20px 28px;
+}
+
+.candidateCorrectionPanel h3 {
+  margin: 4px 0;
+  font-size: 22px;
+  letter-spacing: -0.03em;
+}
+
+.candidateCorrectionPanel p {
+  max-width: 860px;
+  color: var(--muted);
+}
+
+.candidateCorrectionGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.candidateCorrectionGrid label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.candidateCorrectionGrid .wide {
+  grid-column: span 2;
+}
+
+.candidateCorrectionGrid input,
+.candidateCorrectionGrid textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8faf9;
+  color: var(--ink);
+  padding: 10px 12px;
+}
+
+.candidateCorrectionGrid textarea {
+  min-height: 92px;
+  resize: vertical;
+}
+
+.candidateCorrectionActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .candidateVersionsPanel .candidateVersionRail {
@@ -9191,12 +9260,190 @@ h3 {
 }
 
 .candidateCleanLayout {
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.46fr);
 }
 
 .candidateContextRail {
-  max-height: calc(100vh - 150px);
-  overflow: auto;
+  max-height: none;
+  overflow: visible;
+}
+
+.uploadModeTabs {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+  padding: 4px;
+}
+
+.uploadModeTabs button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  padding: 0 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.uploadModeTabs button.active {
+  background: #22364a;
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(34, 54, 74, 0.16);
+}
+
+.refinedUploadDrop {
+  min-height: 240px;
+  border-style: solid;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 249, 0.98)),
+    radial-gradient(circle at top left, rgba(53, 92, 125, 0.08), transparent 34%);
+}
+
+.refinedUploadCard {
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+}
+
+.campaignRequirementUploadTab {
+  display: grid;
+  gap: 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+  padding: 22px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+}
+
+.campaignRequirementUploadTab h3 {
+  margin: 4px 0;
+  color: var(--ink);
+  font-size: 22px;
+  letter-spacing: -0.03em;
+}
+
+.campaignRequirementUploadTab p,
+.campaignRequirementUploadTab label span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.campaignRequirementUploadTab label {
+  display: grid;
+  gap: 7px;
+  font-weight: 800;
+}
+
+.campaignRequirementUploadTab select,
+.campaignRequirementUploadTab textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f8faf9;
+  color: var(--ink);
+  padding: 11px 12px;
+}
+
+.campaignRequirementSplit {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.8fr) auto minmax(320px, 1.2fr) auto;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.campaignRequirementDrop.large {
+  min-height: 132px;
+}
+
+.campaignRequirementSplit textarea {
+  min-height: 132px;
+  resize: vertical;
+}
+
+.matchDistributionPanel {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  padding: 16px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+}
+
+.matchDistributionPanel.compact {
+  box-shadow: none;
+}
+
+.matchDistributionPanel h3 {
+  margin: 4px 0;
+  color: var(--ink);
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+
+.matchDistributionPanel p {
+  max-width: 520px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.matchGaugeBuckets {
+  min-width: 420px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.matchGaugeBuckets button {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f8faf9;
+  color: var(--muted);
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.matchGaugeBuckets button.active {
+  border-color: #22364a;
+  background: #eef3f5;
+  color: #22364a;
+}
+
+.matchGaugeBuckets span {
+  position: relative;
+  z-index: 1;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.matchGaugeBuckets strong {
+  position: relative;
+  z-index: 1;
+  color: var(--ink);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.matchGaugeBuckets i {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 4px;
+  border-radius: 999px;
+  background: #355c7d;
 }
 
 @media (max-width: 767px) {
@@ -9328,5 +9575,33 @@ h3 {
 
   .candidateVersionRail {
     position: static;
+  }
+
+  .uploadModeTabs {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .uploadModeTabs button {
+    flex: 1;
+  }
+
+  .campaignRequirementSplit,
+  .matchDistributionPanel,
+  .matchGaugeBuckets,
+  .candidateCorrectionGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .matchDistributionPanel {
+    display: grid;
+  }
+
+  .matchGaugeBuckets {
+    min-width: 0;
+  }
+
+  .candidateCorrectionGrid .wide {
+    grid-column: auto;
   }
 }

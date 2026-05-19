@@ -81,12 +81,18 @@ def primary_key_coverage(record: dict[str, Any]) -> dict[str, Any]:
     ]
     categories = _coverage_categories(items)
     critical_missing = [item["key"] for item in items if item["status"] == "missing" and item["severity"] == "critical"]
+    score = round(present / total, 3)
+    missing_items = [item for item in items if item["status"] == "missing"]
     return {
-        "score": round(present / total, 3),
+        "score": score,
         "present": present,
         "total": total,
         "items": items,
         "categories": categories,
+        "review_threshold": 0.8,
+        "minimum_usable_threshold": 0.65,
+        "status": "good" if score >= 0.8 else "needs_review" if score >= 0.65 else "low_confidence",
+        "low_coverage_reasons": _low_coverage_reasons(missing_items, score),
         "missing_keys": [key for key, value in checks.items() if not value],
         "critical_missing_keys": critical_missing,
         "critical_missing_count": len(critical_missing),
@@ -137,3 +143,29 @@ def _coverage_categories(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
             }
         )
     return categories
+
+
+def _low_coverage_reasons(missing_items: list[dict[str, Any]], score: float) -> list[dict[str, str]]:
+    reasons: list[dict[str, str]] = []
+    if score >= 0.8:
+        return reasons
+    if score < 0.65:
+        reasons.append(
+            {
+                "severity": "critical",
+                "label": "Below usable profile threshold",
+                "detail": "Profile coverage is below 65%, so this upload may be the wrong document, a weak scan, or missing core resume sections.",
+            }
+        )
+    for item in missing_items:
+        severity = str(item.get("severity") or "standard")
+        label = str(item.get("label") or item.get("key") or "Missing field")
+        category = str(item.get("category_label") or item.get("category") or "Profile")
+        if severity == "critical":
+            detail = f"{label} is required for reliable search, matching, and recruiter screening."
+        elif severity in {"standard", "enrichment"}:
+            detail = f"{label} improves ranking, evidence, and recruiter confidence."
+        else:
+            detail = f"{label} can be added by the recruiter to improve context."
+        reasons.append({"severity": severity, "label": label, "detail": f"{category}: {detail}"})
+    return reasons[:8]

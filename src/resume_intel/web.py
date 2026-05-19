@@ -49,6 +49,7 @@ from .db_store import (
     load_raw_text_db,
     public_candidate_record,
     soft_delete_candidate_db,
+    update_candidate_profile_db,
     update_note_db,
 )
 from .entity_resolution import decide_match, entity_resolution_requirements, find_matches_for_record, list_clusters, persist_matches
@@ -166,6 +167,19 @@ async def request_logging_middleware(request: Request, call_next):
 class NoteRequest(BaseModel):
     name: str
     content: str
+
+
+class CandidateProfileUpdateRequest(BaseModel):
+    name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    location: str | None = None
+    summary: str | None = None
+    current_title: str | None = None
+    current_company: str | None = None
+    total_years_experience: float | int | None = None
+    skills: list[str] = Field(default_factory=list)
+    countries: list[str] = Field(default_factory=list)
 
 
 class MatchStatusRequest(BaseModel):
@@ -538,6 +552,19 @@ def delete_candidate(document_id: str, reason: str = Query("removed_by_recruiter
     try:
         deleted = soft_delete_candidate_db(document_id, _tenant_id(user), user["id"], reason)
         return {"candidate": deleted, "user": user}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="candidate not found") from exc
+
+
+@app.patch("/candidates/{document_id}/profile")
+def update_candidate_profile(document_id: str, request: CandidateProfileUpdateRequest, user: dict = Depends(current_user)) -> dict:
+    require_tenant_write(user)
+    try:
+        record = update_candidate_profile_db(document_id, user["id"], request.model_dump(), _tenant_id(user))
+        matches = find_matches_for_record(record, tenant_id=_tenant_id(user))
+        record["candidate_versions"] = {"matches": matches}
+        record["entity_resolution"] = {"matches": matches}
+        return public_candidate_record(record, allow_pii=_can_view_pii(user))
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="candidate not found") from exc
 

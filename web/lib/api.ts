@@ -140,6 +140,10 @@ export type Candidate = {
     total: number;
     items: Array<{ key: string; label: string; status: "present" | "missing"; category?: string; category_label?: string; severity?: "critical" | "standard" | "enrichment" | "context" }>;
     categories?: Array<{ key: string; label: string; score: number; present: number; total: number; status: "complete" | "needs_enrichment" | "critical_missing"; missing_keys: string[]; critical_missing_keys: string[] }>;
+    status?: "good" | "needs_review" | "low_confidence" | string;
+    review_threshold?: number;
+    minimum_usable_threshold?: number;
+    low_coverage_reasons?: Array<{ severity: string; label: string; detail: string }>;
     missing_keys: string[];
     critical_missing_keys?: string[];
     critical_missing_count?: number;
@@ -148,6 +152,19 @@ export type Candidate = {
   candidate_versions?: { matches: EntityMatch[] };
   entity_resolution?: { matches: EntityMatch[] };
   _metadata?: any;
+};
+
+export type CandidateProfileUpdate = {
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  location?: string | null;
+  summary?: string | null;
+  current_title?: string | null;
+  current_company?: string | null;
+  total_years_experience?: number | null;
+  skills?: string[];
+  countries?: string[];
 };
 
 export type Requirement = {
@@ -692,6 +709,14 @@ export async function getCandidate(token: string, id: string): Promise<Candidate
 export async function deleteCandidate(token: string, id: string, reason = "removed_by_recruiter"): Promise<{ candidate: { document_id: string; deleted: boolean; reason: string } }> {
   const search = new URLSearchParams({ reason });
   return request(`/candidates/${id}?${search.toString()}`, { method: "DELETE", token });
+}
+
+export async function updateCandidateProfile(token: string, id: string, payload: CandidateProfileUpdate): Promise<Candidate> {
+  return request(`/candidates/${id}/profile`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function getCandidateSource(token: string, id: string): Promise<Blob> {

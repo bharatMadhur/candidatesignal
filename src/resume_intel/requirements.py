@@ -40,6 +40,8 @@ SKILL_ALIASES = {
     "looker": ["looker", "dashboard", "dashboards", "analytics"],
 }
 
+MATCH_VISIBILITY_THRESHOLD = 0.30
+
 MATCH_STOPWORDS = {
     "ability",
     "applications",
@@ -296,24 +298,30 @@ def match_requirement(requirement_id: str, tenant_id: str | None = None) -> list
         match["rule_score"] = match["total_score"]
         match["semantic_score"] = round(semantic["semantic_score"], 3)
         match["semantic_top_chunks"] = semantic["top_chunks"]
-        match["total_score"] = round((match["rule_score"] * 0.78) + (match["semantic_score"] * 0.22), 3)
+        semantic_weight = _semantic_weight(profile)
+        rule_weight = round(1.0 - semantic_weight, 3)
+        match["total_score"] = round((match["rule_score"] * rule_weight) + (match["semantic_score"] * semantic_weight), 3)
+        match["evidence"]["score_weights"]["semantic"] = semantic_weight
+        match["evidence"]["score_weights"]["structured_profile"] = rule_weight
         if not match.get("hard_filter_pass", True):
             match["total_score"] = min(match["total_score"], 0.49)
         match["evidence"]["semantic_top_chunks"] = semantic["top_chunks"]
         match["evidence"]["semantic_evidence"] = semantic.get("evidence", [])
+        match["evidence"]["visibility_threshold"] = MATCH_VISIBILITY_THRESHOLD
         match["candidate_id"] = row["document_id"]
         match["candidate"] = _candidate_summary(candidate)
         matches.append(match)
     matches.sort(key=lambda item: item["total_score"], reverse=True)
-    _persist_matches(requirement_id, matches, tenant_id)
-    _persist_match_run(requirement_id, profile, matches, tenant_id)
+    visible_matches = [item for item in matches if float(item.get("total_score") or 0) >= MATCH_VISIBILITY_THRESHOLD]
+    _persist_matches(requirement_id, visible_matches, tenant_id)
+    _persist_match_run(requirement_id, profile, visible_matches, tenant_id)
     with db() as conn:
         conn.execute(
             "update requirements set status='matched', updated_at=now() where id=%s and (%s::uuid is null or tenant_id=%s)",
             (requirement_id, tenant_id, tenant_id),
         )
         conn.commit()
-    return matches
+    return visible_matches
 
 
 def list_match_runs(requirement_id: str, tenant_id: str | None = None) -> list[dict[str, Any]]:
@@ -459,7 +467,14 @@ def score_candidate(profile: dict[str, Any], candidate: dict[str, Any], raw_text
     all_location_hits = [*location_hits, *preferred_location_hits]
     location_score = len(all_location_hits) / len(scored_locations) if scored_locations else 1.0
 
-    total = (must_score * 0.38) + (nice_score * 0.14) + (years_score * 0.18) + (domain_score * 0.2) + (location_score * 0.1)
+    weights = _dynamic_match_weights(profile, must, nice, min_years, required_domains, scored_locations)
+    total = (
+        (must_score * weights.get("must_have", 0))
+        + (nice_score * weights.get("nice_to_have", 0))
+        + (years_score * weights.get("years", 0))
+        + (domain_score * weights.get("domain", 0))
+        + (location_score * weights.get("location", 0))
+    )
     gaps = {
         "missing_must_haves": [item for item in must if item not in must_hits],
         "missing_nice_to_haves": [item for item in nice if item not in nice_hits],
@@ -481,6 +496,8 @@ def score_candidate(profile: dict[str, Any], candidate: dict[str, Any], raw_text
         "candidate_years": candidate_years,
         "hard_filter_failures": hard_filter_failures,
         "notes_relevance": _notes_relevance(profile, candidate),
+        "score_weights": weights,
+        "match_explanation": _score_explanation(must_score, nice_score, years_score, domain_score, location_score, weights),
     }
     return {
         "total_score": round(total, 3),
@@ -549,7 +566,27 @@ def _save_requirement(user_id: str, source_type: str, text: str, profile: dict[s
 
 
 def _persist_matches(requirement_id: str, matches: list[dict[str, Any]], tenant_id: str | None) -> None:
+    visible_candidate_ids = [str(match["candidate_id"]) for match in matches]
     with db() as conn:
+        if visible_candidate_ids:
+            conn.execute(
+                """
+                delete from requirement_matches
+                where requirement_id=%s
+                  and (%s::uuid is null or tenant_id=%s)
+                  and not (candidate_id = any(%s::text[]))
+                """,
+                (requirement_id, tenant_id, tenant_id, visible_candidate_ids),
+            )
+        else:
+            conn.execute(
+                """
+                delete from requirement_matches
+                where requirement_id=%s
+                  and (%s::uuid is null or tenant_id=%s)
+                """,
+                (requirement_id, tenant_id, tenant_id),
+            )
         for match in matches:
             conn.execute(
                 """
@@ -860,8 +897,9 @@ def _notes_relevance(profile: dict[str, Any], candidate: dict[str, Any]) -> list
 
 def _hard_filter_failures(profile: dict[str, Any], gaps: dict[str, Any], candidate_text: str, candidate_years: float, min_years: Any) -> list[str]:
     failures: list[str] = []
-    failures.extend(f"Missing must-have: {item}" for item in gaps.get("missing_must_haves", []))
-    if min_years and gaps.get("years_gap", 0) > 0:
+    if _strict_profile_flag(profile, "strict_must_haves", "must_haves_required", "must_have_required"):
+        failures.extend(f"Missing must-have: {item}" for item in gaps.get("missing_must_haves", []))
+    if min_years and gaps.get("years_gap", 0) > 0 and _strict_profile_flag(profile, "strict_min_years", "minimum_years_required"):
         failures.append(f"Below minimum years: has {round(float(candidate_years), 1)}, needs {min_years}")
     failures.extend(f"Missing required location/country: {item}" for item in gaps.get("missing_locations", []))
     for item in _active_dealbreakers(profile):
@@ -871,6 +909,91 @@ def _hard_filter_failures(profile: dict[str, Any], gaps: dict[str, Any], candida
     if _requires_work_authorization_check(work_authorization) and not _requirement_item_hit(str(work_authorization), candidate_text):
         failures.append(f"Work authorization not confirmed: {work_authorization}")
     return failures
+
+
+def _strict_profile_flag(profile: dict[str, Any], *keys: str) -> bool:
+    for key in keys:
+        value = profile.get(key)
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str) and value.strip().lower() in {"1", "true", "yes", "required", "hard"}:
+            return True
+    return False
+
+
+def _dynamic_match_weights(
+    profile: dict[str, Any],
+    must: list[str],
+    nice: list[str],
+    min_years: Any,
+    required_domains: list[str],
+    scored_locations: list[str],
+) -> dict[str, float]:
+    desired: dict[str, float] = {}
+    if must:
+        desired["must_have"] = 0.30
+    if nice:
+        desired["nice_to_have"] = 0.14
+    if min_years:
+        desired["years"] = 0.18
+    if required_domains:
+        desired["domain"] = 0.22
+    if scored_locations:
+        desired["location"] = 0.12
+    if not desired:
+        return {"must_have": 0.2, "nice_to_have": 0.2, "years": 0.2, "domain": 0.2, "location": 0.2}
+    total = sum(desired.values()) or 1.0
+    normalized = {key: round(value / total, 3) for key, value in desired.items()}
+    for key in ("must_have", "nice_to_have", "years", "domain", "location"):
+        normalized.setdefault(key, 0.0)
+    return normalized
+
+
+def _semantic_weight(profile: dict[str, Any]) -> float:
+    populated = sum(
+        1
+        for value in (
+            profile.get("must_have_skills"),
+            profile.get("nice_to_have_skills"),
+            profile.get("min_years_experience"),
+            profile.get("domains"),
+            profile.get("preferred_locations") or profile.get("location_preference") or profile.get("required_locations"),
+        )
+        if _profile_value_present(value)
+    )
+    if populated <= 1:
+        return 0.42
+    if populated == 2:
+        return 0.34
+    return 0.26
+
+
+def _profile_value_present(value: Any) -> bool:
+    if isinstance(value, (int, float)):
+        return value > 0
+    return bool(_field_list(value))
+
+
+def _score_explanation(
+    must_score: float,
+    nice_score: float,
+    years_score: float,
+    domain_score: float,
+    location_score: float,
+    weights: dict[str, float],
+) -> list[str]:
+    rows = [
+        ("Must-have", must_score, weights.get("must_have", 0)),
+        ("Nice-to-have", nice_score, weights.get("nice_to_have", 0)),
+        ("Years", years_score, weights.get("years", 0)),
+        ("Domain", domain_score, weights.get("domain", 0)),
+        ("Location", location_score, weights.get("location", 0)),
+    ]
+    return [
+        f"{label}: {round(score * 100)}% match with {round(weight * 100)}% weight"
+        for label, score, weight in rows
+        if weight > 0
+    ]
 
 
 def _requires_work_authorization_check(value: Any) -> bool:

@@ -20,6 +20,8 @@ class RequirementScoringTests(unittest.TestCase):
             "required_locations": ["United States"],
             "required_countries": [],
             "dealbreakers": [],
+            "strict_must_haves": True,
+            "strict_min_years": True,
         }
         candidate = {
             "name": "Candidate",
@@ -40,6 +42,37 @@ class RequirementScoringTests(unittest.TestCase):
         self.assertTrue(any("Missing must-have" in item for item in result["hard_filter_failures"]))
         self.assertTrue(any("Below minimum years" in item for item in result["hard_filter_failures"]))
         self.assertTrue(any("Missing required location" in item for item in result["hard_filter_failures"]))
+
+    def test_missing_must_haves_are_scored_not_blocked_by_default(self) -> None:
+        profile = {
+            "must_have_skills": ["Spark", "Databricks"],
+            "nice_to_have_skills": ["Airflow"],
+            "domains": ["data_engineering"],
+            "min_years_experience": 5,
+            "preferred_locations": ["New York"],
+            "required_locations": [],
+            "required_countries": [],
+            "dealbreakers": [],
+        }
+        candidate = {
+            "name": "Candidate",
+            "summary": "Data engineer with Python and ETL experience.",
+            "skills": ["Python", "ETL"],
+            "experience": [{"company": "Example", "title": "Data Engineer", "location": "Ohio", "bullets": ["Built data pipelines"]}],
+            "education": [],
+            "notes": [],
+            "certifications": [],
+            "derived": {"hr_profile": {"total_years_experience": 3}, "experience_by_domain": {"data_engineering": 3}},
+            "contact": {"location": "Ohio"},
+        }
+
+        result = score_candidate(profile, candidate, "")
+
+        self.assertTrue(result["hard_filter_pass"])
+        self.assertEqual(result["hard_filter_failures"], [])
+        self.assertGreater(result["total_score"], 0)
+        self.assertIn("score_weights", result["evidence"])
+        self.assertIn("match_explanation", result["evidence"])
 
     def test_candidate_with_required_facts_passes_hard_filters(self) -> None:
         profile = {

@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import {
   Candidate,
+  CandidateProfileUpdate,
   CampaignPipelineStatus,
   CampaignScorecard,
   CandidateMaintenanceJob,
@@ -115,6 +116,7 @@ import {
   uploadCampaignResumes,
   updateCampaignCandidateStatus,
   updateCampaign,
+  updateCandidateProfile,
   updateCampaignScorecard,
   updateGovernancePolicy,
   uploadCampaignRequirement,
@@ -874,6 +876,14 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     await refresh();
   }
 
+  async function handleUpdateCandidateProfile(payload: CandidateProfileUpdate) {
+    if (!candidate || !token) return;
+    const result = await run("Saving candidate corrections", () => updateCandidateProfile(token, candidate.document_id, payload));
+    if (!result) return;
+    setCandidate(result);
+    await refresh();
+  }
+
   async function handleCreateRequirement() {
     const result = requirementFile
       ? await run("Reading requirement PDF", () => uploadRequirement(token, requirementFile))
@@ -1438,6 +1448,9 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               cancelJob={handleCancelJob}
               cancelBatch={handleCancelBatch}
               openCandidate={handleOpenCandidate}
+              openCampaign={handleOpenCampaign}
+              createCampaignRequirement={handleCreateCampaignRequirement}
+              uploadCampaignRequirement={handleUploadCampaignRequirement}
               busy={busy}
             />
           ) : null}
@@ -1481,6 +1494,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               saveNote={handleAddNote}
               updateSavedNote={handleUpdateNote}
               deleteSavedNote={handleDeleteNote}
+              updateProfile={handleUpdateCandidateProfile}
               deleteCandidate={handleDeleteCandidate}
               openCandidate={handleOpenCandidate}
               reparseCandidate={handleReparseCandidate}
@@ -2322,32 +2336,60 @@ function UploadResumeView(props: {
   cancelJob: (jobId: string) => void;
   cancelBatch: (batchId: string) => void;
   openCandidate: (id: string) => void;
+  openCampaign: (id: string) => void;
+  createCampaignRequirement: (id: string, text: string) => Promise<void>;
+  uploadCampaignRequirement: (id: string, file: File) => Promise<void>;
   busy: boolean;
 }) {
+  const [uploadMode, setUploadMode] = useState<"resumes" | "requirement">("resumes");
+  const [requirementTextDraft, setRequirementTextDraft] = useState("");
+  const [campaignRequirementFile, setCampaignRequirementFile] = useState<File | null>(null);
   const selectedCampaign = props.campaigns.find((item) => item.id === props.bulkCampaignId);
   const activeBatch = props.selectedBatch ?? props.batches[0] ?? null;
   const activeProgress = activeBatch ? (activeBatch.progress_percent ?? batchProgress(activeBatch)) : 0;
   const generatedBatchName = autoBatchNameForFiles(props.bulkFiles, selectedCampaign?.name);
   const shownBatchName = props.batchName.trim() || props.bulkContextNote.trim() || generatedBatchName;
+  const requirementCampaignReady = Boolean(selectedCampaign);
+
+  async function submitRequirementText() {
+    if (!selectedCampaign || !requirementTextDraft.trim()) return;
+    await props.createCampaignRequirement(selectedCampaign.id, requirementTextDraft);
+    setRequirementTextDraft("");
+    props.openCampaign(selectedCampaign.id);
+  }
+
+  async function submitRequirementFile() {
+    if (!selectedCampaign || !campaignRequirementFile) return;
+    await props.uploadCampaignRequirement(selectedCampaign.id, campaignRequirementFile);
+    setCampaignRequirementFile(null);
+    props.openCampaign(selectedCampaign.id);
+  }
+
   return (
     <section className="uploadPage stitchUploadPage">
       <header className="stitchHeader compact">
-        <h2>Upload Resumes</h2>
-        <p>Add resumes to the database or attach them directly to a campaign. Parsing runs in the background.</p>
+        <h2>Upload Center</h2>
+        <p>Add resumes to the database, or add a requirement directly inside a campaign. Both flows stay attached to the recruiter workflow.</p>
       </header>
-      <label className="stitchDropZone">
-        <FileUp size={34} />
-        <strong>{props.bulkFiles.length ? `${props.bulkFiles.length} file${props.bulkFiles.length === 1 ? "" : "s"} selected` : "Drag and drop files here"}</strong>
-        <span>Supported formats: {DOCUMENT_FORMAT_LABEL}. Scanned PDFs and image resumes are handled automatically.</span>
-        <b>Browse Files</b>
-        <input
-          type="file"
-          multiple
-          accept={DOCUMENT_FILE_ACCEPT}
-          onChange={(event) => props.setBulkFiles(Array.from(event.target.files ?? []))}
-        />
-      </label>
-      <section className="stitchProgressCard">
+      <nav className="uploadModeTabs" aria-label="Upload type">
+        <button className={uploadMode === "resumes" ? "active" : ""} onClick={() => setUploadMode("resumes")}>Resume upload</button>
+        <button className={uploadMode === "requirement" ? "active" : ""} onClick={() => setUploadMode("requirement")}>Campaign requirement</button>
+      </nav>
+      {uploadMode === "resumes" ? (
+        <>
+          <label className="stitchDropZone refinedUploadDrop">
+            <FileUp size={34} />
+            <strong>{props.bulkFiles.length ? `${props.bulkFiles.length} file${props.bulkFiles.length === 1 ? "" : "s"} selected` : "Drop resumes or browse files"}</strong>
+            <span>{DOCUMENT_FORMAT_LABEL}. Scanned PDFs and image resumes are handled automatically only when needed.</span>
+            <b>Browse resumes</b>
+            <input
+              type="file"
+              multiple
+              accept={DOCUMENT_FILE_ACCEPT}
+              onChange={(event) => props.setBulkFiles(Array.from(event.target.files ?? []))}
+            />
+          </label>
+          <section className="stitchProgressCard refinedUploadCard">
         <div>
           <strong>Batch Parsing Progress</strong>
           <span>{Math.round(activeProgress)}%</span>
@@ -2379,7 +2421,38 @@ function UploadResumeView(props: {
             ? `Processing ${activeBatch.completed_count + activeBatch.failed_count} of ${activeBatch.total_files} files. Profiles update automatically when parsing completes.`
             : "Select resumes to create a parsing batch."}
         </p>
-      </section>
+          </section>
+        </>
+      ) : (
+        <section className="campaignRequirementUploadTab">
+          <div>
+            <span className="eyebrow">Campaign requirement</span>
+            <h3>Attach the requirement to a campaign</h3>
+            <p>Requirement upload is not standalone. Pick a campaign, upload or paste the requirement, then edit the extracted scorecard in Campaigns.</p>
+          </div>
+          <label>
+            <span>Campaign</span>
+            <select value={props.bulkCampaignId} onChange={(event) => props.setBulkCampaignId(event.target.value)}>
+              <option value="workspace">Select campaign</option>
+              {props.campaigns.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
+            </select>
+          </label>
+          <div className="campaignRequirementSplit">
+            <label className="campaignRequirementDrop large">
+              <FileSearch size={22} />
+              <strong>{campaignRequirementFile ? campaignRequirementFile.name : "Upload requirement file"}</strong>
+              <span>PDF, DOCX, TXT, or MD</span>
+              <input type="file" accept={DOCUMENT_FILE_ACCEPT} onChange={(event) => setCampaignRequirementFile(event.target.files?.[0] ?? null)} />
+            </label>
+            <button className="secondary" disabled={!requirementCampaignReady || !campaignRequirementFile || props.busy} onClick={submitRequirementFile}>Extract file into campaign</button>
+            <textarea value={requirementTextDraft} onChange={(event) => setRequirementTextDraft(event.target.value)} placeholder="Paste job requirement, client email, or hiring-manager notes..." />
+            <button className="primary" disabled={!requirementCampaignReady || !requirementTextDraft.trim() || props.busy} onClick={submitRequirementText}>Extract pasted requirement</button>
+          </div>
+          {!props.campaigns.length ? <p className="muted">Create a campaign first, then attach requirements here.</p> : null}
+        </section>
+      )}
+      {uploadMode === "resumes" ? (
+        <>
       <section className="stitchQueueTable">
         <div className="stitchQueueHead">
           <h3>Parsing Queue</h3>
@@ -2428,6 +2501,8 @@ function UploadResumeView(props: {
           <button className="plain small" disabled={!props.resumeFile || props.busy} onClick={props.upload}>Queue single resume</button>
         </div>
       </details>
+        </>
+      ) : null}
     </section>
   );
 }
@@ -2716,6 +2791,7 @@ function CandidateDetail({
   saveNote,
   updateSavedNote,
   deleteSavedNote,
+  updateProfile,
   deleteCandidate,
   openCandidate,
   reparseCandidate,
@@ -2732,6 +2808,7 @@ function CandidateDetail({
   saveNote: () => void;
   updateSavedNote: (noteId: string, name: string, content: string) => void;
   deleteSavedNote: (noteId: string) => void;
+  updateProfile: (payload: CandidateProfileUpdate) => void;
   deleteCandidate: (documentId: string) => void;
   openCandidate: (id: string) => void;
   reparseCandidate: (id: string) => void;
@@ -2749,6 +2826,8 @@ function CandidateDetail({
   const [editingNoteContent, setEditingNoteContent] = useState("");
   const [activeTab, setActiveTab] = useState<CandidateDetailTab>("overview");
   const [showRawCvText, setShowRawCvText] = useState(false);
+  const [showCorrectionPanel, setShowCorrectionPanel] = useState(false);
+  const [correctionForm, setCorrectionForm] = useState<CandidateCorrectionForm>(() => candidateCorrectionForm(candidate));
   const intelligence = candidate.candidate_intelligence;
   const finalProfile = intelligence?.final_candidate_profile;
   const recruiterDashboard = intelligence?.hr_intelligence?.recruiter_dashboard;
@@ -2840,6 +2919,11 @@ function CandidateDetail({
   }, [candidate.document_id, token]);
 
   useEffect(() => {
+    setCorrectionForm(candidateCorrectionForm(candidate));
+    setShowCorrectionPanel(false);
+  }, [candidate.document_id]);
+
+  useEffect(() => {
     let active = true;
     setDocumentHtml("");
     setDocumentHtmlError("");
@@ -2911,6 +2995,12 @@ function CandidateDetail({
   const reparseStatusBatch = latestCandidateReparseBatch(reparseBatches, sourceName);
   const reparseProgress = reparseStatusBatch ? Number(reparseStatusBatch.progress_percent ?? batchProgress(reparseStatusBatch)) : 0;
   const recruiterEvidenceRows = buildRecruiterEvidenceRows(verifiedFactRows, aiFitRows, evidenceMap, rawText);
+  const coverageReasons = coverageGapReasons(coverage);
+
+  function saveCandidateCorrections() {
+    updateProfile(candidateCorrectionPayload(correctionForm));
+    setShowCorrectionPanel(false);
+  }
 
   return (
     <section className="candidateReport candidateTabbedReport candidateCleanReport">
@@ -2948,10 +3038,24 @@ function CandidateDetail({
           <AlertTriangle size={18} />
           <div>
             <strong>Low candidate coverage detected ({Math.round(coverageScore * 100)}%)</strong>
-            <span>If this was a job requirement or the wrong file, remove it from the active resume database. The file remains audit-preserved.</span>
+            <span>{coverageScore < 0.65 ? "This is below the usable profile threshold. It may be a wrong upload, weak scan, or missing core resume sections." : "This is usable but needs recruiter review before matching confidence is high."}</span>
+            {coverageReasons.length ? (
+              <ul>
+                {coverageReasons.slice(0, 4).map((reason) => <li key={`${reason.label}-${reason.detail}`}>{reason.label}: {reason.detail}</li>)}
+              </ul>
+            ) : null}
           </div>
+          <button className="plain" onClick={() => setShowCorrectionPanel((value) => !value)}>Edit extracted fields</button>
           <button className="plain danger" onClick={() => deleteCandidate(candidate.document_id)}>Remove from database</button>
         </article>
+      ) : null}
+      {showCorrectionPanel ? (
+        <CandidateCorrectionPanel
+          form={correctionForm}
+          setForm={setCorrectionForm}
+          save={saveCandidateCorrections}
+          cancel={() => setShowCorrectionPanel(false)}
+        />
       ) : null}
 
       <main className="candidateReportMain candidateCleanMainShell">
@@ -2961,9 +3065,10 @@ function CandidateDetail({
             <p>Clean recruiter view with facts, AI interpretation, source evidence, and notes kept separate.</p>
           </div>
           <div>
-            <button className="plain" onClick={() => setActiveTab("evidence")}>Source Evidence</button>
-            <button className="plain" onClick={() => setActiveTab("notes")}>Add Note</button>
-          </div>
+              <button className="plain" onClick={() => setActiveTab("evidence")}>Source Evidence</button>
+              <button className="plain" onClick={() => setShowCorrectionPanel((value) => !value)}>Edit Extracted Data</button>
+              <button className="plain" onClick={() => setActiveTab("notes")}>Add Note</button>
+            </div>
         </header>
 
         <nav className="candidateReportTabs" aria-label="Candidate detail sections">
@@ -3101,6 +3206,7 @@ function CandidateDetail({
                   <div><span>Versions</span><strong>{versionCount || "None"}</strong></div>
                 </div>
               </article>
+              <CoverageSummary coverage={coverage} />
             </aside>
           </section>
         ) : null}
@@ -3299,6 +3405,108 @@ function CandidateDetail({
       </main>
     </section>
   );
+}
+
+type CandidateCorrectionForm = {
+  name: string;
+  email: string;
+  phone: string;
+  location: string;
+  summary: string;
+  current_title: string;
+  current_company: string;
+  total_years_experience: string;
+  skills: string;
+  countries: string;
+};
+
+function CandidateCorrectionPanel({
+  form,
+  setForm,
+  save,
+  cancel,
+}: {
+  form: CandidateCorrectionForm;
+  setForm: (form: CandidateCorrectionForm) => void;
+  save: () => void;
+  cancel: () => void;
+}) {
+  const update = (key: keyof CandidateCorrectionForm, value: string) => setForm({ ...form, [key]: value });
+  return (
+    <section className="candidateCorrectionPanel">
+      <div>
+        <span className="reportLabel">Manual correction</span>
+        <h3>Fix extracted candidate fields</h3>
+        <p>Use this when the parser missed a field or coverage is below 80%. Changes update the candidate profile, coverage, search index, and matching context.</p>
+      </div>
+      <div className="candidateCorrectionGrid">
+        <label><span>Name</span><input value={form.name} onChange={(event) => update("name", event.target.value)} /></label>
+        <label><span>Email</span><input value={form.email} onChange={(event) => update("email", event.target.value)} /></label>
+        <label><span>Phone</span><input value={form.phone} onChange={(event) => update("phone", event.target.value)} /></label>
+        <label><span>Current location</span><input value={form.location} onChange={(event) => update("location", event.target.value)} /></label>
+        <label><span>Current title</span><input value={form.current_title} onChange={(event) => update("current_title", event.target.value)} /></label>
+        <label><span>Current company</span><input value={form.current_company} onChange={(event) => update("current_company", event.target.value)} /></label>
+        <label><span>Total years</span><input value={form.total_years_experience} onChange={(event) => update("total_years_experience", event.target.value)} /></label>
+        <label><span>Countries</span><input value={form.countries} onChange={(event) => update("countries", event.target.value)} placeholder="United States, India" /></label>
+        <label className="wide"><span>Summary</span><textarea value={form.summary} onChange={(event) => update("summary", event.target.value)} /></label>
+        <label className="wide"><span>Skills</span><textarea value={form.skills} onChange={(event) => update("skills", event.target.value)} placeholder="Python, Spark, Databricks" /></label>
+      </div>
+      <div className="candidateCorrectionActions">
+        <button className="plain" onClick={cancel}>Cancel</button>
+        <button className="primary" onClick={save}>Save corrections</button>
+      </div>
+    </section>
+  );
+}
+
+function candidateCorrectionForm(candidate: Candidate): CandidateCorrectionForm {
+  const hr = candidate.derived?.hr_profile ?? {};
+  return {
+    name: textValue(candidate.name),
+    email: textValue(candidate.contact?.email),
+    phone: textValue(candidate.contact?.phone),
+    location: textValue(candidate.contact?.location),
+    summary: textValue(candidate.summary),
+    current_title: textValue(hr.current_title),
+    current_company: textValue(hr.current_company),
+    total_years_experience: textValue(hr.total_years_experience),
+    skills: (candidate.skills ?? []).join(", "),
+    countries: toTextList(candidate.derived?.countries_associated ?? []).join(", "),
+  };
+}
+
+function candidateCorrectionPayload(form: CandidateCorrectionForm): CandidateProfileUpdate {
+  const years = Number(form.total_years_experience.replace(/[^\d.]/g, ""));
+  return {
+    name: form.name.trim() || null,
+    email: form.email.trim() || null,
+    phone: form.phone.trim() || null,
+    location: form.location.trim() || null,
+    summary: form.summary.trim() || null,
+    current_title: form.current_title.trim() || null,
+    current_company: form.current_company.trim() || null,
+    total_years_experience: Number.isFinite(years) ? years : null,
+    skills: candidateInputList(form.skills),
+    countries: candidateInputList(form.countries),
+  };
+}
+
+function coverageGapReasons(coverage?: Candidate["primary_key_coverage"]) {
+  if (!coverage) return [];
+  const generated = coverage.low_coverage_reasons ?? [];
+  if (generated.length) return generated;
+  return (coverage.items ?? [])
+    .filter((item) => item.status === "missing")
+    .slice(0, 8)
+    .map((item) => ({
+      severity: item.severity ?? "standard",
+      label: item.label,
+      detail: `${item.category_label ?? "Profile"} field is missing.`,
+    }));
+}
+
+function candidateInputList(value: string) {
+  return value.split(/[\n,;]+/).map((item) => item.trim()).filter(Boolean);
 }
 
 function WorkstreamList({ workstreams }: { workstreams: Array<{ name?: string | null; start_date?: string | null; end_date?: string | null; bullets?: string[] }> }) {
@@ -3751,8 +3959,10 @@ function MatchResults({
   selectRequirement: (requirement: Requirement) => void;
 }) {
   const [filter, setFilter] = useState<MatchFilter>("all");
+  const [minimumScore, setMinimumScore] = useState(0.3);
   const matchedRequirements = requirements.filter((item) => item.status === "matched");
-  const filteredMatches = matches.filter((item) => matchFilterHit(item, filter));
+  const scoreBuckets = matchDistribution(matches);
+  const filteredMatches = matches.filter((item) => item.total_score >= minimumScore).filter((item) => matchFilterHit(item, filter));
   const counts = {
     all: matches.length,
     eligible: matches.filter((item) => !(item.evidence?.hard_filter_failures ?? []).length).length,
@@ -3767,7 +3977,7 @@ function MatchResults({
           <h2>Ranked Matches</h2>
           <p>{requirement ? `Requirement: ${requirement.title ?? "Untitled requirement"}` : "Select or create a finalized requirement to rank candidates."}</p>
         </div>
-        <span>{filteredMatches.length}/{matches.length} candidates shown</span>
+        <span>{filteredMatches.length}/{matches.length} candidates shown above {Math.round(minimumScore * 100)}%</span>
       </div>
       {!matches.length ? (
         <section className="panel emptyState">
@@ -3816,6 +4026,24 @@ function MatchResults({
               ))}
             </div>
           ) : <p className="muted">Run comparison will appear after at least two match runs.</p>}
+        </section>
+      ) : null}
+      {matches.length ? (
+        <section className="matchDistributionPanel">
+          <div>
+            <span className="eyebrow">Match distribution</span>
+            <h3>Only review candidates above the working threshold</h3>
+            <p>Candidates below 30% are hidden from the recruiter list. Raise the threshold when the database gets large.</p>
+          </div>
+          <div className="matchGaugeBuckets">
+            {scoreBuckets.map((bucket) => (
+              <button className={minimumScore === bucket.minimum ? "active" : ""} key={bucket.label} onClick={() => setMinimumScore(bucket.minimum)}>
+                <span>{bucket.label}</span>
+                <strong>{bucket.count}</strong>
+                <i style={{ width: `${Math.max(8, Math.min(100, bucket.percent))}%` }} />
+              </button>
+            ))}
+          </div>
         </section>
       ) : null}
       {matches.length ? (
@@ -3951,6 +4179,7 @@ function CampaignsView({
   const [scorecardForm, setScorecardForm] = useState<CampaignScorecardForm>(emptyCampaignScorecardForm());
   const [requirementDraft, setRequirementDraft] = useState("");
   const [campaignRequirementFile, setCampaignRequirementFile] = useState<File | null>(null);
+  const [campaignMatchThreshold, setCampaignMatchThreshold] = useState(0.3);
   const campaignStages: Array<{ id: CampaignPipelineStatus; label: string }> = [
     { id: "recommended", label: "Matched" },
     { id: "shortlisted", label: "Shortlisted" },
@@ -3973,6 +4202,8 @@ function CampaignsView({
   const campaignProgress = campaignProgressStats(activeCampaign, selectedCandidates);
   const campaignTimeline = useMemo(() => campaignTimelineItems(activeCampaign, selectedCandidates), [activeCampaign, selectedCandidates]);
   const rankedCandidates = useMemo(() => [...selectedCandidates].sort((left, right) => Number(right.score ?? 0) - Number(left.score ?? 0)), [selectedCandidates]);
+  const campaignMatchBuckets = matchDistribution(rankedCandidates);
+  const visibleRankedCandidates = rankedCandidates.filter((item) => Number(item.score ?? 0) >= campaignMatchThreshold);
   const scorecardCompleteness = campaignScorecardCompleteness(scorecardForm);
 
   useEffect(() => {
@@ -4147,11 +4378,28 @@ function CampaignsView({
               <div className="campaignPanelHeader">
                 <div>
                   <span className="eyebrow">Ranked candidates</span>
-                  <h3>{rankedCandidates.length} candidates in this campaign</h3>
+                  <h3>{visibleRankedCandidates.length} candidates above {Math.round(campaignMatchThreshold * 100)}%</h3>
                 </div>
                 <button className="secondary" onClick={() => matchCampaign(activeCampaign.id)} disabled={busy || !activeCampaign.requirement_id}>Refresh matches</button>
               </div>
-              {rankedCandidates.length ? rankedCandidates.map((item, index) => (
+              {rankedCandidates.length ? (
+                <section className="matchDistributionPanel compact">
+                  <div>
+                    <span className="eyebrow">Review threshold</span>
+                    <p>Use buckets instead of scrolling through weak matches. Candidates under 30% are hidden by default.</p>
+                  </div>
+                  <div className="matchGaugeBuckets">
+                    {campaignMatchBuckets.map((bucket) => (
+                      <button className={campaignMatchThreshold === bucket.minimum ? "active" : ""} key={bucket.label} onClick={() => setCampaignMatchThreshold(bucket.minimum)}>
+                        <span>{bucket.label}</span>
+                        <strong>{bucket.count}</strong>
+                        <i style={{ width: `${Math.max(8, Math.min(100, bucket.percent))}%` }} />
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+              {visibleRankedCandidates.length ? visibleRankedCandidates.map((item, index) => (
                 <article className="campaignMatchRow" key={item.candidate_id}>
                   <b>{index + 1}</b>
                   <button onClick={() => openCandidate(item.candidate_id)}>
@@ -4165,7 +4413,7 @@ function CampaignsView({
                     <button className="plain small danger" onClick={() => updateCandidateStatus(item.candidate_id, "rejected")}>Reject</button>
                   </div>
                 </article>
-              )) : <EmptyPanel title="No matches yet" body="Run matching to rank existing candidates, or upload resumes into this campaign." />}
+              )) : <EmptyPanel title={rankedCandidates.length ? "No candidates above this threshold" : "No matches yet"} body={rankedCandidates.length ? "Lower the threshold bucket or adjust the scorecard." : "Run matching to rank existing candidates, or upload resumes into this campaign."} />}
             </section>
           ) : null}
 
@@ -5573,6 +5821,23 @@ function matchNextAction(match: RequirementMatch) {
   if (match.total_score >= 0.78) return "Shortlist and open the candidate detail to review raw evidence before outreach.";
   if (hasMatchGaps(match.gaps)) return "Review gaps and semantic evidence before deciding whether to shortlist.";
   return "Open candidate detail and compare against other eligible candidates.";
+}
+
+function matchDistribution(matches: Array<{ total_score?: number; score?: number }>) {
+  const buckets = [
+    { label: "80-100%", minimum: 0.8, min: 0.8, max: 1.01 },
+    { label: "65-79%", minimum: 0.65, min: 0.65, max: 0.8 },
+    { label: "50-64%", minimum: 0.5, min: 0.5, max: 0.65 },
+    { label: "30-49%", minimum: 0.3, min: 0.3, max: 0.5 },
+  ];
+  const total = Math.max(1, matches.length);
+  return buckets.map((bucket) => {
+    const count = matches.filter((item) => {
+      const score = Number(item.total_score ?? item.score ?? 0);
+      return score >= bucket.min && score < bucket.max;
+    }).length;
+    return { ...bucket, count, percent: Math.round((count / total) * 100) };
+  });
 }
 
 function findClaimEvidence(value: unknown, evidenceMap: any[], rawText: string, fallbackTerms: string[]) {

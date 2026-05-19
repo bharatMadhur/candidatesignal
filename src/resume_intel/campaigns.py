@@ -306,7 +306,31 @@ def run_campaign_match(campaign_id: str, tenant_id: str, user_id: str) -> dict[s
     if not requirement_id:
         raise ValueError("campaign has no requirement profile")
     matches = match_requirement(requirement_id, tenant_id)
+    visible_candidate_ids = [str(match["candidate_id"]) for match in matches]
     with db() as conn:
+        if visible_candidate_ids:
+            conn.execute(
+                """
+                delete from campaign_candidates
+                where campaign_id=%s
+                  and tenant_id=%s
+                  and source='matched'
+                  and status='recommended'
+                  and not (candidate_id = any(%s::text[]))
+                """,
+                (campaign_id, tenant_id, visible_candidate_ids),
+            )
+        else:
+            conn.execute(
+                """
+                delete from campaign_candidates
+                where campaign_id=%s
+                  and tenant_id=%s
+                  and source='matched'
+                  and status='recommended'
+                """,
+                (campaign_id, tenant_id),
+            )
         for match in matches:
             conn.execute(
                 """

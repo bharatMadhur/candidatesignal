@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import re
 from pathlib import Path
 from typing import Any
 
@@ -369,6 +370,118 @@ def delete_note_db(document_id: str, note_id: str, user_id: str, tenant_id: str 
         conn.commit()
     upsert_candidate_search_chunks(record, raw_text, tenant_id)
     return record
+
+
+def update_candidate_profile_db(document_id: str, user_id: str, updates: dict[str, Any], tenant_id: str | None = None) -> dict[str, Any]:
+    tenant_id = tenant_id or _default_tenant_id()
+    record = load_candidate_db(document_id, tenant_id)
+    with db() as conn:
+        raw_row = conn.execute("select raw_text from candidates where document_id=%s and tenant_id=%s", (document_id, tenant_id)).fetchone()
+    raw_text = raw_row["raw_text"] if raw_row else None
+    applied = _apply_candidate_profile_updates(record, updates)
+    enrich_record_pii(record, raw_text)
+    enrich_profile_verification(record)
+    enrich_record_locations(record, raw_text)
+    normalize_domain_years(record, raw_text)
+    enrich_fact_verification(record, raw_text)
+    record["primary_key_coverage"] = primary_key_coverage(record)
+    contact = record.get("contact") or {}
+    with db() as conn:
+        conn.execute(
+            """
+            update candidates
+            set name=%s,
+                email=%s,
+                phone=%s,
+                record_json=%s,
+                updated_at=now()
+            where document_id=%s and tenant_id=%s and deleted_at is null
+            """,
+            (record.get("name"), contact.get("email"), contact.get("phone"), Jsonb(record), document_id, tenant_id),
+        )
+        _replace_normalized_candidate_tables(conn, record, tenant_id)
+        _upsert_training_data_example(conn, record, raw_text, tenant_id, "manual_profile_correction")
+        _record_activity_event(
+            conn,
+            tenant_id,
+            document_id,
+            user_id,
+            "candidate.profile_corrected",
+            "Candidate fields corrected",
+            ", ".join(applied)[:500],
+            {"fields": applied},
+        )
+        conn.commit()
+    upsert_candidate_search_chunks(record, raw_text, tenant_id)
+    return record
+
+
+def _apply_candidate_profile_updates(record: dict[str, Any], updates: dict[str, Any]) -> list[str]:
+    applied: list[str] = []
+    contact = record.setdefault("contact", {})
+    derived = record.setdefault("derived", {})
+    hr_profile = derived.setdefault("hr_profile", {})
+    simple_fields = {
+        "name": ("record", "name"),
+        "summary": ("record", "summary"),
+        "email": ("contact", "email"),
+        "phone": ("contact", "phone"),
+        "location": ("contact", "location"),
+        "current_title": ("hr_profile", "current_title"),
+        "current_company": ("hr_profile", "current_company"),
+    }
+    for field, (target, key) in simple_fields.items():
+        if field not in updates:
+            continue
+        value = _clean_manual_text(updates.get(field))
+        if target == "record":
+            record[key] = value
+        elif target == "contact":
+            contact[key] = value
+        else:
+            hr_profile[key] = value
+        applied.append(field)
+    if "total_years_experience" in updates:
+        years = _manual_number(updates.get("total_years_experience"))
+        hr_profile["total_years_experience"] = years
+        applied.append("total_years_experience")
+    for field, target in (("skills", "skills"), ("countries", "countries_associated")):
+        if field not in updates:
+            continue
+        values = _manual_list(updates.get(field))
+        if target == "skills":
+            record["skills"] = values
+        else:
+            derived[target] = values
+        applied.append(field)
+    if applied:
+        record.setdefault("manual_corrections", []).append({"fields": applied})
+    return applied
+
+
+def _clean_manual_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _manual_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        raw = value
+    else:
+        raw = re.split(r"[\n,;]+", str(value or ""))
+    return [str(item).strip() for item in raw if str(item).strip()]
+
+
+def _manual_number(value: Any) -> float | int | None:
+    if value is None or value == "":
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return int(number) if number.is_integer() else number
 
 
 def soft_delete_candidate_db(document_id: str, tenant_id: str, user_id: str, reason: str = "removed_by_recruiter") -> dict[str, Any]:
