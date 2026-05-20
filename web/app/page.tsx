@@ -1473,7 +1473,8 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               requirements={requirements}
               campaigns={campaigns}
               clusters={clusters}
-              deadLetterCount={operationalAlerts.length || parseDeadLetters.length}
+              deadLetterCount={parseDeadLetters.length}
+              operationalAlertCount={operationalAlerts.length}
               setView={setView}
               openCandidate={handleOpenCandidate}
             />
@@ -1744,6 +1745,11 @@ function WorkspaceTopNav({
         <NavButton icon={<Search size={18} />} label="Copilot" active={view === "copilot" || view === "requirement" || view === "matches"} onClick={() => setView("copilot")} />
       </nav>
       <div className="topNavActions">
+        {isTenantAdmin(user) ? (
+          <button className={view === "operations" ? "shellUploadButton active queueTopButton" : "shellUploadButton queueTopButton"} type="button" onClick={() => setView("operations")}>
+            <AlertTriangle size={18} /> Queue
+          </button>
+        ) : null}
         <button className={view === "upload" ? "shellUploadButton active" : "shellUploadButton"} type="button" onClick={() => setView("upload")}>
           <UploadCloud size={18} /> Upload
         </button>
@@ -1834,6 +1840,7 @@ function Dashboard({
   campaigns,
   clusters,
   deadLetterCount,
+  operationalAlertCount,
   setView,
   openCandidate,
 }: {
@@ -1842,6 +1849,7 @@ function Dashboard({
   campaigns: JobCampaign[];
   clusters: CandidateVersionMatch[];
   deadLetterCount: number;
+  operationalAlertCount: number;
   setView: (view: View) => void;
   openCandidate: (id: string, tab?: CandidateDetailTab) => void;
 }) {
@@ -1859,11 +1867,18 @@ function Dashboard({
   const domainCounts = topDomainCounts(candidates);
   const actionItems = [
     ...(deadLetterCount ? [{
-      title: "Resume uploads need retry or replacement",
-      body: `${deadLetterCount} upload or parsing item${deadLetterCount === 1 ? "" : "s"} failed after retries. Open the queue to retry, cancel, or inspect the exact error.`,
+      title: "Resume files need review",
+      body: `${deadLetterCount} resume file${deadLetterCount === 1 ? "" : "s"} exhausted retries. Open the queue to inspect the exact file, error, attempts, and retry it.`,
+      action: "Open file review queue",
+      label: "File review",
+      run: () => setView("operations"),
+    }] : []),
+    ...(operationalAlertCount ? [{
+      title: "Processing alerts need review",
+      body: `${operationalAlertCount} processing alert${operationalAlertCount === 1 ? "" : "s"} are open for worker, OCR, queue, or indexing health. Open the queue to acknowledge or inspect them.`,
       action: "Open upload queue",
-      label: "Upload queue",
-      run: () => setView("upload"),
+      label: "Processing alert",
+      run: () => setView("operations"),
     }] : []),
     ...candidates
       .filter((item) => (item.duplicate_risk_score ?? 0) >= 0.75)
@@ -2659,6 +2674,33 @@ function UploadResumeView(props: {
           ) : null}
         </div>
       </section>
+      {props.deadLetters.length ? (
+        <section className="stitchQueueTable uploadReviewQueue">
+          <div className="stitchQueueHead">
+            <div>
+              <h3>Files Needing Review</h3>
+              <p>These resumes failed after retries. Retry the exact file below, or upload a corrected replacement above.</p>
+            </div>
+            <span className="statusPill dangerPill">{props.deadLetters.length} open</span>
+          </div>
+          <div className="jobTable">
+            <div className="jobRow uploadQueueRow header"><span>Resume</span><span>Batch</span><span>Error</span><span>Action</span></div>
+            {props.deadLetters.map((item) => (
+              <div className="jobRow uploadQueueRow failedReviewRow" key={item.id}>
+                <span>{item.original_filename ?? "Unknown file"}</span>
+                <span>{item.batch_name ?? "No batch"}<small>Attempts {item.attempt_count}/{item.max_attempts || "?"}</small></span>
+                <span className="queueStatusCell">
+                  <b className="queueStatus failed">{domainLabel(item.job_status ?? "failed")}</b>
+                  <small>{item.error_message}</small>
+                </span>
+                <span className="jobActions">
+                  <button className="plain small" disabled={props.busy} onClick={() => props.retryJob(item.job_id)}>Retry</button>
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
       {props.batches.length ? (
         <section className="stitchRecentBatches">
           {props.batches.slice(0, 4).map((batch) => (
@@ -2887,6 +2929,20 @@ function OperationsView(props: {
               </div>
             ))}
           </div>
+          {props.selectedBatch.events?.length ? (
+            <section className="queueEventLog">
+              <h4>Queue Event Log</h4>
+              <div>
+                {props.selectedBatch.events.slice(0, 20).map((event) => (
+                  <article key={event.id}>
+                    <strong>{domainLabel(event.event_type)}</strong>
+                    <span>{domainLabel(event.status)} | {domainLabel(event.stage)} | {formatDateTime(event.created_at)}</span>
+                    {event.message ? <p>{event.message}</p> : null}
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
         </section>
       ) : null}
     </section>

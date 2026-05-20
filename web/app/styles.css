@@ -560,7 +560,7 @@ a:focus {
 .workspaceTopNav {
   min-height: 96px;
   display: grid;
-  grid-template-columns: minmax(260px, 0.55fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(240px, 1fr) auto minmax(240px, 1fr);
   align-items: center;
   gap: 28px;
   border-bottom: 1px solid var(--line);
@@ -607,7 +607,12 @@ a:focus {
 
 .workspaceTopNav nav {
   justify-content: center;
+  justify-self: center;
   gap: 24px;
+}
+
+.workspaceTopNav .topNavActions {
+  justify-self: end;
 }
 
 .workspaceTopNav .topNavLink {
@@ -668,6 +673,10 @@ a:focus {
   padding: 0 18px;
   border-radius: 8px;
   background: #f4f5ff;
+}
+
+.queueTopButton {
+  background: var(--surface);
 }
 
 .accountMenu {
@@ -1457,6 +1466,18 @@ a:focus {
   justify-content: space-between;
   gap: 16px;
   align-items: center;
+}
+
+.stitchQueueHead > div {
+  display: grid;
+  gap: 4px;
+}
+
+.stitchQueueHead p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 19px;
 }
 
 .stitchProgressCard > div:first-child strong,
@@ -6091,6 +6112,21 @@ button:disabled {
   padding: 0 28px;
 }
 
+.jobRow.failedReviewRow {
+  grid-template-columns: minmax(260px, 1.15fr) minmax(200px, 0.8fr) minmax(260px, 1.25fr) minmax(120px, 0.4fr);
+}
+
+.failedReviewRow > span {
+  min-width: 0;
+}
+
+.failedReviewRow small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
 .jobRow:last-child {
   border-bottom: 0;
 }
@@ -6108,6 +6144,43 @@ button:disabled {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.queueEventLog {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--soft-line);
+  padding-top: 14px;
+}
+
+.queueEventLog h4 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.queueEventLog > div {
+  display: grid;
+  gap: 8px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.queueEventLog article {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--soft-line);
+  background: var(--surface-low);
+  padding: 10px;
+}
+
+.queueEventLog span,
+.queueEventLog p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 17px;
 }
 
 .jobEventTimeline {
@@ -8525,10 +8598,16 @@ h3 {
 
 .workspaceTopNav {
   min-height: 62px;
+  grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
 }
 
 .workspaceTopNav nav {
+  justify-self: center;
   gap: 4px;
+}
+
+.workspaceTopNav .topNavActions {
+  justify-self: end;
 }
 
 .workspaceTopNav .topNavLink {
@@ -8596,6 +8675,10 @@ h3 {
 
 .uploadQueueRow {
   grid-template-columns: minmax(220px, 1.4fr) minmax(180px, 1fr) minmax(180px, 1fr) minmax(190px, auto);
+}
+
+.uploadReviewQueue {
+  border-color: var(--danger-soft);
 }
 
 .singleUploadFallback,
