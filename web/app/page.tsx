@@ -942,7 +942,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
       setCandidate(result);
       setNote("");
       setNoteSaveState("saved");
-      await refresh();
+      setStatus("Note saved. Search index will update in the background.");
     } catch (error) {
       setNoteSaveState("error");
       setNoteSaveError(readableError(error));
@@ -954,7 +954,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     const result = await run("Updating note", () => updateNote(candidate.document_id, noteId, name, content, token));
     if (!result) return;
     setCandidate(result);
-    await refresh();
+    setStatus("Note updated. Search index will update in the background.");
   }
 
   async function handleDeleteNote(noteId: string) {
@@ -966,8 +966,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
       const result = await run("Deleting recruiter note", () => deleteNote(candidate.document_id, noteId, token));
       if (!result) throw new Error("No candidate returned after deleting note");
       setCandidate(result);
-      setStatus("Note deleted");
-      await refresh();
+      setStatus("Note deleted. Search index will update in the background.");
     } catch (error) {
       setNoteSaveState("error");
       setNoteSaveError(`Could not delete note: ${readableError(error)}`);

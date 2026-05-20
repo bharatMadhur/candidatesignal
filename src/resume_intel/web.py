@@ -47,6 +47,7 @@ from .db_store import (
     load_candidate_db,
     load_raw_text_db,
     public_candidate_record,
+    reindex_candidate_search_db,
     soft_delete_candidate_db,
     update_candidate_profile_db,
     update_note_db,
@@ -719,36 +720,76 @@ def upload_resume_alias(
     return upload_resume(file, note_name, note, user)
 
 
+def _schedule_candidate_search_reindex(background_tasks: BackgroundTasks, document_id: str, tenant_id: str) -> None:
+    background_tasks.add_task(_reindex_candidate_search_safe, document_id, tenant_id)
+
+
+def _reindex_candidate_search_safe(document_id: str, tenant_id: str) -> None:
+    try:
+        reindex_candidate_search_db(document_id, tenant_id)
+    except Exception as exc:
+        http_logger.exception(
+            "candidate_search_reindex_failed",
+            extra={
+                "document_id": document_id,
+                "tenant_id": tenant_id,
+                "error_type": exc.__class__.__name__,
+            },
+        )
+
+
 @app.post("/candidates/{document_id}/notes")
-def create_note(document_id: str, request: NoteRequest, user: dict = Depends(current_user)) -> dict:
+def create_note(
+    document_id: str,
+    request: NoteRequest,
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(current_user),
+) -> dict:
     require_tenant_write(user)
     if not request.content.strip():
         raise HTTPException(status_code=400, detail="note content is required")
     try:
-        record = add_note_db(document_id, user["id"], request.name, request.content, _tenant_id(user))
-        matches = find_matches_for_record(record, tenant_id=_tenant_id(user))
-        record["candidate_versions"] = {"matches": matches}
+        tenant_id = _tenant_id(user)
+        record = add_note_db(document_id, user["id"], request.name, request.content, tenant_id, reindex_search=False)
+        _schedule_candidate_search_reindex(background_tasks, document_id, tenant_id)
         return public_candidate_record(record)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="candidate not found") from exc
 
 
 @app.patch("/candidates/{document_id}/notes/{note_id}")
-def update_note(document_id: str, note_id: str, request: NoteRequest, user: dict = Depends(current_user)) -> dict:
+def update_note(
+    document_id: str,
+    note_id: str,
+    request: NoteRequest,
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(current_user),
+) -> dict:
     require_tenant_write(user)
     if not request.content.strip():
         raise HTTPException(status_code=400, detail="note content is required")
     try:
-        return public_candidate_record(update_note_db(document_id, note_id, user["id"], request.name, request.content, _tenant_id(user)))
+        tenant_id = _tenant_id(user)
+        record = update_note_db(document_id, note_id, user["id"], request.name, request.content, tenant_id, reindex_search=False)
+        _schedule_candidate_search_reindex(background_tasks, document_id, tenant_id)
+        return public_candidate_record(record)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="candidate or note not found") from exc
 
 
 @app.delete("/candidates/{document_id}/notes/{note_id}")
-def delete_note(document_id: str, note_id: str, user: dict = Depends(current_user)) -> dict:
+def delete_note(
+    document_id: str,
+    note_id: str,
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(current_user),
+) -> dict:
     require_tenant_write(user)
     try:
-        return public_candidate_record(delete_note_db(document_id, note_id, user["id"], _tenant_id(user)))
+        tenant_id = _tenant_id(user)
+        record = delete_note_db(document_id, note_id, user["id"], tenant_id, reindex_search=False)
+        _schedule_candidate_search_reindex(background_tasks, document_id, tenant_id)
+        return public_candidate_record(record)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="candidate or note not found") from exc
 

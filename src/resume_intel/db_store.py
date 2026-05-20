@@ -242,7 +242,15 @@ def list_candidates_db(tenant_id: str | None = None) -> list[dict[str, Any]]:
     return candidates
 
 
-def add_note_db(document_id: str, user_id: str, name: str, content: str, tenant_id: str | None = None) -> dict[str, Any]:
+def add_note_db(
+    document_id: str,
+    user_id: str,
+    name: str,
+    content: str,
+    tenant_id: str | None = None,
+    *,
+    reindex_search: bool = True,
+) -> dict[str, Any]:
     tenant_id = tenant_id or _default_tenant_id()
     record = load_candidate_db(document_id, tenant_id)
     note_name = name.strip() or "HR Note"
@@ -284,11 +292,21 @@ def add_note_db(document_id: str, user_id: str, name: str, content: str, tenant_
             {"note_id": note["id"], "note_name": note_name},
         )
         conn.commit()
-    upsert_candidate_search_chunks(record, raw_text, tenant_id)
+    if reindex_search:
+        upsert_candidate_search_chunks(record, raw_text, tenant_id)
     return record
 
 
-def update_note_db(document_id: str, note_id: str, user_id: str, name: str, content: str, tenant_id: str | None = None) -> dict[str, Any]:
+def update_note_db(
+    document_id: str,
+    note_id: str,
+    user_id: str,
+    name: str,
+    content: str,
+    tenant_id: str | None = None,
+    *,
+    reindex_search: bool = True,
+) -> dict[str, Any]:
     tenant_id = tenant_id or _default_tenant_id()
     record = load_candidate_db(document_id, tenant_id)
     with db() as conn:
@@ -326,11 +344,19 @@ def update_note_db(document_id: str, note_id: str, user_id: str, name: str, cont
             {"note_id": note_id},
         )
         conn.commit()
-    upsert_candidate_search_chunks(record, raw_text, tenant_id)
+    if reindex_search:
+        upsert_candidate_search_chunks(record, raw_text, tenant_id)
     return record
 
 
-def delete_note_db(document_id: str, note_id: str, user_id: str, tenant_id: str | None = None) -> dict[str, Any]:
+def delete_note_db(
+    document_id: str,
+    note_id: str,
+    user_id: str,
+    tenant_id: str | None = None,
+    *,
+    reindex_search: bool = True,
+) -> dict[str, Any]:
     tenant_id = tenant_id or _default_tenant_id()
     record = load_candidate_db(document_id, tenant_id)
     with db() as conn:
@@ -368,8 +394,17 @@ def delete_note_db(document_id: str, note_id: str, user_id: str, tenant_id: str 
             {"note_id": note_id},
         )
         conn.commit()
-    upsert_candidate_search_chunks(record, raw_text, tenant_id)
+    if reindex_search:
+        upsert_candidate_search_chunks(record, raw_text, tenant_id)
     return record
+
+
+def reindex_candidate_search_db(document_id: str, tenant_id: str) -> None:
+    """Refresh derived semantic chunks without blocking the recruiter note write path."""
+
+    record = load_candidate_db(document_id, tenant_id)
+    raw_text = load_raw_text_db(document_id, tenant_id)
+    upsert_candidate_search_chunks(record, raw_text, tenant_id)
 
 
 def update_candidate_profile_db(document_id: str, user_id: str, updates: dict[str, Any], tenant_id: str | None = None) -> dict[str, Any]:
