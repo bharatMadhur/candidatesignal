@@ -3,10 +3,12 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from resume_intel import web
 from resume_intel.candidate_versions import build_version_diffs, merge_match
 
 
@@ -41,6 +43,40 @@ class CandidateVersionDiffTests(unittest.TestCase):
     def test_candidate_merge_helper_is_disabled(self) -> None:
         with self.assertRaises(RuntimeError):
             merge_match("match-id", "user-id", "tenant-id")
+
+    def test_candidate_detail_persists_live_version_matches(self) -> None:
+        user = {"id": "user-1", "tenant_id": "tenant-1", "tenant_role": "recruiter"}
+        raw_record = {"document_id": "doc-1", "name": "Candidate One"}
+        matches = [{"id": "match-1", "left_document_id": "doc-1", "right_document_id": "doc-2"}]
+
+        with (
+            patch.object(web, "load_candidate_db", return_value=raw_record),
+            patch.object(web, "find_matches_for_record", return_value=matches),
+            patch.object(web, "persist_matches") as persist_matches,
+            patch.object(web, "_can_view_pii", return_value=False),
+            patch.object(web, "public_candidate_record", side_effect=lambda record, **_kwargs: dict(record)),
+        ):
+            result = web.candidate("doc-1", user)
+
+        persist_matches.assert_called_once_with(raw_record, matches, "tenant-1")
+        self.assertEqual(result["candidate_versions"]["matches"], matches)
+
+    def test_profile_update_persists_live_version_matches(self) -> None:
+        user = {"id": "user-1", "tenant_id": "tenant-1", "tenant_role": "tenant_admin"}
+        updated_record = {"document_id": "doc-1", "name": "Candidate One"}
+        matches = [{"id": "match-1", "left_document_id": "doc-1", "right_document_id": "doc-2"}]
+
+        with (
+            patch.object(web, "update_candidate_profile_db", return_value=updated_record),
+            patch.object(web, "find_matches_for_record", return_value=matches),
+            patch.object(web, "persist_matches") as persist_matches,
+            patch.object(web, "_can_view_pii", return_value=False),
+            patch.object(web, "public_candidate_record", side_effect=lambda record, **_kwargs: dict(record)),
+        ):
+            result = web.update_candidate_profile("doc-1", web.CandidateProfileUpdateRequest(), user)
+
+        persist_matches.assert_called_once_with(updated_record, matches, "tenant-1")
+        self.assertEqual(result["candidate_versions"]["matches"], matches)
 
 
 if __name__ == "__main__":

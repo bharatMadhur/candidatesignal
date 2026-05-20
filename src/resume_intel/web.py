@@ -559,9 +559,11 @@ def copilot_chat(request: CopilotChatRequest, user: dict = Depends(current_user)
 @app.get("/candidates/{document_id}")
 def candidate(document_id: str, user: dict = Depends(current_user)) -> dict:
     try:
-        raw_record = load_candidate_db(document_id, _tenant_id(user))
+        tenant_id = _tenant_id(user)
+        raw_record = load_candidate_db(document_id, tenant_id)
+        matches = find_matches_for_record(raw_record, tenant_id=tenant_id)
+        persist_matches(raw_record, matches, tenant_id)
         record = public_candidate_record(raw_record, allow_pii=_can_view_pii(user))
-        matches = find_matches_for_record(raw_record, tenant_id=_tenant_id(user))
         record["candidate_versions"] = {"matches": matches}
         if _can_view_pii(user):
             _audit_pii_access(user, document_id, _candidate_pii_fields(record), action="view_candidate_detail")
@@ -584,8 +586,10 @@ def delete_candidate(document_id: str, reason: str = Query("removed_by_recruiter
 def update_candidate_profile(document_id: str, request: CandidateProfileUpdateRequest, user: dict = Depends(current_user)) -> dict:
     require_tenant_write(user)
     try:
-        record = update_candidate_profile_db(document_id, user["id"], request.model_dump(), _tenant_id(user))
-        matches = find_matches_for_record(record, tenant_id=_tenant_id(user))
+        tenant_id = _tenant_id(user)
+        record = update_candidate_profile_db(document_id, user["id"], request.model_dump(), tenant_id)
+        matches = find_matches_for_record(record, tenant_id=tenant_id)
+        persist_matches(record, matches, tenant_id)
         record["candidate_versions"] = {"matches": matches}
         return public_candidate_record(record, allow_pii=_can_view_pii(user))
     except FileNotFoundError as exc:

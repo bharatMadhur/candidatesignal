@@ -13,16 +13,21 @@ async function main() {
   assert.equal(home.response.status, 200, "homepage should load");
   assert.match(home.body, /candidateSignal\.ai/, "homepage should show product brand");
   assert.match(home.body, /Company Login|Company workspace/i, "homepage should include company login");
-  assert.match(home.body, /Admin Login|Platform Admin/i, "homepage should include admin login");
+  assert.match(home.body, /Applicant Login|Applicant portal/i, "homepage should include applicant coming-soon login");
+  assert.doesNotMatch(home.body, /Admin Login/i, "homepage should not expose admin login");
   assert.match(home.body, /Upload resumes/i, "homepage should preserve public-home content");
 
   const companyMode = await get("/?login=company");
   assert.equal(companyMode.response.status, 200, "company login mode should load from homepage");
   assert.match(companyMode.body, /Company Login|Company workspace/i, "company login mode should be visible");
 
-  const adminMode = await get("/?login=admin");
-  assert.equal(adminMode.response.status, 200, "admin login mode should load from homepage");
-  assert.match(adminMode.body, /Admin Login|Platform Admin/i, "admin login mode should be visible");
+  const ignoredAdminQuery = await get("/?login=admin");
+  assert.equal(ignoredAdminQuery.response.status, 200, "legacy admin query should not break homepage");
+  assert.doesNotMatch(ignoredAdminQuery.body, /Enter Admin System/i, "legacy admin query should not open admin login");
+
+  const adminMode = await get("/admin");
+  assert.equal(adminMode.response.status, 200, "admin login mode should load from /admin");
+  assert.match(adminMode.body, /Admin Login|Admin System/i, "admin login mode should be visible on /admin");
 
   const removedLogin = await get("/login");
   assert.equal(removedLogin.response.status, 404, "/login should not exist as a standalone page");

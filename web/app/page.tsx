@@ -292,6 +292,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   const [invitePassword, setInvitePassword] = useState("");
   const [inviteMode, setInviteMode] = useState(false);
   const [loginMode, setLoginMode] = useState<"company" | "admin">(initialLoginMode ?? "company");
+  const [applicantLoginSelected, setApplicantLoginSelected] = useState(false);
   const [loginError, setLoginError] = useState("");
   const initialRouteAppliedRef = useRef(false);
   const routeApplyingRef = useRef(false);
@@ -300,10 +301,11 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     const params = new URLSearchParams(window.location.search);
     const invite = params.get("invite");
     const login = params.get("login");
-    if (!lockedLoginMode && (login === "admin" || login === "company")) setLoginMode(login);
+    if (!lockedLoginMode && login === "company") setLoginMode(login);
     if (invite) {
       setInviteToken(invite);
       setInviteMode(true);
+      setApplicantLoginSelected(false);
     }
     const saved = window.localStorage.getItem("resume-intel-token");
     if (saved) {
@@ -394,7 +396,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
       setCurrentUser(null);
       setWorkspaceMode("tenant");
       setView("dashboard");
-      setStatus("Platform admin session found. Use Admin Login.");
+      setStatus("Platform admin session found. Open /admin.");
       return;
     }
     if (lockedLoginMode && initialLoginMode === "admin" && !isPlatform) {
@@ -651,7 +653,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
       }
       if (loginMode === "company" && platform) {
         window.localStorage.removeItem("resume-intel-token");
-        throw new Error("This account is a platform admin. Use Admin Login.");
+        throw new Error("This account is a platform admin. Open /admin to use the platform admin system.");
       }
       window.localStorage.setItem("resume-intel-token", nextToken);
       const session = { token: nextToken, user: current.user };
@@ -691,6 +693,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   function handleLoginModeChange(mode: "company" | "admin") {
     if (lockedLoginMode) return;
     setLoginMode(mode);
+    setApplicantLoginSelected(false);
     setEmail("");
     setPassword("");
     setLoginError("");
@@ -1157,6 +1160,12 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     setClusters(result.clusters);
   }
 
+  async function handleOpenCandidateVersions() {
+    const result = await run("Loading candidate versions", () => listCandidateVersionClusters(token));
+    if (result) setClusters(result.clusters);
+    setView("versions");
+  }
+
   async function handleShortlist(candidateId: string) {
     if (!requirement) return;
     const updated = await run("Shortlisting candidate", () => shortlistMatch(token, requirement.id, candidateId));
@@ -1257,54 +1266,83 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   if (!token) {
     const showBootstrap = process.env.NODE_ENV !== "production";
     const showLocalDevHelp = process.env.NODE_ENV !== "production";
-    const canSwitchLoginMode = !inviteMode && !lockedLoginMode;
     const isAdminLogin = loginMode === "admin";
+    const showApplicantComingSoon = applicantLoginSelected && !isAdminLogin && !inviteMode;
     const showMergedHome = showPublicHome && !lockedLoginMode && !inviteMode;
+    const canShowPublicLoginTabs = showMergedHome && !inviteMode;
     return (
-      <main className={showMergedHome ? "loginShell mergedHomeLoginShell" : "loginShell"}>
+      <main className={showMergedHome ? "loginShell mergedHomeLoginShell stitchHomeShell" : "loginShell"}>
         {showMergedHome ? (
-          <section className="mergedHomeContent">
-            <a className="publicBrand mergedHomeBrand" href="/">
-              <BrandMark />
-              <strong>candidateSignal.ai</strong>
-            </a>
-            <div className="mergedHomeHero">
+          <section className="mergedHomeContent stitchHomeContent">
+            <header className="stitchHomeNav">
+              <a className="publicBrand mergedHomeBrand" href="/">
+                <BrandMark />
+                <strong>candidateSignal.ai</strong>
+              </a>
+              <nav aria-label="Homepage sections">
+                <a href="#solutions">Solutions</a>
+                <a href="#privacy">Privacy</a>
+                <a href="#security">Security</a>
+              </nav>
+            </header>
+            <div className="mergedHomeHero stitchHomeHero">
+              <span className="stitchHomePill"><CheckCircle2 size={15} /> Evidence-backed recruiting intelligence</span>
               <h1>
                 <span>Upload resumes.</span>
                 <span>Understand candidates.</span>
                 <em>Find the right fit faster.</em>
               </h1>
-              <p>candidateSignal.ai turns resumes, notes, raw CV text, and job campaigns into evidence-backed recruiter decisions without mixing company data.</p>
+              <p>Built for calm, evidence-backed hiring. candidateSignal.ai turns resumes, notes, raw CV text, and job campaigns into recruiter decisions without mixing company data.</p>
+              <div className="stitchHeroActions">
+                <button className="primary" type="button" onClick={() => setApplicantLoginSelected(false)}>
+                  <LogIn size={16} /> Company Login
+                </button>
+                <button className="secondary" type="button" onClick={() => setApplicantLoginSelected(true)}>
+                  <Users size={16} /> Applicant Login
+                </button>
+              </div>
             </div>
-            <div className="mergedHomeFeatureGrid" id="platform">
+            <div className="stitchHomeFeatureGrid" id="solutions">
               <article>
-                <FileSearch size={26} />
-                <strong>Intelligence-first parsing</strong>
-                <span>Extract skills, experience, location signals, PII links, and candidate evidence from resumes without rigid templates.</span>
+                <FileSearch size={24} />
+                <strong>Intelligent parsing</strong>
+                <span>Extract skills, timelines, PII links, locations, portfolio URLs, and evidence from raw CVs without forcing templates.</span>
               </article>
               <article>
-                <CheckCircle2 size={26} />
-                <strong>Evidence-backed matching</strong>
-                <span>Every recommendation shows source-linked reasons, gaps, and next steps for recruiters.</span>
+                <CheckCircle2 size={24} />
+                <strong>Evidence matching</strong>
+                <span>Every recommendation highlights source text, gaps, uncertainty, and the next recruiter action.</span>
               </article>
               <article>
-                <Search size={26} />
+                <Search size={24} />
                 <strong>Search Copilot</strong>
-                <span>Ask natural-language hiring questions across the company talent pool and get ranked candidates.</span>
+                <span>Ask natural-language hiring questions across your company talent pool and get ranked candidates with evidence.</span>
               </article>
-              <article>
-                <ShieldCheck size={26} />
-                <strong>Tenant-safe privacy</strong>
+              <article id="privacy">
+                <ShieldCheck size={24} />
+                <strong>Tenant privacy</strong>
                 <span>Company data stays isolated. Platform admins manage companies and seats, not candidate databases.</span>
               </article>
             </div>
-            <div className="loginBoundaryCard mergedHomeBoundary">
-              <strong>{isAdminLogin ? "Admin system selected" : "Company workspace selected"}</strong>
-              <span>
-                {isAdminLogin
-                  ? "Use Admin only for companies, seats, invites, and platform governance."
-                  : "Use Company for resumes, candidates, campaigns, matching, and team settings."}
-              </span>
+            <section className="stitchParserPreview" id="security">
+              <div>
+                <span className="eyebrow">Raw resume</span>
+                <p>“Led Spark migration, healthcare analytics, Azure Data Factory, Python, SQL, Tableau...”</p>
+              </div>
+              <div>
+                <span className="eyebrow">Structured signal</span>
+                <strong>Data engineering, healthcare domain, Azure stack, verified evidence snippets.</strong>
+              </div>
+            </section>
+            <div className="stitchPersonaGrid">
+              <article>
+                <strong>For recruiters and hiring teams</strong>
+                <span>Upload, parse, search, match, shortlist, and present candidates with defensible evidence.</span>
+              </article>
+              <article>
+                <strong>For applicants and students</strong>
+                <span>Coming soon: a personal portal to understand resume signal and application fit.</span>
+              </article>
             </div>
           </section>
         ) : (
@@ -1344,39 +1382,47 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
             </>
           ) : (
             <>
-              <h1>{isAdminLogin ? "Admin Login" : "Company Login"}</h1>
-              <p>{isAdminLogin ? "Platform owners only. This opens the admin system, not the recruiter app." : "Company users only. This opens the recruiter workspace for one tenant."}</p>
-              {canSwitchLoginMode ? (
+              <h1>{showApplicantComingSoon ? "Applicant Login" : isAdminLogin ? "Admin Login" : "Company Login"}</h1>
+              <p>
+                {showApplicantComingSoon
+                  ? "Applicant and student access is coming soon."
+                  : isAdminLogin
+                    ? "Platform owners only. This opens the admin system, not the recruiter app."
+                    : "Company users only. This opens the recruiter workspace for one tenant."}
+              </p>
+              {canShowPublicLoginTabs ? (
                 <div className="loginModeTabs" role="tablist" aria-label="Choose login type">
                   <button
-                    className={!isAdminLogin ? "active" : ""}
+                    className={!showApplicantComingSoon ? "active" : ""}
                     type="button"
                     role="tab"
-                    aria-selected={!isAdminLogin}
+                    aria-selected={!showApplicantComingSoon}
                     onClick={() => {
-                      setLoginMode("company");
+                      handleLoginModeChange("company");
+                      setApplicantLoginSelected(false);
                       setEmail("");
                       setLoginError("");
                     }}
                     disabled={busy}
                   >
-                    <strong>Company</strong>
+                    <strong>Company Access</strong>
                     <span>Recruiters, candidates, campaigns, matching.</span>
                   </button>
                   <button
-                    className={isAdminLogin ? "active" : ""}
+                    className={showApplicantComingSoon ? "active" : ""}
                     type="button"
                     role="tab"
-                    aria-selected={isAdminLogin}
+                    aria-selected={showApplicantComingSoon}
                     onClick={() => {
-                      setLoginMode("admin");
+                      handleLoginModeChange("company");
+                      setApplicantLoginSelected(true);
                       setEmail("");
                       setLoginError("");
                     }}
                     disabled={busy}
                   >
-                    <strong>Admin</strong>
-                    <span>Platform owner: companies, seats, invites.</span>
+                    <strong>Applicant Login</strong>
+                    <span>Coming soon for applicants and students.</span>
                   </button>
                 </div>
               ) : (
@@ -1385,48 +1431,59 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                   <span>{isAdminLogin ? "Create companies, allocate seats, invite company owners." : "Upload resumes, search candidates, run campaigns and matching."}</span>
                 </div>
               )}
-              <input
-                value={email}
-                onChange={(event) => {
-                  setEmail(event.target.value);
-                  setLoginError("");
-                }}
-                onKeyDown={handleLoginKeyDown}
-                placeholder={isAdminLogin ? "admin@example.com" : "recruiter@example.com"}
-                aria-label={isAdminLogin ? "Admin email or username" : "Company email or username"}
-                autoComplete="username"
-              />
-              <input
-                value={password}
-                onChange={(event) => {
-                  setPassword(event.target.value);
-                  setLoginError("");
-                }}
-                onKeyDown={handleLoginKeyDown}
-                placeholder="resume-intel"
-                type="password"
-                aria-label="Password"
-                autoComplete="current-password"
-              />
-              <button className="primary" onClick={handleLogin} disabled={busy || !email.trim() || !password.trim()}>
-                <LogIn size={16} /> {busy ? "Signing in..." : isAdminLogin ? "Enter Admin System" : "Enter Company Workspace"}
-              </button>
-              {loginError ? <div className="loginError">{loginError}</div> : null}
-              {showLocalDevHelp ? <div className="loginHelpBox">
-                <strong>Local dev login</strong>
-                <span>{isAdminLogin ? "admin or admin@example.com / resume-intel" : "recruiter or recruiter@example.com / resume-intel"}</span>
-              </div> : null}
-              {lockedLoginMode ? (
-                <a className="plain actionLink" href={isAdminLogin ? "/?login=company" : "/?login=admin"}>
-                  {isAdminLogin ? "Go to Company Login" : "Go to Admin Login"}
-                </a>
-              ) : null}
-              {isAdminLogin && showBootstrap ? <button className="plain" onClick={handleBootstrap} disabled={busy || !email.trim() || !password.trim()}>
-                Create local platform admin
-              </button> : null}
-              {!isAdminLogin ? <button className="plain" onClick={() => setInviteMode(true)} disabled={busy}>
-                Accept invite
-              </button> : null}
+              {showApplicantComingSoon ? (
+                <div className="applicantComingSoonCard">
+                  <Users size={26} />
+                  <strong>Applicant portal is coming soon</strong>
+                  <span>Applicants will eventually review their resume signal and application fit here. Company recruiters should continue with Company Access.</span>
+                  <button className="primary" type="button" onClick={() => setApplicantLoginSelected(false)}>Use Company Login</button>
+                </div>
+              ) : (
+                <>
+                  <input
+                    value={email}
+                    onChange={(event) => {
+                      setEmail(event.target.value);
+                      setLoginError("");
+                    }}
+                    onKeyDown={handleLoginKeyDown}
+                    placeholder={isAdminLogin ? "admin@example.com" : "recruiter@example.com"}
+                    aria-label={isAdminLogin ? "Admin email or username" : "Company email or username"}
+                    autoComplete="username"
+                  />
+                  <input
+                    value={password}
+                    onChange={(event) => {
+                      setPassword(event.target.value);
+                      setLoginError("");
+                    }}
+                    onKeyDown={handleLoginKeyDown}
+                    placeholder="resume-intel"
+                    type="password"
+                    aria-label="Password"
+                    autoComplete="current-password"
+                  />
+                  <button className="primary" onClick={handleLogin} disabled={busy || !email.trim() || !password.trim()}>
+                    <LogIn size={16} /> {busy ? "Signing in..." : isAdminLogin ? "Enter Admin System" : "Enter Company Workspace"}
+                  </button>
+                  {loginError ? <div className="loginError">{loginError}</div> : null}
+                  {showLocalDevHelp ? <div className="loginHelpBox">
+                    <strong>Local dev login</strong>
+                    <span>{isAdminLogin ? "admin or admin@example.com / resume-intel" : "recruiter or recruiter@example.com / resume-intel"}</span>
+                  </div> : null}
+                  {lockedLoginMode ? (
+                    <a className="plain actionLink" href={isAdminLogin ? "/" : "/admin"}>
+                      {isAdminLogin ? "Go to Company Login" : "Go to Admin Login"}
+                    </a>
+                  ) : null}
+                  {isAdminLogin && showBootstrap ? <button className="plain" onClick={handleBootstrap} disabled={busy || !email.trim() || !password.trim()}>
+                    Create local platform admin
+                  </button> : null}
+                  {!isAdminLogin ? <button className="plain" onClick={() => setInviteMode(true)} disabled={busy}>
+                    Accept invite
+                  </button> : null}
+                </>
+              )}
             </>
           )}
           <div className="status">{busy ? <Loader2 className="spin" size={16} /> : null}{busy ? "Working..." : status}</div>
@@ -1606,6 +1663,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               match={() => setView("requirement")}
               activeTab={candidateDetailTab}
               setActiveTab={setCandidateDetailTab}
+              openCandidateVersions={handleOpenCandidateVersions}
             />
           ) : null}
 
@@ -1776,7 +1834,7 @@ function AccountSettingsMenu({
 }) {
   const role = user?.tenant_role ?? user?.role ?? user?.platform_role ?? "user";
   const canManageWorkspaceSettings = isTenantAdmin(user);
-  function switchLogin(path: "/?login=company" | "/?login=admin") {
+  function switchLogin(path: "/" | "/admin") {
     logout();
     window.location.href = path;
   }
@@ -1813,8 +1871,8 @@ function AccountSettingsMenu({
           </div>
         ) : null}
         <div className="accountMenuActions">
-          <button type="button" onClick={() => switchLogin("/?login=company")}><LogIn size={16} /> Company Login</button>
-          <button type="button" onClick={() => switchLogin("/?login=admin")}><ShieldCheck size={16} /> Admin Login</button>
+          <button type="button" onClick={() => switchLogin("/")}><LogIn size={16} /> Company Login</button>
+          <button type="button" onClick={() => switchLogin("/admin")}><ShieldCheck size={16} /> Admin Login</button>
         </div>
         <button className="logoutButton" type="button" onClick={logout}><LogOut size={16} /> Logout</button>
       </section>
@@ -2483,7 +2541,7 @@ function DatabaseView({ candidates, query, setQuery, open }: { candidates: Candi
           <em>Country/location not captured</em>
         </article>
         <article>
-          <span>Resume Versions</span>
+          <span>Version Signals</span>
           <strong>{versionSignalCount}</strong>
           <em>Possible repeated candidate uploads</em>
         </article>
@@ -3084,6 +3142,7 @@ function CandidateDetail({
   match,
   activeTab,
   setActiveTab,
+  openCandidateVersions,
 }: {
   candidate: Candidate;
   token: string;
@@ -3106,6 +3165,7 @@ function CandidateDetail({
   match: () => void;
   activeTab: CandidateDetailTab;
   setActiveTab: (tab: CandidateDetailTab) => void;
+  openCandidateVersions: () => void;
 }) {
   const hr = candidate.derived?.hr_profile;
   const [previewUrl, setPreviewUrl] = useState<string>("");
@@ -3639,7 +3699,7 @@ function CandidateDetail({
 
         {activeTab === "versions" ? (
           <section className="candidateTabPanel candidateVersionsPanel">
-            <CandidateVersionRail candidate={candidate} matches={versionMatches} openCandidate={openCandidate} />
+            <CandidateVersionRail candidate={candidate} matches={versionMatches} openCandidate={openCandidate} openCandidateVersions={openCandidateVersions} />
           </section>
         ) : null}
           </div>
@@ -3747,6 +3807,7 @@ function CandidateDetail({
                   <button className="plain small" type="button" onClick={() => setActiveTab("versions")}>Review</button>
                 </div>
                 <p>{versionCount} related resume version{versionCount === 1 ? "" : "s"} found. Use this before deleting or correcting candidate data.</p>
+                <button className="plain small" type="button" onClick={openCandidateVersions}>Open Candidate Versions</button>
               </article>
             ) : null}
           </aside>
@@ -3937,7 +3998,17 @@ function NoteTypeButtons({ setNoteName }: { setNoteName: (value: string) => void
   );
 }
 
-function CandidateVersionRail({ candidate, matches, openCandidate }: { candidate: Candidate; matches: CandidateVersionMatch[]; openCandidate: (id: string) => void }) {
+function CandidateVersionRail({
+  candidate,
+  matches,
+  openCandidate,
+  openCandidateVersions,
+}: {
+  candidate: Candidate;
+  matches: CandidateVersionMatch[];
+  openCandidate: (id: string) => void;
+  openCandidateVersions: () => void;
+}) {
   const versions = candidateVersionLinks(candidate, matches);
   const activeDocument = candidateVersionDocumentLabel(candidate);
   return (
@@ -3948,6 +4019,7 @@ function CandidateVersionRail({ candidate, matches, openCandidate }: { candidate
         <h3>Resume History</h3>
           <p>PII/name matches are kept as candidate versions. Nothing is auto-merged.</p>
         </div>
+        <button className="plain small" type="button" onClick={openCandidateVersions}>Open Candidate Versions</button>
       </div>
       <article className="currentVersionCard">
         <span>Current version</span>
