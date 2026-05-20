@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -129,6 +129,20 @@ import { BrandMark } from "./components/brand";
 import { DOCUMENT_FILE_ACCEPT, DOCUMENT_FORMAT_LABEL, resolveLoginIdentifier } from "./lib/login";
 
 type View = "dashboard" | "copilot" | "database" | "upload" | "operations" | "candidate" | "requirement" | "matches" | "campaigns" | "versions" | "team" | "admin";
+type CandidateDetailTab = "overview" | "timeline" | "evidence" | "cv" | "notes" | "versions";
+type CampaignDetailTab = "pipeline" | "matches" | "scorecard" | "uploads" | "activity";
+
+type WorkspaceRoute = {
+  view?: View;
+  candidateId?: string;
+  candidateTab?: CandidateDetailTab;
+  campaignId?: string;
+  campaignTab?: CampaignDetailTab;
+  campaignStage?: CampaignPipelineStatus;
+  campaignCandidateId?: string;
+  threadId?: string;
+  requirementId?: string;
+};
 
 type WorkspaceChatMessage = CopilotMessage & {
   query?: string;
@@ -142,6 +156,39 @@ const COPILOT_GREETING: WorkspaceChatMessage = {
   role: "assistant",
   content: "Ask me to find candidates, compare profiles, surface evidence from raw CV text, or turn a hiring intent into a shortlist query.",
 };
+
+const WORKSPACE_VIEWS = new Set<View>(["dashboard", "copilot", "database", "upload", "operations", "candidate", "requirement", "matches", "campaigns", "versions", "team", "admin"]);
+const CANDIDATE_DETAIL_TABS = new Set<CandidateDetailTab>(["overview", "timeline", "evidence", "cv", "notes", "versions"]);
+const CAMPAIGN_DETAIL_TABS = new Set<CampaignDetailTab>(["pipeline", "matches", "scorecard", "uploads", "activity"]);
+const CAMPAIGN_PIPELINE_STAGES = new Set<CampaignPipelineStatus>(["recommended", "shortlisted", "contacted", "replied", "screened", "submitted", "interviewing", "offer", "placed", "rejected"]);
+
+function parseWorkspaceRoute(search: string): WorkspaceRoute {
+  const params = new URLSearchParams(search);
+  const viewValue = params.get("view");
+  const candidateTabValue = params.get("candidateTab");
+  const campaignTabValue = params.get("campaignTab");
+  const campaignStageValue = params.get("campaignStage");
+  return {
+    view: viewValue && WORKSPACE_VIEWS.has(viewValue as View) ? viewValue as View : undefined,
+    candidateId: params.get("candidate") || undefined,
+    candidateTab: candidateTabValue && CANDIDATE_DETAIL_TABS.has(candidateTabValue as CandidateDetailTab) ? candidateTabValue as CandidateDetailTab : undefined,
+    campaignId: params.get("campaign") || undefined,
+    campaignTab: campaignTabValue && CAMPAIGN_DETAIL_TABS.has(campaignTabValue as CampaignDetailTab) ? campaignTabValue as CampaignDetailTab : undefined,
+    campaignStage: campaignStageValue && CAMPAIGN_PIPELINE_STAGES.has(campaignStageValue as CampaignPipelineStatus) ? campaignStageValue as CampaignPipelineStatus : undefined,
+    campaignCandidateId: params.get("campaignCandidate") || undefined,
+    threadId: params.get("thread") || undefined,
+    requirementId: params.get("requirement") || undefined,
+  };
+}
+
+function routeHasDeepLink(route: WorkspaceRoute) {
+  return Boolean(route.view || route.candidateId || route.campaignId || route.threadId || route.requirementId);
+}
+
+function copyCurrentUrl() {
+  if (typeof window === "undefined" || typeof navigator === "undefined" || !navigator.clipboard) return;
+  void navigator.clipboard.writeText(window.location.href);
+}
 
 type CopilotFilters = {
   sort: "relevance" | "recency";
@@ -180,6 +227,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   const [busy, setBusy] = useState(false);
   const [candidates, setCandidates] = useState<CandidateSummary[]>([]);
   const [candidate, setCandidate] = useState<Candidate | null>(null);
+  const [candidateDetailTab, setCandidateDetailTab] = useState<CandidateDetailTab>("overview");
   const [requirements, setRequirements] = useState<Requirement[]>([]);
   const [requirement, setRequirement] = useState<Requirement | null>(null);
   const [matches, setMatches] = useState<RequirementMatch[]>([]);
@@ -187,6 +235,9 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   const [matchRunChanges, setMatchRunChanges] = useState<RequirementMatchRunChange[]>([]);
   const [campaigns, setCampaigns] = useState<JobCampaign[]>([]);
   const [campaign, setCampaign] = useState<JobCampaign | null>(null);
+  const [campaignDetailTab, setCampaignDetailTab] = useState<CampaignDetailTab>("pipeline");
+  const [campaignPipelineStage, setCampaignPipelineStage] = useState<CampaignPipelineStatus>("recommended");
+  const [campaignSelectedCandidateId, setCampaignSelectedCandidateId] = useState("");
   const [clusters, setClusters] = useState<CandidateVersionMatch[]>([]);
   const [parseBatches, setParseBatches] = useState<ParseBatch[]>([]);
   const [parseDeadLetters, setParseDeadLetters] = useState<ParseDeadLetter[]>([]);
@@ -214,6 +265,8 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   const [campaignFiles, setCampaignFiles] = useState<File[]>([]);
   const [noteName, setNoteName] = useState("Recruiter Notes");
   const [note, setNote] = useState("");
+  const [noteSaveState, setNoteSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [noteSaveError, setNoteSaveError] = useState("");
   const [clarifyAnswers, setClarifyAnswers] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<CandidateSummary[]>([]);
@@ -229,6 +282,8 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   const [inviteMode, setInviteMode] = useState(false);
   const [loginMode, setLoginMode] = useState<"company" | "admin">(initialLoginMode ?? "company");
   const [loginError, setLoginError] = useState("");
+  const initialRouteAppliedRef = useRef(false);
+  const routeApplyingRef = useRef(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -255,6 +310,59 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
       setCopilotCampaignId(campaigns[0].id);
     }
   }, [campaigns, copilotCampaignId]);
+
+  useEffect(() => {
+    setNoteSaveState("idle");
+    setNoteSaveError("");
+  }, [candidate?.document_id]);
+
+  useEffect(() => {
+    if (!token || !currentUser || initialRouteAppliedRef.current) return;
+    initialRouteAppliedRef.current = true;
+    const route = parseWorkspaceRoute(window.location.search);
+    if (routeHasDeepLink(route)) void applyWorkspaceRoute(route);
+  }, [token, currentUser?.id]);
+
+  useEffect(() => {
+    if (!token || !currentUser) return;
+    const handlePopState = () => void applyWorkspaceRoute(parseWorkspaceRoute(window.location.search));
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [token, currentUser?.id, requirements]);
+
+  useEffect(() => {
+    if (!token || !currentUser || routeApplyingRef.current) return;
+    const params = new URLSearchParams();
+    params.set("view", view);
+    if (view === "candidate" && candidate?.document_id) {
+      params.set("candidate", candidate.document_id);
+      params.set("candidateTab", candidateDetailTab);
+    }
+    if (view === "campaigns" && campaign?.id) {
+      params.set("campaign", campaign.id);
+      params.set("campaignTab", campaignDetailTab);
+      params.set("campaignStage", campaignPipelineStage);
+      if (campaignSelectedCandidateId) params.set("campaignCandidate", campaignSelectedCandidateId);
+    }
+    if (view === "copilot" && copilotThread?.id) params.set("thread", copilotThread.id);
+    if ((view === "requirement" || view === "matches") && requirement?.id) params.set("requirement", requirement.id);
+    const nextSearch = `?${params.toString()}`;
+    if (window.location.search !== nextSearch) {
+      window.history.replaceState(null, "", `${window.location.pathname}${nextSearch}`);
+    }
+  }, [
+    token,
+    currentUser?.id,
+    view,
+    candidate?.document_id,
+    candidateDetailTab,
+    campaign?.id,
+    campaignDetailTab,
+    campaignPipelineStage,
+    campaignSelectedCandidateId,
+    copilotThread?.id,
+    requirement?.id,
+  ]);
 
   useEffect(() => {
     if (!token || !copilotCampaignId) return;
@@ -461,6 +569,56 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     }
   }
 
+  async function applyWorkspaceRoute(route: WorkspaceRoute) {
+    if (!token) return;
+    routeApplyingRef.current = true;
+    try {
+      if (route.candidateId) {
+        const result = await getCandidate(token, route.candidateId);
+        setCandidate(result);
+        setCandidateDetailTab(route.candidateTab ?? "overview");
+        setView("candidate");
+        return;
+      }
+      if (route.campaignId) {
+        const result = await getCampaign(token, route.campaignId);
+        setCampaign(result);
+        setCampaigns((items) => items.some((item) => item.id === result.id) ? items.map((item) => item.id === result.id ? result : item) : [result, ...items]);
+        setCampaignDetailTab(route.campaignTab ?? "pipeline");
+        setCampaignPipelineStage(route.campaignStage ?? "recommended");
+        setCampaignSelectedCandidateId(route.campaignCandidateId ?? "");
+        setView("campaigns");
+        return;
+      }
+      if (route.threadId) {
+        const result = await getCopilotThread(token, route.threadId);
+        setCopilotThread(result.thread);
+        setCopilotMessages(copilotThreadMessages(result.thread));
+        setCopilotThreads((items) => items.some((item) => item.id === result.thread.id) ? items.map((item) => item.id === result.thread.id ? result.thread : item) : [result.thread, ...items]);
+        setView("copilot");
+        return;
+      }
+      if (route.requirementId) {
+        const requirementResult = await listRequirements(token);
+        setRequirements(requirementResult.requirements);
+        const selected = requirementResult.requirements.find((item) => item.id === route.requirementId);
+        if (selected) {
+          setRequirement(selected);
+          setClarifyAnswers(selected.recruiter_answers ?? {});
+          setView(route.view === "matches" ? "matches" : "requirement");
+          return;
+        }
+      }
+      if (route.view) setView(route.view);
+    } catch (error) {
+      setStatus(readableError(error));
+    } finally {
+      window.setTimeout(() => {
+        routeApplyingRef.current = false;
+      }, 0);
+    }
+  }
+
   async function handleLogin() {
     setBusy(true);
     setStatus("Signing in with Better Auth...");
@@ -536,6 +694,9 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   function handleLogout() {
     void authClient.signOut().catch(() => undefined);
     window.localStorage.removeItem("resume-intel-token");
+    initialRouteAppliedRef.current = false;
+    routeApplyingRef.current = false;
+    window.history.replaceState(null, "", window.location.pathname);
     setToken("");
     setCurrentUser(null);
     setWorkspaceMode("admin");
@@ -626,10 +787,11 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     await refresh();
   }
 
-  async function handleOpenCandidate(id: string) {
+  async function handleOpenCandidate(id: string, tab: CandidateDetailTab = "overview") {
     const result = await run("Loading candidate", () => getCandidate(token, id));
     if (!result) return;
     setCandidate(result);
+    setCandidateDetailTab(tab);
     setView("candidate");
   }
 
@@ -759,12 +921,20 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   }
 
   async function handleAddNote() {
-    if (!candidate || !note.trim()) return;
-    const result = await run("Saving note", () => addNote(candidate.document_id, noteName, note, token));
-    if (!result) return;
-    setCandidate(result);
-    setNote("");
-    await refresh();
+    if (!candidate || !token || !note.trim()) return;
+    setNoteSaveState("saving");
+    setNoteSaveError("");
+    try {
+      const result = await run("Saving recruiter note", () => addNote(candidate.document_id, noteName.trim() || "Recruiter Notes", note, token));
+      if (!result) throw new Error("No candidate returned after saving note");
+      setCandidate(result);
+      setNote("");
+      setNoteSaveState("saved");
+      await refresh();
+    } catch (error) {
+      setNoteSaveState("error");
+      setNoteSaveError(readableError(error));
+    }
   }
 
   async function handleUpdateNote(noteId: string, name: string, content: string) {
@@ -838,10 +1008,11 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     setView("campaigns");
   }
 
-  async function handleOpenCampaign(id: string) {
+  async function handleOpenCampaign(id: string, tab: CampaignDetailTab = "pipeline") {
     const result = await run("Loading campaign", () => getCampaign(token, id));
     if (!result) return;
     setCampaign(result);
+    setCampaignDetailTab(tab);
     setView("campaigns");
   }
 
@@ -1399,6 +1570,8 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               note={note}
               setNote={setNote}
               saveNote={handleAddNote}
+              noteSaveState={noteSaveState}
+              noteSaveError={noteSaveError}
               updateSavedNote={handleUpdateNote}
               deleteSavedNote={handleDeleteNote}
               updateProfile={handleUpdateCandidateProfile}
@@ -1407,6 +1580,8 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               reparseCandidate={handleReparseCandidate}
               canReparse={isTenantAdmin(currentUser)}
               match={() => setView("requirement")}
+              activeTab={candidateDetailTab}
+              setActiveTab={setCandidateDetailTab}
             />
           ) : null}
 
@@ -1450,6 +1625,12 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               uploadResumes={handleUploadCampaignResumes}
               updateCandidateStatus={handleCampaignCandidateStatus}
               openCandidate={handleOpenCandidate}
+              activeTab={campaignDetailTab}
+              setActiveTab={setCampaignDetailTab}
+              activePipelineStage={campaignPipelineStage}
+              setActivePipelineStage={setCampaignPipelineStage}
+              selectedCandidateId={campaignSelectedCandidateId}
+              setSelectedCandidateId={setCampaignSelectedCandidateId}
               busy={busy}
             />
           ) : null}
@@ -1639,10 +1820,10 @@ function Dashboard({
   clusters: CandidateVersionMatch[];
   deadLetterCount: number;
   setView: (view: View) => void;
-  openCandidate: (id: string) => void;
+  openCandidate: (id: string, tab?: CandidateDetailTab) => void;
 }) {
-  const incomplete = candidates.filter((item) => (item.coverage ?? 0) < 0.9).length;
-  const duplicateCount = candidates.filter((item) => (item.duplicate_risk_score ?? 0) >= 0.75).length || clusters.filter((item) => item.status === "suggested").length;
+  const urgentCoverageCandidates = candidates.filter((item) => (item.coverage ?? 1) > 0 && (item.coverage ?? 1) < 0.65);
+  const roleFactReviewCandidates = candidates.filter(candidateRoleFactsNeedReview);
   const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
   const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const newToday = candidates.filter((item) => item.updated_at && new Date(item.updated_at).getTime() >= dayAgo).length;
@@ -1654,31 +1835,43 @@ function Dashboard({
     .sort((a, b) => b - a)[0];
   const domainCounts = topDomainCounts(candidates);
   const actionItems = [
+    ...(deadLetterCount ? [{
+      title: "Resume uploads need retry or replacement",
+      body: `${deadLetterCount} upload or parsing item${deadLetterCount === 1 ? "" : "s"} failed after retries. Open the queue to retry, cancel, or inspect the exact error.`,
+      action: "Open upload queue",
+      label: "Upload queue",
+      run: () => setView("upload"),
+    }] : []),
     ...candidates
       .filter((item) => (item.duplicate_risk_score ?? 0) >= 0.75)
       .slice(0, 2)
       .map((item) => ({
         title: `${item.name ?? "Candidate"} has a possible newer resume version`,
         body: `${Math.round((item.duplicate_risk_score ?? 0) * 100)}% version signal from matching identity/profile fields.`,
-        action: "Review profile",
-        run: () => openCandidate(item.document_id),
+        action: "Review versions",
+        label: "Version review",
+        run: () => openCandidate(item.document_id, "versions"),
       })),
-    ...candidates
-      .filter((item) => (item.coverage ?? 0) < 0.8)
+    ...urgentCoverageCandidates
       .slice(0, 2)
       .map((item) => ({
-        title: `${item.name ?? "Candidate"} needs missing profile fields`,
-        body: `Coverage is ${Math.round((item.coverage ?? 0) * 100)}%. Add notes or re-upload a cleaner file if needed.`,
-        action: "Open profile",
+        title: `${item.name ?? "Candidate"} has unusable profile coverage`,
+        body: `Coverage is ${Math.round((item.coverage ?? 0) * 100)}%. Edit extracted fields, reparse, or remove the upload if it was not a resume.`,
+        action: "Fix profile",
+        label: "Profile fix",
         run: () => openCandidate(item.document_id),
       })),
-    ...(deadLetterCount ? [{
-      title: "Some resume uploads need attention",
-      body: `${deadLetterCount} upload or parsing item${deadLetterCount === 1 ? "" : "s"} require retry, replacement, or support review.`,
-      action: "Open upload queue",
-      run: () => setView("upload"),
-    }] : []),
+    ...roleFactReviewCandidates
+      .slice(0, 2)
+      .map((item) => ({
+        title: `${item.name ?? "Candidate"} needs role fact review`,
+        body: "The latest role was not fully supported by source evidence. Open Evidence to verify or edit extracted fields.",
+        action: "Review evidence",
+        label: "Fact review",
+        run: () => openCandidate(item.document_id, "evidence"),
+      })),
   ].slice(0, 5);
+  const reviewCount = actionItems.length;
   const activeCampaigns = campaigns.filter((item) => item.status !== "archived").slice(0, 4);
   return (
     <section className="snapshotPage">
@@ -1700,8 +1893,8 @@ function Dashboard({
           </button>
           <button className="stitchMetricCard attention" onClick={() => setView("upload")}>
             <div><span>Needs Review</span><b><AlertTriangle size={20} /></b></div>
-            <strong>{incomplete + duplicateCount + deadLetterCount}</strong>
-            <em>Low coverage, versions, or failed uploads</em>
+            <strong>{reviewCount}</strong>
+            <em>Only tasks with a clear next action</em>
           </button>
           <button className="stitchMetricCard" onClick={() => setView("database")}>
             <div><span>Ready Candidates</span><b><CheckCircle2 size={20} /></b></div>
@@ -1746,8 +1939,8 @@ function Dashboard({
       </main>
       <aside className="snapshotAside">
         <div className="actionHeader">
-          <h3><AlertTriangle size={22} /> Action Needed</h3>
-          <span>{actionItems.length || 0} Tasks</span>
+          <h3><AlertTriangle size={22} /> Review Queue</h3>
+          <span>{reviewCount || 0} Tasks</span>
         </div>
         <div className="stitchActionList">
           {actionItems.length ? actionItems.slice(0, 3).map((item, index) => (
@@ -1756,13 +1949,13 @@ function Dashboard({
                 <div className="avatarDot">{item.title.slice(0, 1)}</div>
                 <div>
                   <strong>{item.title.split(" has ")[0].replace(" needs missing profile fields", "")}</strong>
-                  <span>{index === 0 ? "AI Flag" : "Review"}</span>
+                  <span>{item.label}</span>
                 </div>
               </div>
               <p>{item.body}</p>
               <button onClick={item.run}>{item.action}</button>
             </article>
-          )) : <EmptyPanel title="No tasks" body="Profiles needing review will appear here." />}
+          )) : <EmptyPanel title="No resolvable tasks" body="Non-blocking uncertainty stays inside candidate reports. This queue only shows items with a concrete next action." />}
         </div>
       </aside>
     </section>
@@ -1896,6 +2089,7 @@ function RecruiterCopilot({
             </select>
           </label>
           {selectedCampaignId ? <button className="secondary" type="button" onClick={() => openCampaign(selectedCampaignId)}>Open Campaign</button> : null}
+          {activeThread?.id ? <button className="plain" type="button" onClick={() => copyCurrentUrl()}>Copy Thread Link</button> : null}
           <button className="secondary" onClick={newThread}><Plus size={16} /> New Thread</button>
         </div>
       </div>
@@ -2724,8 +2918,6 @@ function CandidateTable({ candidates, open }: { candidates: CandidateSummary[]; 
   );
 }
 
-type CandidateDetailTab = "overview" | "timeline" | "evidence" | "cv" | "notes" | "versions";
-
 function CandidateDetail({
   candidate,
   token,
@@ -2735,6 +2927,8 @@ function CandidateDetail({
   note,
   setNote,
   saveNote,
+  noteSaveState,
+  noteSaveError,
   updateSavedNote,
   deleteSavedNote,
   updateProfile,
@@ -2743,6 +2937,8 @@ function CandidateDetail({
   reparseCandidate,
   canReparse,
   match,
+  activeTab,
+  setActiveTab,
 }: {
   candidate: Candidate;
   token: string;
@@ -2751,7 +2947,9 @@ function CandidateDetail({
   setNoteName: (value: string) => void;
   note: string;
   setNote: (value: string) => void;
-  saveNote: () => void;
+  saveNote: () => Promise<void> | void;
+  noteSaveState: "idle" | "saving" | "saved" | "error";
+  noteSaveError: string;
   updateSavedNote: (noteId: string, name: string, content: string) => void;
   deleteSavedNote: (noteId: string) => void;
   updateProfile: (payload: CandidateProfileUpdate) => void;
@@ -2760,6 +2958,8 @@ function CandidateDetail({
   reparseCandidate: (id: string) => void;
   canReparse: boolean;
   match: () => void;
+  activeTab: CandidateDetailTab;
+  setActiveTab: (tab: CandidateDetailTab) => void;
 }) {
   const hr = candidate.derived?.hr_profile;
   const [previewUrl, setPreviewUrl] = useState<string>("");
@@ -2770,7 +2970,6 @@ function CandidateDetail({
   const [editingNoteId, setEditingNoteId] = useState("");
   const [editingNoteName, setEditingNoteName] = useState("");
   const [editingNoteContent, setEditingNoteContent] = useState("");
-  const [activeTab, setActiveTab] = useState<CandidateDetailTab>("overview");
   const [showRawCvText, setShowRawCvText] = useState(false);
   const [showCorrectionPanel, setShowCorrectionPanel] = useState(false);
   const [correctionForm, setCorrectionForm] = useState<CandidateCorrectionForm>(() => candidateCorrectionForm(candidate));
@@ -2980,11 +3179,12 @@ function CandidateDetail({
           </div>
         </section>
         <section className="candidateCleanActions">
-          <button className="plain" onClick={() => setActiveTab("cv")}>View CV</button>
-          <button className="plain" onClick={() => setActiveTab("notes")}>Recruiter Notes</button>
-          {canReparse ? <button className="plain" onClick={() => reparseCandidate(candidate.document_id)}>Reparse CV</button> : null}
-          <button className="plain danger" onClick={() => deleteCandidate(candidate.document_id)}>Remove Upload</button>
-          <button className="primary" onClick={match}>Match to Role</button>
+          <button className="plain" type="button" onClick={() => copyCurrentUrl()}>Copy Link</button>
+          <button className="plain" type="button" onClick={() => setActiveTab("cv")}>View CV</button>
+          <button className="plain" type="button" onClick={() => setActiveTab("notes")}>Recruiter Notes</button>
+          {canReparse ? <button className="plain" type="button" onClick={() => reparseCandidate(candidate.document_id)}>Reparse CV</button> : null}
+          <button className="plain danger" type="button" onClick={() => deleteCandidate(candidate.document_id)}>Remove Upload</button>
+          <button className="primary" type="button" onClick={match}>Match to Role</button>
         </section>
       </header>
       {needsUploadReview ? (
@@ -3019,9 +3219,9 @@ function CandidateDetail({
             <p>Clean recruiter view with facts, AI interpretation, source evidence, and notes kept separate.</p>
           </div>
           <div>
-              <button className="plain" onClick={() => setActiveTab("evidence")}>Source Evidence</button>
-              <button className="plain" onClick={() => setShowCorrectionPanel((value) => !value)}>Edit Extracted Data</button>
-              <button className="plain" onClick={() => setActiveTab("notes")}>Add Note</button>
+              <button className="plain" type="button" onClick={() => setActiveTab("evidence")}>Source Evidence</button>
+              <button className="plain" type="button" onClick={() => setShowCorrectionPanel((value) => !value)}>Edit Extracted Data</button>
+              <button className="plain" type="button" onClick={() => setActiveTab("notes")}>Add Note</button>
             </div>
         </header>
 
@@ -3146,7 +3346,11 @@ function CandidateDetail({
           </div>
           <input value={noteName} onChange={(event) => setNoteName(event.target.value)} placeholder="Note title" />
           <textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Write recruiter notes. These become searchable candidate context." />
-          <button className="secondary" onClick={saveNote} disabled={!note.trim()}>Save Note</button>
+          <button className="secondary" type="button" onClick={() => void saveNote()} disabled={!note.trim() || noteSaveState === "saving"}>
+            {noteSaveState === "saving" ? "Saving..." : noteSaveState === "saved" ? "Saved" : "Save Note"}
+          </button>
+          {noteSaveError ? <p className="noteSaveFeedback error">{noteSaveError}</p> : null}
+          {noteSaveState === "saved" ? <p className="noteSaveFeedback success">Recruiter note saved to this candidate.</p> : null}
           <div className="notes">
             {(candidate.notes ?? []).map((item, index) => (
               <article key={`${item.created_at}-${index}`}>
@@ -3299,7 +3503,11 @@ function CandidateDetail({
               <NoteTypeButtons setNoteName={setNoteName} />
               <input value={noteName} onChange={(event) => setNoteName(event.target.value)} placeholder="Note title" />
               <textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Write a quick recruiter note. It becomes searchable context." />
-              <button className="secondary" onClick={saveNote} disabled={!note.trim()}>Save Note</button>
+              <button className="secondary" type="button" onClick={() => void saveNote()} disabled={!note.trim() || noteSaveState === "saving"}>
+                {noteSaveState === "saving" ? "Saving..." : noteSaveState === "saved" ? "Saved" : "Save Note"}
+              </button>
+              {noteSaveError ? <p className="noteSaveFeedback error">{noteSaveError}</p> : null}
+              {noteSaveState === "saved" ? <p className="noteSaveFeedback success">Recruiter note saved.</p> : null}
               <div className="recentNotesCompact">
                 {(candidate.notes ?? []).slice(0, 3).map((item, index) => (
                   <article key={`${item.id ?? item.created_at}-${index}`}>
@@ -4181,6 +4389,12 @@ function CampaignsView({
   uploadResumes,
   updateCandidateStatus,
   openCandidate,
+  activeTab,
+  setActiveTab,
+  activePipelineStage,
+  setActivePipelineStage,
+  selectedCandidateId,
+  setSelectedCandidateId,
   busy,
 }: {
   campaigns: JobCampaign[];
@@ -4202,14 +4416,18 @@ function CampaignsView({
   uploadResumes: () => void;
   updateCandidateStatus: (candidateId: string, status: CampaignPipelineStatus, note?: string) => Promise<void> | void;
   openCandidate: (id: string) => void;
+  activeTab: CampaignDetailTab;
+  setActiveTab: (tab: CampaignDetailTab) => void;
+  activePipelineStage: CampaignPipelineStatus;
+  setActivePipelineStage: (stage: CampaignPipelineStatus) => void;
+  selectedCandidateId: string;
+  setSelectedCandidateId: (id: string) => void;
   busy: boolean;
 }) {
   const activeCampaign = campaign ?? campaigns[0] ?? null;
   const selectedCandidates = useMemo(() => activeCampaign?.candidates ?? [], [activeCampaign?.candidates]);
-  const [selectedCandidateId, setSelectedCandidateId] = useState("");
   const [autoOpenedCampaignId, setAutoOpenedCampaignId] = useState("");
   const [stageNote, setStageNote] = useState("");
-  const [activeTab, setActiveTab] = useState<"pipeline" | "matches" | "scorecard" | "uploads" | "activity">("pipeline");
   const [editingCampaign, setEditingCampaign] = useState(false);
   const [editForm, setEditForm] = useState({ name: "", description: "", status: "active", requirement_id: "" });
   const [scorecardForm, setScorecardForm] = useState<CampaignScorecardForm>(emptyCampaignScorecardForm());
@@ -4217,7 +4435,6 @@ function CampaignsView({
   const [campaignRequirementFile, setCampaignRequirementFile] = useState<File | null>(null);
   const [campaignMatchThreshold, setCampaignMatchThreshold] = useState(0.65);
   const [matchResultLimit, setMatchResultLimit] = useState(50);
-  const [activePipelineStage, setActivePipelineStage] = useState<CampaignPipelineStatus>("recommended");
   const campaignStages = useMemo<Array<{ id: CampaignPipelineStatus; label: string }>>(() => [
     { id: "recommended", label: "Matched" },
     { id: "shortlisted", label: "Shortlisted" },
@@ -4401,6 +4618,7 @@ function CampaignsView({
                 </div>
               </div>
               <div className="campaignCleanActions">
+                <button className="plain" type="button" onClick={() => copyCurrentUrl()}>Copy Link</button>
                 <button className="plain" onClick={() => setEditingCampaign((value) => !value)}>{editingCampaign ? "Close edit" : "Edit Campaign"}</button>
                 <button className="secondary" onClick={() => setActiveTab("uploads")}>Upload Resumes</button>
                 <button className="primary" onClick={() => matchCampaign(activeCampaign.id)} disabled={busy || !activeCampaign.requirement_id}>Find Matches</button>
