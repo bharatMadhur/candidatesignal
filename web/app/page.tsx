@@ -185,9 +185,19 @@ function routeHasDeepLink(route: WorkspaceRoute) {
   return Boolean(route.view || route.candidateId || route.campaignId || route.threadId || route.requirementId);
 }
 
+function canonicalWorkspaceUrl() {
+  if (typeof window === "undefined") return "";
+  const url = new URL(window.location.href);
+  if (url.hostname === "www.candidatesignal.ai" || url.hostname === "candidatesignal.ai") {
+    url.protocol = "https:";
+    url.hostname = "app.candidatesignal.ai";
+  }
+  return url.toString();
+}
+
 function copyCurrentUrl() {
   if (typeof window === "undefined" || typeof navigator === "undefined" || !navigator.clipboard) return;
-  void navigator.clipboard.writeText(window.location.href);
+  void navigator.clipboard.writeText(canonicalWorkspaceUrl());
 }
 
 type CopilotFilters = {
@@ -2063,9 +2073,20 @@ function RecruiterCopilot({
     return filterCopilotCandidates(latestCandidateMessage?.candidates ?? [], filters, latestQuery)
       .filter((candidate) => !ignoredCandidateIds.includes(candidate.document_id));
   }, [filters, ignoredCandidateIds, latestCandidateMessage?.candidates, latestQuery]);
-  const queryInsights = useMemo(() => buildCopilotQueryInsights(latestQuery, latestCandidateMessage?.candidates ?? latestFilteredCandidates, latestQueryIntent), [latestQuery, latestCandidateMessage?.candidates, latestFilteredCandidates, latestQueryIntent]);
+  const computedQueryInsights = useMemo(() => buildCopilotQueryInsights(latestQuery, latestCandidateMessage?.candidates ?? latestFilteredCandidates, latestQueryIntent), [latestQuery, latestCandidateMessage?.candidates, latestFilteredCandidates, latestQueryIntent]);
+  const [queryDraft, setQueryDraft] = useState(computedQueryInsights);
+  const queryDraftResetKey = latestCandidateMessage
+    ? `${activeThread?.id ?? "new"}:${latestCandidateMessage.query ?? ""}:${latestCandidateMessage.candidates?.length ?? 0}`
+    : `draft:${input}`;
+  useEffect(() => {
+    setQueryDraft(computedQueryInsights);
+  }, [queryDraftResetKey, computedQueryInsights]);
   const isSearching = busy && activeTab === "search";
   const canShowMore = Boolean(latestQuery.trim()) && !isSearching && (latestCandidateMessage?.candidates?.length ?? 0) >= resultLimit;
+  function updateQueryDraft(next: typeof queryDraft) {
+    setQueryDraft(next);
+    setInput(copilotAnalysisQuery(next));
+  }
   function showMoreResults() {
     const nextLimit = Math.min(100, resultLimit + 10);
     setResultLimit(nextLimit);
@@ -2316,23 +2337,23 @@ function RecruiterCopilot({
             <label>
               <span>Role intent</span>
               <input
-                value={queryInsights.roleIntent}
-                onChange={(event) => setInput(copilotAnalysisQuery({ ...queryInsights, roleIntent: event.target.value }))}
+                value={queryDraft.roleIntent}
+                onChange={(event) => updateQueryDraft({ ...queryDraft, roleIntent: event.target.value })}
               />
             </label>
             <label>
               <span>Skills / signals</span>
               <input
-                value={queryInsights.skills.join(", ")}
-                onChange={(event) => setInput(copilotAnalysisQuery({ ...queryInsights, skills: splitCommaList(event.target.value) }))}
+                value={queryDraft.skills.join(", ")}
+                onChange={(event) => updateQueryDraft({ ...queryDraft, skills: splitCommaList(event.target.value) })}
                 placeholder="Spark, Python, healthcare"
               />
             </label>
             <label>
               <span>Location preference</span>
               <input
-                value={queryInsights.locations.join(", ")}
-                onChange={(event) => setInput(copilotAnalysisQuery({ ...queryInsights, locations: splitCommaList(event.target.value) }))}
+                value={queryDraft.locations.join(", ")}
+                onChange={(event) => updateQueryDraft({ ...queryDraft, locations: splitCommaList(event.target.value) })}
                 placeholder="New York, remote, USA"
               />
             </label>
@@ -2342,14 +2363,11 @@ function RecruiterCopilot({
               <em>{locationRequirementLabel(latestQueryIntent.location_requirement)}</em>
             </div>
           </div>
-          <h3>Quick Refinements</h3>
-          <div className="guideList">
-            <button className="promptChip" onClick={() => setInput(rewriteCopilotLocationPreference(latestQuery, "preferred"))}>Treat location as preferred</button>
-            <button className="promptChip" onClick={() => setInput(rewriteCopilotLocationPreference(latestQuery, "required"))}>Make location required</button>
-            <button className="promptChip" onClick={() => setInput(`${latestQuery || queryInsights.roleIntent} with recent experience and recruiter-note relevance`)}>Add recency + notes</button>
-          </div>
-          <details className="savedThreadsDrawer">
-            <summary>Saved Threads ({threads.length})</summary>
+          <section className="savedThreadsDrawer">
+            <div className="savedThreadsHeader">
+              <h3>Saved Threads</h3>
+              <span>{threads.length}</span>
+            </div>
             <div className="threadList">
               {threads.length ? threads.map((thread) => (
                 <article className={activeThread?.id === thread.id ? "active" : ""} key={thread.id}>
@@ -2364,7 +2382,13 @@ function RecruiterCopilot({
                 </article>
               )) : <EmptyPanel title="No saved threads" body="Ask a Copilot question and the thread will be saved for the company workspace." />}
             </div>
-          </details>
+          </section>
+          <h3>Quick Refinements</h3>
+          <div className="guideList">
+            <button className="promptChip" onClick={() => setInput(rewriteCopilotLocationPreference(latestQuery, "preferred"))}>Treat location as preferred</button>
+            <button className="promptChip" onClick={() => setInput(rewriteCopilotLocationPreference(latestQuery, "required"))}>Make location required</button>
+            <button className="promptChip" onClick={() => setInput(`${latestQuery || queryDraft.roleIntent} with recent experience and recruiter-note relevance`)}>Add recency + notes</button>
+          </div>
         </aside>
       </div>
     </section>

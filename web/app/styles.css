@@ -1,9 +1,9 @@
 :root {
-  --background: #faf8ff;
+  --background: #ffffff;
   --surface: #ffffff;
-  --surface-low: #f3f3fe;
-  --surface-mid: #ededf9;
-  --surface-high: #e1e2ed;
+  --surface-low: #f8fafc;
+  --surface-mid: #f1f5f9;
+  --surface-high: #e2e8f0;
   --ink: #191b23;
   --muted: #475569;
   --outline: #737686;
@@ -162,10 +162,7 @@ h3 {
   align-items: start;
   gap: 30px;
   padding: 28px 34px;
-  background:
-    radial-gradient(circle at 14% 8%, rgba(53, 92, 125, 0.12), transparent 28%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(247, 244, 236, 0.68)),
-    var(--background);
+  background: var(--background);
 }
 
 .mergedHomeContent {
@@ -2643,14 +2640,14 @@ a:focus {
   display: grid;
   gap: 7px;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: 9px;
   background: #ffffff;
-  padding: 12px;
+  padding: 10px;
 }
 
 .editableQueryAnalysis .queryAnalysisSummary {
-  border-color: #cbd9e4;
-  background: #f4f8fa;
+  border-color: #d8e1ea;
+  background: #f8fafc;
 }
 
 .editableQueryAnalysis .queryAnalysisSummary strong {
@@ -2665,9 +2662,9 @@ a:focus {
 
 .editableQueryAnalysis label input {
   min-height: 38px;
-  border: 1px solid #d7e1ea;
-  border-radius: 9px;
-  background: #fbfdfe;
+  border: 1px solid #d8e1ea;
+  border-radius: 7px;
+  background: #ffffff;
   color: var(--ink);
   padding: 0 11px;
   font-size: 13px;
@@ -2701,20 +2698,39 @@ a:focus {
 }
 
 .savedThreadsDrawer {
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 10px;
 }
 
-.savedThreadsDrawer summary {
+.savedThreadsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.savedThreadsHeader h3 {
+  color: var(--ink);
+}
+
+.savedThreadsHeader span {
+  min-width: 28px;
+  border-radius: 999px;
+  background: var(--surface-low);
   color: var(--primary);
-  cursor: pointer;
+  padding: 3px 8px;
+  text-align: center;
+  font-size: 12px;
   font-weight: 900;
-  font-size: 13px;
 }
 
 .savedThreadsDrawer .threadList {
-  max-height: min(360px, 42vh);
-  margin-top: 10px;
+  max-height: min(300px, 34vh);
+  margin-top: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-right: 4px;
@@ -8098,16 +8114,16 @@ button:disabled {
 /* Mellow density pass: keep the Stitch-derived structure, but reduce volume,
    saturation, and heavy spacing across the public and workspace surfaces. */
 :root {
-  --background: #f7f5ef;
+  --background: #ffffff;
   --surface: #ffffff;
-  --surface-low: #f4f1ea;
-  --surface-mid: #ebe7dc;
-  --surface-high: #e4ded1;
+  --surface-low: #f8fafc;
+  --surface-mid: #f1f5f9;
+  --surface-high: #e2e8f0;
   --ink: #202833;
   --muted: #66727f;
-  --outline: #a3a89f;
-  --line: #e5e0d5;
-  --soft-line: #ece7dc;
+  --outline: #94a3b8;
+  --line: #e2e8f0;
+  --soft-line: #edf2f7;
   --primary: #40566f;
   --primary-soft: #e7edf3;
   --primary-mid: #60758c;
@@ -8594,9 +8610,12 @@ h3 {
 
 .copilotGuide {
   position: sticky;
-  top: 86px;
-  max-height: calc(100vh - 104px);
+  top: 0;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
   overflow: auto;
+  padding-bottom: 24px;
 }
 
 .stitchSearchCommand {
