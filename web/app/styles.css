@@ -2702,33 +2702,39 @@ a:focus {
 
 .savedThreadsDrawer {
   border-top: 1px solid var(--line);
-  padding-top: 16px;
+  padding-top: 12px;
 }
 
 .savedThreadsDrawer summary {
   color: var(--primary);
   cursor: pointer;
   font-weight: 900;
+  font-size: 13px;
 }
 
 .savedThreadsDrawer .threadList {
-  margin-top: 12px;
+  max-height: min(360px, 42vh);
+  margin-top: 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
 }
 
 .threadList {
   display: grid;
-  gap: 8px;
-  margin-bottom: 14px;
+  gap: 6px;
+  margin-bottom: 10px;
 }
 
 .threadList article {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
   border: 1px solid var(--soft-line);
+  border-radius: 8px;
   background: var(--surface-low);
-  padding: 8px;
+  padding: 6px 7px;
 }
 
 .threadList article.active {
@@ -2738,17 +2744,39 @@ a:focus {
 
 .threadList article > button:first-child {
   display: grid;
-  gap: 3px;
+  min-width: 0;
+  gap: 2px;
   border: 0;
   background: transparent;
   color: var(--ink);
+  padding: 0;
   text-align: left;
   cursor: pointer;
 }
 
+.threadList strong {
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .threadList span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.threadActions {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.threadActions .tiny {
+  min-height: 24px;
+  padding: 0 6px;
+  font-size: 10px;
 }
 
 .guideList span {
@@ -3403,6 +3431,78 @@ button:disabled {
   gap: 16px;
 }
 
+.candidateSectionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.candidateSectionHeader div {
+  display: grid;
+  gap: 4px;
+}
+
+.candidateSectionHeader p {
+  color: var(--muted);
+  line-height: 22px;
+}
+
+.candidateSectionHeader > span {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-low);
+  color: var(--muted);
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.educationList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.educationList article {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--soft-line);
+  border-radius: 8px;
+  background: var(--surface-low);
+  padding: 12px;
+}
+
+.educationList article > div {
+  display: grid;
+  gap: 3px;
+}
+
+.educationList strong {
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 21px;
+}
+
+.educationList span,
+.educationList em,
+.educationList small,
+.educationList p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.educationList em {
+  font-style: normal;
+}
+
+.educationList small {
+  color: var(--primary);
+  font-weight: 900;
+}
+
 .reportSkillGroups.clean {
   margin-top: 0;
 }
@@ -3700,6 +3800,28 @@ button:disabled {
   gap: 3px;
 }
 
+.timelineType {
+  width: fit-content;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.timelineType.education {
+  border-color: rgba(53, 92, 125, 0.24);
+  background: #edf5f8;
+  color: #24445d;
+}
+
+.timelineType.work {
+  color: var(--muted);
+}
+
 .timelineRoleLabel strong {
   color: var(--ink);
   font-size: 14px;
@@ -3745,6 +3867,15 @@ button:disabled {
 
 .timelineRow.crossOverlap .timelineTrack i {
   background: #b91c1c;
+}
+
+.timelineRow.educationTimelineRow {
+  border-color: rgba(53, 92, 125, 0.2);
+  background: #f7fbfd;
+}
+
+.timelineRow.educationTimelineRow .timelineTrack i {
+  background: #7597aa;
 }
 
 .timelineRow > p,
@@ -9311,6 +9442,144 @@ h3 {
   color: var(--ink);
   font-size: 22px;
   letter-spacing: -0.04em;
+}
+
+.campaignCandidateWorkflow {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #d8e2ea;
+  border-radius: 12px;
+  background: #f8faf9;
+  padding: 12px;
+}
+
+.campaignCandidateWorkflowHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.campaignCandidateWorkflowHead div {
+  display: grid;
+  gap: 2px;
+}
+
+.campaignCandidateWorkflowHead strong {
+  color: #22364a;
+  font-size: 17px;
+}
+
+.campaignStageProgress {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 0;
+  overflow-x: auto;
+  padding: 4px 0 8px;
+}
+
+.campaignStageProgress button {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  min-width: 52px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0;
+  text-align: center;
+}
+
+.campaignStageProgress button::before {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #d9e2e8;
+}
+
+.campaignStageProgress button:first-child::before {
+  left: 50%;
+}
+
+.campaignStageProgress button:last-child::before {
+  right: 50%;
+}
+
+.campaignStageProgress i {
+  position: relative;
+  z-index: 1;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #cbd5df;
+  border-radius: 999px;
+  background: #fff;
+}
+
+.campaignStageProgress span {
+  max-width: 74px;
+  overflow: hidden;
+  color: inherit;
+  font-size: 10px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.campaignStageProgress button.done::before,
+.campaignStageProgress button.done i {
+  border-color: #355c7d;
+  background: #355c7d;
+}
+
+.campaignStageProgress button.active {
+  color: #22364a;
+}
+
+.campaignStageProgress button.active i {
+  border-color: #22364a;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(53, 92, 125, 0.14);
+}
+
+.campaignStageMoveControls,
+.campaignStageQuickActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.campaignStageQuickActions {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.campaignCandidateNoteBox {
+  display: grid;
+  gap: 7px;
+}
+
+.campaignCandidateNoteBox span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.campaignCandidateNoteBox textarea {
+  width: 100%;
+  min-height: 96px;
+  border: 1px solid #d7e1ea;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  padding: 10px 11px;
+  resize: vertical;
 }
 
 .campaignColumnMore {

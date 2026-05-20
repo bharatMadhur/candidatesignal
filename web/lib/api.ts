@@ -126,7 +126,15 @@ export type Candidate = {
       evidence_note?: string | null;
     }>;
   }>;
-  education: Array<{ school?: string | null; degree?: string | null; field?: string | null }>;
+  education: Array<{
+    school?: string | null;
+    degree?: string | null;
+    field?: string | null;
+    location?: string | null;
+    start_date?: string | null;
+    end_date?: string | null;
+    details?: string[];
+  }>;
   certifications: string[];
   notes?: Array<{ id?: string; name: string; content: string; created_at: string; updated_at?: string | null }>;
   derived?: any;

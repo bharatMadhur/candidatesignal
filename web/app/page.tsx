@@ -2157,14 +2157,16 @@ function RecruiterCopilot({
           <details className="savedThreadsDrawer">
             <summary>Saved Threads ({threads.length})</summary>
             <div className="threadList">
-              {threads.length ? threads.slice(0, 8).map((thread) => (
+              {threads.length ? threads.map((thread) => (
                 <article className={activeThread?.id === thread.id ? "active" : ""} key={thread.id}>
                   <button onClick={() => openThread(thread.id)}>
                     <strong>{thread.title}</strong>
                     <span>{thread.message_count ?? 0} messages | {thread.updated_at ? new Date(thread.updated_at).toLocaleDateString() : "No date"}</span>
                   </button>
-                  <button className="plain tiny danger" onClick={() => archiveThread(thread.id)}>Archive</button>
-                  <button className="plain tiny" onClick={() => createRequirementFromThread(thread.id)}>Make Requirement</button>
+                  <div className="threadActions">
+                    <button className="plain tiny" onClick={() => createRequirementFromThread(thread.id)}>Req</button>
+                    <button className="plain tiny danger" onClick={() => archiveThread(thread.id)}>Archive</button>
+                  </div>
                 </article>
               )) : <EmptyPanel title="No saved threads" body="Ask a Copilot question and the thread will be saved for the company workspace." />}
             </div>
@@ -2785,7 +2787,6 @@ function CandidateDetail({
   const factVerification = candidate.derived?.fact_verification ?? {};
   const roleFactNeedsReview = factVerification.current_role_status && factVerification.current_role_status !== "verified";
   const timelineEvents = timeline?.timeline_events ?? [];
-  const timelineRows = buildTimelineRows(timelineEvents);
   const accounting = timeline?.experience_accounting;
   const bestFitRoles = toTextList(finalProfile?.best_fit_roles ?? intelligence?.hr_intelligence?.good_fit_roles);
   const aiNotes = toTextList(finalProfile?.ai_notes ?? intelligence?.hr_intelligence?.ai_notes);
@@ -2910,9 +2911,9 @@ function CandidateDetail({
     intelligence?.hr_intelligence?.possible_concerns ??
     intelligence?.hr_intelligence?.concerns
   );
-  const reportTimeline = timelineRows.length
-    ? timelineRows
-    : candidate.experience.map((item, index) => ({
+  const educationRows = candidateEducationRows(candidate.education ?? []);
+  const educationTimelineEvents = candidateEducationTimelineEvents(candidate.education ?? []);
+  const fallbackWorkTimelineEvents = candidate.experience.map((item, index) => ({
       id: `${item.company ?? "company"}-${item.title ?? "role"}-${index}`,
       title: item.title,
       organization: item.company,
@@ -2920,8 +2921,14 @@ function CandidateDetail({
       end_date: item.end_date,
       summary: item.bullets?.[0],
       workstreams: item.workstreams ?? [],
+      relationship: "work",
       crossCompanyOverlap: false,
     }));
+  const timelineBaseEvents = timelineEvents.length ? timelineEvents : fallbackWorkTimelineEvents;
+  const reportTimeline = buildTimelineRows(dedupeTimelineEvents([
+    ...timelineBaseEvents,
+    ...educationTimelineEvents,
+  ]));
   const timelineMarkers = timelineYearMarkers(reportTimeline);
   const verifiedSkillGroups = skillTaxonomyEntries.length
     ? skillTaxonomyEntries.map(([group, values]) => ({ group, skills: toTextList(Array.isArray(values) ? values : []) }))
@@ -3085,48 +3092,47 @@ function CandidateDetail({
                   </div>
                 </div>
               </article>
+
+              <article className="briefCard candidateEducationCard">
+                <div className="candidateSectionHeader">
+                  <div>
+                    <h3>Education</h3>
+                    <p>Parsed from the CV and included in candidate matching context.</p>
+                  </div>
+                  <span>{educationRows.length ? `${educationRows.length} record${educationRows.length === 1 ? "" : "s"}` : "Missing"}</span>
+                </div>
+                {educationRows.length ? (
+                  <div className="educationList">
+                    {educationRows.map((item, index) => (
+                      <article key={`${item.school}-${item.degree}-${index}`}>
+                        <div>
+                          <strong>{item.degree || item.field || "Education"}</strong>
+                          <span>{item.school || "School not extracted"}</span>
+                        </div>
+                        <em>{[item.field, item.location].filter(Boolean).join(" | ") || "Field/location not stated"}</em>
+                        <small>{educationDateLabel(item)}</small>
+                        {item.details.length ? <p>{item.details.slice(0, 2).join(" ")}</p> : null}
+                      </article>
+                    ))}
+                  </div>
+                ) : <p className="muted">No education history was extracted. Use source evidence or reparse if the CV contains education.</p>}
+              </article>
+
+              <CandidateWorkEducationTimeline
+                rows={reportTimeline}
+                markers={timelineMarkers}
+                uniqueExperience={formatYears(accounting?.total_years_unique ?? hr?.total_years_experience)}
+              />
             </div>
           </section>
         ) : null}
 
         {activeTab === "timeline" ? (
-          <section className="candidateReportTimeline cleanTimeline">
-            <div className="timelineHeader">
-              <div>
-                <h3>Experience Timeline</h3>
-                <p>Same-company projects stay nested. Red bars only indicate true cross-company overlap.</p>
-              </div>
-              <div className="timelineAccounting">
-                <span>Unique experience</span>
-                <strong>{formatYears(accounting?.total_years_unique ?? hr?.total_years_experience)}</strong>
-              </div>
-            </div>
-            {reportTimeline.length ? (
-              <div className="timelineBoard">
-                <div className="timelineYearAxis">
-                  <span />
-                  <div>
-                    {timelineMarkers.map((year) => <b key={year}>{year}</b>)}
-                  </div>
-                </div>
-                {reportTimeline.slice(0, 10).map((item: any, index: number) => (
-                  <article className={item.crossCompanyOverlap ? "timelineRow crossOverlap" : "timelineRow"} key={item.id ?? index}>
-                    <div className="timelineRoleLabel">
-                      <strong>{item.title ?? "Role"}</strong>
-                      <span>{item.organization ?? "Unknown company"}</span>
-                      <em>{item.start_date ?? "Unknown"} - {item.end_date ?? "Present"}</em>
-                    </div>
-                    <div className="timelineTrack">
-                      <i style={{ left: `${Math.max(0, Math.min(96, Number(item.left ?? 0)))}%`, width: `${Math.max(4, Math.min(100, Number(item.width ?? 100)))}%` }} />
-                      {item.crossCompanyOverlap ? <b>Cross-company overlap</b> : null}
-                    </div>
-                    {item.summary ? <p>{item.summary}</p> : null}
-                    {item.workstreams?.length ? <WorkstreamList workstreams={item.workstreams} /> : null}
-                  </article>
-                ))}
-              </div>
-            ) : <EmptyPanel title="No dated timeline extracted" body="The parser did not extract dated experience. Review the source evidence panel." />}
-          </section>
+          <CandidateWorkEducationTimeline
+            rows={reportTimeline}
+            markers={timelineMarkers}
+            uniqueExperience={formatYears(accounting?.total_years_unique ?? hr?.total_years_experience)}
+          />
         ) : null}
 
         {activeTab === "notes" ? (
@@ -3379,6 +3385,60 @@ function CandidateDetail({
         </section>
 
       </main>
+    </section>
+  );
+}
+
+function CandidateWorkEducationTimeline({
+  rows,
+  markers,
+  uniqueExperience,
+}: {
+  rows: any[];
+  markers: number[];
+  uniqueExperience: string;
+}) {
+  return (
+    <section className="candidateReportTimeline cleanTimeline workEducationTimeline">
+      <div className="timelineHeader">
+        <div>
+          <h3>Work & Education Timeline</h3>
+          <p>Employment, same-company project workstreams, and dated education are shown together. Red bars only indicate true cross-company overlap.</p>
+        </div>
+        <div className="timelineAccounting">
+          <span>Unique work experience</span>
+          <strong>{uniqueExperience}</strong>
+        </div>
+      </div>
+      {rows.length ? (
+        <div className="timelineBoard">
+          <div className="timelineYearAxis">
+            <span />
+            <div>
+              {markers.map((year) => <b key={year}>{year}</b>)}
+            </div>
+          </div>
+          {rows.slice(0, 14).map((item: any, index: number) => {
+            const isEducation = isEducationTimelineEvent(item);
+            return (
+              <article className={`timelineRow ${isEducation ? "educationTimelineRow" : ""} ${item.crossCompanyOverlap ? "crossOverlap" : ""}`.trim()} key={item.id ?? index}>
+                <div className="timelineRoleLabel">
+                  <span className={isEducation ? "timelineType education" : "timelineType work"}>{isEducation ? "Education" : "Work"}</span>
+                  <strong>{item.title ?? (isEducation ? "Education" : "Role")}</strong>
+                  <span>{item.organization ?? (isEducation ? "School not extracted" : "Unknown company")}</span>
+                  <em>{timelineDateRangeLabel(item, isEducation)}</em>
+                </div>
+                <div className="timelineTrack">
+                  <i style={{ left: `${Math.max(0, Math.min(96, Number(item.left ?? 0)))}%`, width: `${Math.max(4, Math.min(100, Number(item.width ?? 100)))}%` }} />
+                  {item.crossCompanyOverlap ? <b>Cross-company overlap</b> : null}
+                </div>
+                {item.summary ? <p>{item.summary}</p> : null}
+                {item.workstreams?.length ? <WorkstreamList workstreams={item.workstreams} /> : null}
+              </article>
+            );
+          })}
+        </div>
+      ) : <EmptyPanel title="No dated timeline extracted" body="The parser did not extract dated work or education history. Review the source evidence panel or reparse this CV." />}
     </section>
   );
 }
@@ -4140,7 +4200,7 @@ function CampaignsView({
   saveScorecard: (id: string, scorecard: CampaignScorecard) => void;
   matchCampaign: (id?: string) => void;
   uploadResumes: () => void;
-  updateCandidateStatus: (candidateId: string, status: CampaignPipelineStatus, note?: string) => void;
+  updateCandidateStatus: (candidateId: string, status: CampaignPipelineStatus, note?: string) => Promise<void> | void;
   openCandidate: (id: string) => void;
   busy: boolean;
 }) {
@@ -4186,6 +4246,10 @@ function CampaignsView({
   const activeStageCandidates = activeStageBucket?.candidates ?? [];
   const nonEmptyStageCount = stageBuckets.filter((stage) => stage.candidates.length).length;
   const selectedCampaignCandidate = activeStageCandidates.find((item) => item.candidate_id === selectedCandidateId) ?? activeStageCandidates[0] ?? null;
+  const selectedCandidateStage = selectedCampaignCandidate ? stageCandidateStatus(selectedCampaignCandidate.status) : activePipelineStage;
+  const selectedCandidateStageIndex = campaignStages.findIndex((stage) => stage.id === selectedCandidateStage);
+  const previousCampaignStage = selectedCandidateStageIndex > 0 ? campaignStages[selectedCandidateStageIndex - 1] : null;
+  const nextCampaignStage = selectedCandidateStageIndex >= 0 && selectedCandidateStageIndex < campaignStages.length - 1 ? campaignStages[selectedCandidateStageIndex + 1] : null;
   const campaignProgress = campaignProgressStats(activeCampaign, selectedCandidates);
   const campaignTimeline = useMemo(() => campaignTimelineItems(activeCampaign, selectedCandidates), [activeCampaign, selectedCandidates]);
   const rankedCandidates = useMemo(() => [...selectedCandidates].sort((left, right) => Number(right.score ?? 0) - Number(left.score ?? 0)), [selectedCandidates]);
@@ -4217,6 +4281,10 @@ function CampaignsView({
       setSelectedCandidateId(activeStageCandidates[0].candidate_id);
     }
   }, [activeStageCandidates, selectedCandidateId]);
+
+  useEffect(() => {
+    setStageNote(selectedCampaignCandidate?.stage_note ?? "");
+  }, [selectedCampaignCandidate?.candidate_id, selectedCampaignCandidate?.stage_note]);
 
   useEffect(() => {
     setMatchResultLimit(50);
@@ -4270,6 +4338,18 @@ function CampaignsView({
   async function saveCurrentScorecard() {
     if (!activeCampaign) return;
     await saveScorecard(activeCampaign.id, campaignScorecardPayload(scorecardForm, activeCampaign));
+  }
+
+  async function moveSelectedCampaignCandidate(status: CampaignPipelineStatus) {
+    if (!selectedCampaignCandidate) return;
+    await Promise.resolve(updateCandidateStatus(selectedCampaignCandidate.candidate_id, status, stageNote));
+    setActivePipelineStage(status);
+    setSelectedCandidateId(selectedCampaignCandidate.candidate_id);
+  }
+
+  async function saveSelectedCampaignNote() {
+    if (!selectedCampaignCandidate) return;
+    await Promise.resolve(updateCandidateStatus(selectedCampaignCandidate.candidate_id, selectedCandidateStage, stageNote));
   }
 
   return (
@@ -4696,20 +4776,47 @@ function CampaignsView({
                         <strong>Draft reachout angle</strong>
                         <span>{selectedCampaignCandidate.evidence?.recommendation ?? "Open the candidate report to tailor outreach from resume evidence and recruiter notes."}</span>
                       </div>
-                      <div className="campaignStageEditor">
-                        <label>
-                          <span>Move stage</span>
-                          <select value={stageCandidateStatus(selectedCampaignCandidate.status)} onChange={(event) => updateCandidateStatus(selectedCampaignCandidate.candidate_id, event.target.value as CampaignPipelineStatus, stageNote)}>
-                            {campaignStages.map((stage) => <option key={stage.id} value={stage.id}>{stage.label}</option>)}
-                          </select>
+                      <div className="campaignCandidateWorkflow">
+                        <div className="campaignCandidateWorkflowHead">
+                          <div>
+                            <span className="eyebrow">Campaign workflow</span>
+                            <strong>{campaignStages.find((stage) => stage.id === selectedCandidateStage)?.label ?? domainLabel(selectedCandidateStage)}</strong>
+                          </div>
+                          <button className="plain small" onClick={() => openCandidate(selectedCampaignCandidate.candidate_id)}>Open report</button>
+                        </div>
+                        <div className="campaignStageProgress" aria-label="Candidate campaign stage progress">
+                          {campaignStages.map((stage, index) => (
+                            <button
+                              className={stage.id === selectedCandidateStage ? "active" : index < selectedCandidateStageIndex ? "done" : ""}
+                              key={stage.id}
+                              onClick={() => moveSelectedCampaignCandidate(stage.id)}
+                              title={stage.label}
+                              type="button"
+                            >
+                              <i />
+                              <span>{stage.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                        <div className="campaignStageMoveControls">
+                          <button className="secondary small" disabled={!previousCampaignStage} onClick={() => previousCampaignStage && moveSelectedCampaignCandidate(previousCampaignStage.id)}>
+                            Move back{previousCampaignStage ? ` to ${previousCampaignStage.label}` : ""}
+                          </button>
+                          <button className="primary small" disabled={!nextCampaignStage} onClick={() => nextCampaignStage && moveSelectedCampaignCandidate(nextCampaignStage.id)}>
+                            Move forward{nextCampaignStage ? ` to ${nextCampaignStage.label}` : ""}
+                          </button>
+                        </div>
+                        <div className="campaignStageQuickActions">
+                          <button className="secondary small" onClick={() => moveSelectedCampaignCandidate("shortlisted")} disabled={selectedCandidateStage === "shortlisted"}>Shortlist</button>
+                          <button className="plain small" onClick={() => moveSelectedCampaignCandidate("contacted")} disabled={selectedCandidateStage === "contacted"}>Contacted</button>
+                          <button className="plain small" onClick={() => moveSelectedCampaignCandidate("submitted")} disabled={selectedCandidateStage === "submitted"}>Submit</button>
+                          <button className="plain small danger" onClick={() => moveSelectedCampaignCandidate("rejected")} disabled={selectedCandidateStage === "rejected"}>Reject</button>
+                        </div>
+                        <label className="campaignCandidateNoteBox">
+                          <span>Campaign-candidate note</span>
+                          <textarea value={stageNote} onChange={(event) => setStageNote(event.target.value)} placeholder="Add screening feedback, follow-up context, client fit, or why this candidate moved stages. This note only belongs to this candidate inside this campaign." />
                         </label>
-                        <textarea value={stageNote} onChange={(event) => setStageNote(event.target.value)} placeholder="Optional stage note, feedback, or next action" />
-                      </div>
-                      <div className="jobActions">
-                        <button className="plain small" onClick={() => openCandidate(selectedCampaignCandidate.candidate_id)}>Open report</button>
-                        <button className="secondary small" onClick={() => updateCandidateStatus(selectedCampaignCandidate.candidate_id, "shortlisted", stageNote)} disabled={selectedCampaignCandidate.status === "shortlisted"}>Shortlist</button>
-                        <button className="plain small" onClick={() => updateCandidateStatus(selectedCampaignCandidate.candidate_id, "submitted", stageNote)} disabled={selectedCampaignCandidate.status === "submitted"}>Submit</button>
-                        <button className="plain small danger" onClick={() => updateCandidateStatus(selectedCampaignCandidate.candidate_id, "rejected", stageNote)} disabled={selectedCampaignCandidate.status === "rejected"}>Reject</button>
+                        <button className="secondary small" onClick={saveSelectedCampaignNote}>Save campaign note</button>
                       </div>
                     </>
                   ) : (
@@ -6207,6 +6314,70 @@ function ProgressBar({ value }: { value: number }) {
       <span>{percent}%</span>
     </div>
   );
+}
+
+function candidateEducationRows(education: Candidate["education"]) {
+  return (education ?? []).map((item) => ({
+    school: textValue(item.school),
+    degree: textValue(item.degree),
+    field: textValue(item.field),
+    location: textValue(item.location),
+    start_date: textValue(item.start_date),
+    end_date: textValue(item.end_date),
+    details: toTextList(item.details ?? []),
+  })).filter((item) => item.school || item.degree || item.field || item.location);
+}
+
+function candidateEducationTimelineEvents(education: Candidate["education"]) {
+  return candidateEducationRows(education)
+    .filter((item) => item.start_date || item.end_date)
+    .map((item, index) => ({
+      id: `education-${item.school || item.degree || index}`,
+      title: item.degree || item.field || "Education",
+      organization: item.school,
+      start_date: item.start_date || item.end_date,
+      end_date: item.end_date || item.start_date,
+      summary: [item.field, item.location, ...item.details.slice(0, 2)].filter(Boolean).join(" | "),
+      relationship: "education",
+      workstreams: [],
+      overlaps_with: [],
+    }));
+}
+
+function educationDateLabel(item: { start_date?: string; end_date?: string }) {
+  if (item.start_date && item.end_date && item.start_date !== item.end_date) return `${item.start_date} - ${item.end_date}`;
+  if (item.end_date) return `Completed ${item.end_date}`;
+  if (item.start_date) return `Started ${item.start_date}`;
+  return "Dates not extracted";
+}
+
+function timelineDateRangeLabel(item: { start_date?: string | null; end_date?: string | null }, isEducation: boolean) {
+  const start = textValue(item.start_date);
+  const end = textValue(item.end_date);
+  if (isEducation && end && (!start || start === end)) return `Completed ${end}`;
+  if (isEducation && start && !end) return `Started ${start}`;
+  return `${start || "Unknown"} - ${end || (isEducation ? "Completed" : "Present")}`;
+}
+
+function isEducationTimelineEvent(value: any) {
+  const relationship = String(value?.relationship ?? value?.kind ?? value?.type ?? "").toLowerCase();
+  return relationship === "education" || relationship === "school" || relationship === "degree";
+}
+
+function dedupeTimelineEvents(events: any[]) {
+  const seen = new Set<string>();
+  return events.filter((event) => {
+    const key = [
+      isEducationTimelineEvent(event) ? "education" : "work",
+      normalizeComparableText(event?.title),
+      normalizeComparableText(event?.organization),
+      String(event?.start_date ?? ""),
+      String(event?.end_date ?? ""),
+    ].join("|");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function buildTimelineRows(events: any[]) {
