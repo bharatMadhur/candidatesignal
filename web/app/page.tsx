@@ -277,6 +277,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   const [note, setNote] = useState("");
   const [noteSaveState, setNoteSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [noteSaveError, setNoteSaveError] = useState("");
+  const [deletingNoteId, setDeletingNoteId] = useState("");
   const [clarifyAnswers, setClarifyAnswers] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<CandidateSummary[]>([]);
@@ -324,6 +325,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   useEffect(() => {
     setNoteSaveState("idle");
     setNoteSaveError("");
+    setDeletingNoteId("");
   }, [candidate?.document_id]);
 
   useEffect(() => {
@@ -956,11 +958,22 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   }
 
   async function handleDeleteNote(noteId: string) {
-    if (!candidate) return;
-    const result = await run("Deleting note", () => deleteNote(candidate.document_id, noteId, token));
-    if (!result) return;
-    setCandidate(result);
-    await refresh();
+    if (!candidate || !token || !noteId) return;
+    setDeletingNoteId(noteId);
+    setNoteSaveState("idle");
+    setNoteSaveError("");
+    try {
+      const result = await run("Deleting recruiter note", () => deleteNote(candidate.document_id, noteId, token));
+      if (!result) throw new Error("No candidate returned after deleting note");
+      setCandidate(result);
+      setStatus("Note deleted");
+      await refresh();
+    } catch (error) {
+      setNoteSaveState("error");
+      setNoteSaveError(`Could not delete note: ${readableError(error)}`);
+    } finally {
+      setDeletingNoteId("");
+    }
   }
 
   async function handleUpdateCandidateProfile(payload: CandidateProfileUpdate) {
@@ -1582,6 +1595,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               saveNote={handleAddNote}
               noteSaveState={noteSaveState}
               noteSaveError={noteSaveError}
+              deletingNoteId={deletingNoteId}
               updateSavedNote={handleUpdateNote}
               deleteSavedNote={handleDeleteNote}
               updateProfile={handleUpdateCandidateProfile}
@@ -2953,6 +2967,7 @@ function CandidateDetail({
   saveNote,
   noteSaveState,
   noteSaveError,
+  deletingNoteId,
   updateSavedNote,
   deleteSavedNote,
   updateProfile,
@@ -2974,6 +2989,7 @@ function CandidateDetail({
   saveNote: () => Promise<void> | void;
   noteSaveState: "idle" | "saving" | "saved" | "error";
   noteSaveError: string;
+  deletingNoteId: string;
   updateSavedNote: (noteId: string, name: string, content: string) => void;
   deleteSavedNote: (noteId: string) => void;
   updateProfile: (payload: CandidateProfileUpdate) => void;
@@ -3383,8 +3399,8 @@ function CandidateDetail({
                     <input value={editingNoteName} onChange={(event) => setEditingNoteName(event.target.value)} />
                     <textarea value={editingNoteContent} onChange={(event) => setEditingNoteContent(event.target.value)} />
                     <div className="jobActions">
-                      <button className="plain small" onClick={() => setEditingNoteId("")}>Cancel</button>
-                      <button className="secondary small" onClick={() => {
+                      <button className="plain small" type="button" onClick={() => setEditingNoteId("")}>Cancel</button>
+                      <button className="secondary small" type="button" onClick={() => {
                         if (!item.id) return;
                         updateSavedNote(item.id, editingNoteName, editingNoteContent);
                         setEditingNoteId("");
@@ -3398,12 +3414,19 @@ function CandidateDetail({
                     <span>{item.created_at ? new Date(item.created_at).toLocaleString() : "Saved"}</span>
                     {item.id ? (
                       <div className="jobActions">
-                        <button className="plain small" onClick={() => {
+                        <button className="plain small" type="button" onClick={() => {
                           setEditingNoteId(item.id ?? "");
                           setEditingNoteName(item.name);
                           setEditingNoteContent(item.content);
                         }}>Edit</button>
-                        <button className="plain small danger" onClick={() => item.id && deleteSavedNote(item.id)}>Delete</button>
+                        <button
+                          className="plain small danger"
+                          type="button"
+                          disabled={deletingNoteId === item.id}
+                          onClick={() => item.id && deleteSavedNote(item.id)}
+                        >
+                          {deletingNoteId === item.id ? "Deleting..." : "Delete"}
+                        </button>
                       </div>
                     ) : null}
                   </>
@@ -3540,13 +3563,20 @@ function CandidateDetail({
                     <p>{item.content}</p>
                     {item.id ? (
                       <div className="noteMiniActions">
-                        <button className="plain small" onClick={() => {
+                        <button className="plain small" type="button" onClick={() => {
                           setEditingNoteId(item.id ?? "");
                           setEditingNoteName(item.name);
                           setEditingNoteContent(item.content);
                           setActiveTab("notes");
                         }}>Edit</button>
-                        <button className="plain small danger" onClick={() => item.id && deleteSavedNote(item.id)}>Delete</button>
+                        <button
+                          className="plain small danger"
+                          type="button"
+                          disabled={deletingNoteId === item.id}
+                          onClick={() => item.id && deleteSavedNote(item.id)}
+                        >
+                          {deletingNoteId === item.id ? "Deleting..." : "Delete"}
+                        </button>
                       </div>
                     ) : null}
                   </article>
