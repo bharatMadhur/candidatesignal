@@ -1360,6 +1360,14 @@ a:focus {
   gap: 16px;
 }
 
+.operationsPage {
+  height: calc(100vh - 70px);
+  overflow-y: auto;
+  align-content: start;
+  background: var(--background);
+  padding: 30px 42px 56px;
+}
+
 .databasePage {
   height: 100vh;
   overflow-y: auto;
@@ -5640,9 +5648,52 @@ button:disabled {
   gap: 12px;
 }
 
+.uploadQueuePriorityPanel {
+  border-left: 4px solid var(--danger-soft);
+}
+
+.uploadQueueSection,
+.uploadQueueBatchDetail {
+  display: grid;
+  gap: 14px;
+}
+
 .deadLetterList {
   display: grid;
   gap: 10px;
+}
+
+.failedUploadList {
+  display: grid;
+  gap: 10px;
+}
+
+.failedUploadList article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  border: 1px solid var(--soft-line);
+  background: #fffafa;
+  padding: 14px;
+}
+
+.failedUploadList article > div:first-child {
+  display: grid;
+  gap: 5px;
+}
+
+.failedUploadList span,
+.failedUploadList p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.failedUploadList p {
+  margin: 0;
+  color: var(--danger);
+  overflow-wrap: anywhere;
 }
 
 .deadLetterList article {
@@ -5778,8 +5829,78 @@ button:disabled {
   align-items: start;
 }
 
-.operationsBatchList article {
+.operationsBatchList article,
+.uploadQueueBatchList article {
   cursor: pointer;
+}
+
+.uploadQueueBatchList {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.operationsAdvanced {
+  display: grid;
+  gap: 14px;
+}
+
+.operationsAdvanced > summary,
+.queueEventLog > summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+}
+
+.operationsAdvanced > summary::-webkit-details-marker,
+.queueEventLog > summary::-webkit-details-marker {
+  display: none;
+}
+
+.operationsAdvanced > summary > div {
+  display: grid;
+  gap: 3px;
+}
+
+.operationsAdvanced > summary strong,
+.queueEventLog > summary {
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.operationsAdvanced > summary span:not(.statusPill) {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.operationsAdvanced[open] > summary {
+  border-bottom: 1px solid var(--soft-line);
+  padding-bottom: 12px;
+}
+
+.operationsAdvancedGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.9fr);
+  gap: 14px;
+}
+
+.operationsAdvancedGrid > section,
+.operationsDeliveryHistory {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--soft-line);
+  background: var(--surface-low);
+  padding: 14px;
+}
+
+.operationsDeliveryHistory {
+  margin-top: 14px;
+}
+
+.operationsAdvanced .workerStatusPanel {
+  grid-template-columns: minmax(220px, 0.45fr) minmax(0, 1fr);
+  margin: 0;
 }
 
 .jobActions.vertical {
@@ -10026,6 +10147,10 @@ h3 {
   .structuredClarification,
   .copilotGrid,
   .operationsGrid,
+  .operationsAdvancedGrid,
+  .uploadQueueBatchList,
+  .failedUploadList article,
+  .operationsAdvanced .workerStatusPanel,
   .campaignGrid,
   .campaignBoardShell,
   .campaignBoard,
@@ -10067,6 +10192,17 @@ h3 {
 
   .workspaceTopNav .topNavLink {
     flex: 0 0 auto;
+  }
+
+  .operationsPage {
+    height: calc(100vh - 120px);
+    padding: 18px;
+  }
+
+  .operationsAdvanced > summary,
+  .queueEventLog > summary {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .loginShell.mergedHomeLoginShell {
