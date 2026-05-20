@@ -3350,7 +3350,8 @@ function CandidateDetail({
   const primaryLinkedIn = linkedinProfileUrls[0];
   const primaryPortfolio = portfolioUrls[0];
   const versionMatches = candidate.candidate_versions?.matches ?? [];
-  const versionCount = candidateVersionLinks(candidate, versionMatches).length;
+  const versionLinks = candidateVersionLinks(candidate, versionMatches);
+  const versionSummary = candidateVersionSummary(versionLinks);
   const reparseStatusBatch = latestCandidateReparseBatch(reparseBatches, sourceName);
   const reparseProgress = reparseStatusBatch ? Number(reparseStatusBatch.progress_percent ?? batchProgress(reparseStatusBatch)) : 0;
   const recruiterEvidenceRows = buildRecruiterEvidenceRows(verifiedFactRows, aiFitRows, evidenceMap, rawText);
@@ -3377,7 +3378,7 @@ function CandidateDetail({
               <span>{formatYears(accounting?.total_years_unique ?? hr?.total_years_experience)} experience</span>
               {roleFactNeedsReview ? <span className="factReviewBadge">Role facts need review</span> : <span className="factVerifiedBadge">Role facts verified</span>}
               {currentLocation ? <span className="currentLocationBadge">Latest role: {currentLocation}</span> : <span className="currentLocationBadge muted">Latest role location not stated</span>}
-              <span>{versionCount ? `${versionCount} other version${versionCount === 1 ? "" : "s"}` : "No other versions"}</span>
+              <span className={versionSummary.needsReview ? "versionReviewBadge" : ""}>{versionSummary.badge}</span>
               {reparseStatusBatch ? <span className="reparseStatusBadge">Reparse: {domainLabel(reparseStatusBatch.status)}</span> : null}
               {primaryLinkedIn ? <a href={primaryLinkedIn} target="_blank" rel="noreferrer">LinkedIn</a> : null}
               {primaryPortfolio ? <a href={primaryPortfolio} target="_blank" rel="noreferrer">Portfolio</a> : null}
@@ -3796,17 +3797,17 @@ function CandidateDetail({
                 <div><span>Coverage</span><strong>{coverage ? `${Math.round(coverage.score * 100)}%` : "Unknown"}</strong></div>
                 <div><span>Experience</span><strong>{formatYears(accounting?.total_years_unique ?? hr?.total_years_experience)}</strong></div>
                 <div><span>Top domain</span><strong>{domainRows[0] ? domainLabel(domainRows[0].domain) : "Not found"}</strong></div>
-                <div><span>Versions</span><strong>{versionCount || "None"}</strong></div>
+                <div><span>Versions</span><strong>{versionSummary.quickFact}</strong></div>
               </div>
             </article>
 
-            {versionCount ? (
+            {versionLinks.length ? (
               <article className="briefCard candidateRailVersions">
                 <div className="railCardHeader">
                   <h3>Versions</h3>
                   <button className="plain small" type="button" onClick={() => setActiveTab("versions")}>Review</button>
                 </div>
-                <p>{versionCount} related resume version{versionCount === 1 ? "" : "s"} found. Use this before deleting or correcting candidate data.</p>
+                <p>{versionSummary.railText}</p>
                 <button className="plain small" type="button" onClick={openCandidateVersions}>Open Candidate Versions</button>
               </article>
             ) : null}
@@ -4089,13 +4090,78 @@ function candidateVersionLinks(candidate: Candidate, matches: CandidateVersionMa
       name: otherName || "Candidate version",
       fileName: version?.latest_document?.original_filename || version?.documents?.[0]?.original_filename || "Uploaded resume",
       score: Number(match.score ?? 0),
-      status: match.status || "version_candidate",
+      status: normalizeCandidateVersionStatus(match.status),
       uploadedAt: version?.latest_document?.uploaded_at || version?.candidate_updated_at || version?.candidate_created_at,
       extractionMethod: version?.latest_document?.extraction_method || version?.page_methods?.[0]?.extraction_method,
       diffs: match.field_diffs ?? [],
     });
   }
-  return rows.sort((left, right) => right.score - left.score);
+  return rows.sort((left, right) => {
+    const statusDelta = candidateVersionStatusRank(left.status) - candidateVersionStatusRank(right.status);
+    return statusDelta || right.score - left.score;
+  });
+}
+
+function normalizeCandidateVersionStatus(value?: string | null) {
+  const normalized = (value || "suggested").replace("-", "_");
+  const mapped: Record<string, string> = {
+    same_person: "versioned",
+    not_same_person: "separate",
+    version_candidate: "suggested",
+  };
+  return mapped[normalized] ?? normalized;
+}
+
+function candidateVersionStatusRank(value?: string | null) {
+  const status = normalizeCandidateVersionStatus(value);
+  const ranks: Record<string, number> = {
+    versioned: 0,
+    suggested: 1,
+    review_later: 2,
+    separate: 3,
+  };
+  return ranks[status] ?? 4;
+}
+
+function candidateVersionSummary(links: ReturnType<typeof candidateVersionLinks>) {
+  const confirmed = links.filter((item) => normalizeCandidateVersionStatus(item.status) === "versioned").length;
+  const review = links.filter((item) => ["suggested", "review_later"].includes(normalizeCandidateVersionStatus(item.status))).length;
+  const separate = links.filter((item) => normalizeCandidateVersionStatus(item.status) === "separate").length;
+  const visibleCount = confirmed + review;
+  if (confirmed) {
+    return {
+      badge: `${confirmed} confirmed version${confirmed === 1 ? "" : "s"}`,
+      quickFact: String(confirmed),
+      railText: `${confirmed} uploaded resume version${confirmed === 1 ? "" : "s"} confirmed for this candidate. Separate files are preserved in the version history.`,
+      needsReview: false,
+      visibleCount,
+    };
+  }
+  if (review) {
+    return {
+      badge: `${review} version signal${review === 1 ? "" : "s"} to review`,
+      quickFact: `${review} review`,
+      railText: `${review} possible repeated upload${review === 1 ? "" : "s"} need recruiter review before being treated as resume versions.`,
+      needsReview: true,
+      visibleCount,
+    };
+  }
+  if (separate) {
+    return {
+      badge: "Version review complete",
+      quickFact: "Separate",
+      railText: "Related uploads were reviewed and kept separate, so they are not counted as resume versions.",
+      needsReview: false,
+      visibleCount: 0,
+    };
+  }
+  return {
+    badge: "No version signals",
+    quickFact: "None",
+    railText: "No related resume versions are linked to this candidate.",
+    needsReview: false,
+    visibleCount: 0,
+  };
 }
 
 function candidateVersionDocumentLabel(candidate: Candidate) {
@@ -5594,6 +5660,7 @@ function CandidateVersionReview({ clusters, decide }: { clusters: CandidateVersi
   const [selectedId, setSelectedId] = useState<string | undefined>(clusters[0]?.id);
   const filteredClusters = clusters.filter((cluster) => filter === "all" || (cluster.status ?? "suggested") === filter);
   const selected = filteredClusters.find((cluster) => cluster.id === selectedId) ?? filteredClusters[0];
+  const selectedStatus = normalizeCandidateVersionStatus(selected?.status);
   const resolutionCounts = {
     all: clusters.length,
     suggested: clusters.filter((cluster) => (cluster.status ?? "suggested") === "suggested").length,
@@ -5620,7 +5687,10 @@ function CandidateVersionReview({ clusters, decide }: { clusters: CandidateVersi
           <article className={item.id === selected?.id ? "clusterItem active" : "clusterItem"} key={item.id} onClick={() => setSelectedId(item.id)}>
             <strong>{item.left_name ?? item.name ?? "Candidate"} </strong>
             <p>{item.right_name ? `Possible version: ${item.right_name}` : "Review required"}</p>
-            <span>{Math.round(item.score * 100)}% Version signal</span>
+            <div className="clusterItemMeta">
+              <span>{Math.round(item.score * 100)}% Version signal</span>
+              <em className={`clusterStatus ${normalizeCandidateVersionStatus(item.status)}`}>{versionStatusLabel(item.status)}</em>
+            </div>
           </article>
         ))}
         {!filteredClusters.length ? <p className="muted clusterEmpty">No clusters in this status.</p> : null}
@@ -5632,11 +5702,18 @@ function CandidateVersionReview({ clusters, decide }: { clusters: CandidateVersi
               <div>
                 <h2>Version Stack: {selected.left_name ?? selected.name ?? "Candidate"}</h2>
                 <p>Matching identity signals are handled as candidate versions. Every uploaded file is preserved; no data is merged or deleted.</p>
+                <span className={`clusterStatus large ${selectedStatus}`}>Status: {versionStatusLabel(selected.status)}</span>
               </div>
               <div className="actions">
-                <button className="plain" onClick={() => selected.id && decide(selected.id, "review-later")}>Review Later</button>
-                <button className="plain" onClick={() => selected.id && decide(selected.id, "separate")}>Keep Separate</button>
-                <button className="primary" onClick={() => selected.id && decide(selected.id, "versioned")}>Mark as Versions</button>
+                <button className="plain" disabled={selectedStatus === "review_later"} onClick={() => selected.id && decide(selected.id, "review-later")}>
+                  {selectedStatus === "review_later" ? "Marked Review Later" : "Review Later"}
+                </button>
+                <button className="plain" disabled={selectedStatus === "separate"} onClick={() => selected.id && decide(selected.id, "separate")}>
+                  {selectedStatus === "separate" ? "Kept Separate" : "Keep Separate"}
+                </button>
+                <button className="primary" disabled={selectedStatus === "versioned"} onClick={() => selected.id && decide(selected.id, "versioned")}>
+                  {selectedStatus === "versioned" ? "Marked as Versions" : "Mark as Versions"}
+                </button>
               </div>
             </div>
             <section className="reasonBox">
@@ -6735,6 +6812,7 @@ function shortHash(value?: string | null) {
 
 function versionStatusLabel(value?: string | null) {
   if (!value) return "possible version";
+  const status = normalizeCandidateVersionStatus(value);
   const mapped: Record<string, string> = {
     suggested: "possible version",
     review_later: "review later",
@@ -6744,7 +6822,7 @@ function versionStatusLabel(value?: string | null) {
     not_same_person: "kept separate",
     merged: "legacy merged",
   };
-  return mapped[value] ?? domainLabel(value);
+  return mapped[status] ?? domainLabel(status);
 }
 
 function latestCandidateReparseBatch(batches: ParseBatch[], sourceName: string) {

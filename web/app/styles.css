@@ -4532,6 +4532,12 @@ button:disabled {
   color: #166534;
 }
 
+.candidateReportBadges .versionReviewBadge {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
 .factReviewText {
   color: #9a3412 !important;
   font-weight: 900;
@@ -7511,6 +7517,53 @@ button:disabled {
 .clusterItem p,
 .clusterItem span {
   color: var(--muted);
+}
+
+.clusterItemMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.clusterStatus {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-mid);
+  color: var(--muted);
+  padding: 3px 8px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.clusterStatus.large {
+  margin-top: 10px;
+  padding: 5px 10px;
+}
+
+.clusterStatus.versioned {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.clusterStatus.separate {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+}
+
+.clusterStatus.review_later,
+.clusterStatus.suggested {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #9a3412;
 }
 
 .resolutionDetail {

@@ -52,7 +52,7 @@ from .db_store import (
     update_candidate_profile_db,
     update_note_db,
 )
-from .candidate_versions import candidate_version_requirements, decide_match, find_matches_for_record, list_clusters, persist_matches
+from .candidate_versions import candidate_version_requirements, decide_match, find_matches_for_record, list_clusters, list_matches_for_candidate, persist_matches
 from .governance import get_tenant_governance_policy, list_pii_access_events, role_can_view_contact_pii, update_tenant_governance_policy
 from .llm_provider import Message, NormalizedProvider
 from .logging_config import configure_logging
@@ -561,8 +561,11 @@ def candidate(document_id: str, user: dict = Depends(current_user)) -> dict:
     try:
         tenant_id = _tenant_id(user)
         raw_record = load_candidate_db(document_id, tenant_id)
-        matches = find_matches_for_record(raw_record, tenant_id=tenant_id)
-        persist_matches(raw_record, matches, tenant_id)
+        matches = list_matches_for_candidate(document_id, tenant_id)
+        if not matches:
+            live_matches = find_matches_for_record(raw_record, tenant_id=tenant_id)
+            persist_matches(raw_record, live_matches, tenant_id)
+            matches = list_matches_for_candidate(document_id, tenant_id)
         record = public_candidate_record(raw_record, allow_pii=_can_view_pii(user))
         record["candidate_versions"] = {"matches": matches}
         if _can_view_pii(user):
@@ -588,8 +591,9 @@ def update_candidate_profile(document_id: str, request: CandidateProfileUpdateRe
     try:
         tenant_id = _tenant_id(user)
         record = update_candidate_profile_db(document_id, user["id"], request.model_dump(), tenant_id)
-        matches = find_matches_for_record(record, tenant_id=tenant_id)
-        persist_matches(record, matches, tenant_id)
+        live_matches = find_matches_for_record(record, tenant_id=tenant_id)
+        persist_matches(record, live_matches, tenant_id)
+        matches = list_matches_for_candidate(document_id, tenant_id)
         record["candidate_versions"] = {"matches": matches}
         return public_candidate_record(record, allow_pii=_can_view_pii(user))
     except FileNotFoundError as exc:
@@ -806,11 +810,15 @@ def candidate_versions_for_candidate_legacy(document_id: str, user: dict = Depen
 @app.get("/candidates/{document_id}/candidate-versions")
 def candidate_versions_for_candidate(document_id: str, user: dict = Depends(current_user)) -> dict:
     try:
-        record = load_candidate_db(document_id, _tenant_id(user))
+        tenant_id = _tenant_id(user)
+        record = load_candidate_db(document_id, tenant_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="candidate not found") from exc
-    matches = find_matches_for_record(record, tenant_id=_tenant_id(user))
-    persist_matches(record, matches, _tenant_id(user))
+    matches = list_matches_for_candidate(document_id, tenant_id)
+    if not matches:
+        live_matches = find_matches_for_record(record, tenant_id=tenant_id)
+        persist_matches(record, live_matches, tenant_id)
+        matches = list_matches_for_candidate(document_id, tenant_id)
     return {"matches": matches, "requirements": candidate_version_requirements(), "user": user}
 
 

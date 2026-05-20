@@ -47,36 +47,59 @@ class CandidateVersionDiffTests(unittest.TestCase):
     def test_candidate_detail_persists_live_version_matches(self) -> None:
         user = {"id": "user-1", "tenant_id": "tenant-1", "tenant_role": "recruiter"}
         raw_record = {"document_id": "doc-1", "name": "Candidate One"}
-        matches = [{"id": "match-1", "left_document_id": "doc-1", "right_document_id": "doc-2"}]
+        live_matches = [{"document_id": "doc-2", "score": 0.9, "reasons": [{"type": "exact_email"}]}]
+        persisted_matches = [{"id": "match-1", "left_document_id": "doc-1", "right_document_id": "doc-2", "status": "versioned"}]
 
         with (
             patch.object(web, "load_candidate_db", return_value=raw_record),
-            patch.object(web, "find_matches_for_record", return_value=matches),
+            patch.object(web, "list_matches_for_candidate", side_effect=[[], persisted_matches]),
+            patch.object(web, "find_matches_for_record", return_value=live_matches),
             patch.object(web, "persist_matches") as persist_matches,
             patch.object(web, "_can_view_pii", return_value=False),
             patch.object(web, "public_candidate_record", side_effect=lambda record, **_kwargs: dict(record)),
         ):
             result = web.candidate("doc-1", user)
 
-        persist_matches.assert_called_once_with(raw_record, matches, "tenant-1")
-        self.assertEqual(result["candidate_versions"]["matches"], matches)
+        persist_matches.assert_called_once_with(raw_record, live_matches, "tenant-1")
+        self.assertEqual(result["candidate_versions"]["matches"], persisted_matches)
+
+    def test_candidate_detail_uses_existing_version_decision_without_rescanning(self) -> None:
+        user = {"id": "user-1", "tenant_id": "tenant-1", "tenant_role": "recruiter"}
+        raw_record = {"document_id": "doc-1", "name": "Candidate One"}
+        persisted_matches = [{"id": "match-1", "left_document_id": "doc-1", "right_document_id": "doc-2", "status": "separate"}]
+
+        with (
+            patch.object(web, "load_candidate_db", return_value=raw_record),
+            patch.object(web, "list_matches_for_candidate", return_value=persisted_matches),
+            patch.object(web, "find_matches_for_record") as find_matches,
+            patch.object(web, "persist_matches") as persist_matches,
+            patch.object(web, "_can_view_pii", return_value=False),
+            patch.object(web, "public_candidate_record", side_effect=lambda record, **_kwargs: dict(record)),
+        ):
+            result = web.candidate("doc-1", user)
+
+        find_matches.assert_not_called()
+        persist_matches.assert_not_called()
+        self.assertEqual(result["candidate_versions"]["matches"], persisted_matches)
 
     def test_profile_update_persists_live_version_matches(self) -> None:
         user = {"id": "user-1", "tenant_id": "tenant-1", "tenant_role": "tenant_admin"}
         updated_record = {"document_id": "doc-1", "name": "Candidate One"}
-        matches = [{"id": "match-1", "left_document_id": "doc-1", "right_document_id": "doc-2"}]
+        live_matches = [{"document_id": "doc-2", "score": 0.9, "reasons": [{"type": "exact_email"}]}]
+        persisted_matches = [{"id": "match-1", "left_document_id": "doc-1", "right_document_id": "doc-2", "status": "versioned"}]
 
         with (
             patch.object(web, "update_candidate_profile_db", return_value=updated_record),
-            patch.object(web, "find_matches_for_record", return_value=matches),
+            patch.object(web, "find_matches_for_record", return_value=live_matches),
             patch.object(web, "persist_matches") as persist_matches,
+            patch.object(web, "list_matches_for_candidate", return_value=persisted_matches),
             patch.object(web, "_can_view_pii", return_value=False),
             patch.object(web, "public_candidate_record", side_effect=lambda record, **_kwargs: dict(record)),
         ):
             result = web.update_candidate_profile("doc-1", web.CandidateProfileUpdateRequest(), user)
 
-        persist_matches.assert_called_once_with(updated_record, matches, "tenant-1")
-        self.assertEqual(result["candidate_versions"]["matches"], matches)
+        persist_matches.assert_called_once_with(updated_record, live_matches, "tenant-1")
+        self.assertEqual(result["candidate_versions"]["matches"], persisted_matches)
 
 
 if __name__ == "__main__":

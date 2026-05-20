@@ -77,40 +77,71 @@ def list_clusters(tenant_id: str | None = None) -> list[dict[str, Any]]:
             """,
             (tenant_id, tenant_id),
         ).fetchall()
-        clusters = []
-        for row in rows:
-            match_id = str(row["id"])
-            left_profile = _cluster_profile(row["left_record_json"])
-            right_profile = _cluster_profile(row["right_record_json"])
-            clusters.append({
-                "id": str(row["id"]),
-                "left_document_id": row["left_document_id"],
-                "right_document_id": row["right_document_id"],
-                "left_name": row["left_name"],
-                "right_name": row["right_name"],
-                "score": float(row["score"]),
-                "reasons": row["reasons"],
-                "status": _version_status(row["status"]),
-                "left_profile": left_profile,
-                "right_profile": right_profile,
-                "left_version": _candidate_version_metadata(
-                    conn,
-                    row["left_document_id"],
-                    tenant_id,
-                    row["left_created_at"],
-                    row["left_updated_at"],
-                ),
-                "right_version": _candidate_version_metadata(
-                    conn,
-                    row["right_document_id"],
-                    tenant_id,
-                    row["right_created_at"],
-                    row["right_updated_at"],
-                ),
-                "field_diffs": build_version_diffs(left_profile, right_profile),
-                "audit_events": _audit_events(match_id, tenant_id),
-            })
-        return clusters
+        return [_cluster_match_from_row(conn, row, tenant_id) for row in rows]
+
+
+def list_matches_for_candidate(document_id: str, tenant_id: str | None = None) -> list[dict[str, Any]]:
+    with db() as conn:
+        rows = conn.execute(
+            """
+            select erm.id, erm.left_document_id, erm.right_document_id, erm.score, erm.reasons, erm.status,
+                   left_c.name as left_name, right_c.name as right_name,
+                   left_c.record_json as left_record_json, right_c.record_json as right_record_json,
+                   left_c.created_at as left_created_at, left_c.updated_at as left_updated_at,
+                   right_c.created_at as right_created_at, right_c.updated_at as right_updated_at
+            from candidate_version_matches erm
+            join candidates left_c on left_c.document_id=erm.left_document_id
+            join candidates right_c on right_c.document_id=erm.right_document_id
+            where (%s::uuid is null or erm.tenant_id=%s)
+              and (erm.left_document_id=%s or erm.right_document_id=%s)
+              and left_c.deleted_at is null
+              and right_c.deleted_at is null
+            order by
+              case
+                when erm.status in ('versioned', 'same_person') then 0
+                when erm.status in ('suggested', 'review_later') then 1
+                else 2
+              end,
+              erm.score desc,
+              erm.created_at desc
+            """,
+            (tenant_id, tenant_id, document_id, document_id),
+        ).fetchall()
+        return [_cluster_match_from_row(conn, row, tenant_id) for row in rows]
+
+
+def _cluster_match_from_row(conn: Any, row: dict[str, Any], tenant_id: str | None = None) -> dict[str, Any]:
+    match_id = str(row["id"])
+    left_profile = _cluster_profile(row["left_record_json"])
+    right_profile = _cluster_profile(row["right_record_json"])
+    return {
+        "id": match_id,
+        "left_document_id": row["left_document_id"],
+        "right_document_id": row["right_document_id"],
+        "left_name": row["left_name"],
+        "right_name": row["right_name"],
+        "score": float(row["score"]),
+        "reasons": row["reasons"],
+        "status": _version_status(row["status"]),
+        "left_profile": left_profile,
+        "right_profile": right_profile,
+        "left_version": _candidate_version_metadata(
+            conn,
+            row["left_document_id"],
+            tenant_id,
+            row["left_created_at"],
+            row["left_updated_at"],
+        ),
+        "right_version": _candidate_version_metadata(
+            conn,
+            row["right_document_id"],
+            tenant_id,
+            row["right_created_at"],
+            row["right_updated_at"],
+        ),
+        "field_diffs": build_version_diffs(left_profile, right_profile),
+        "audit_events": _audit_events(match_id, tenant_id),
+    }
 
 
 def _version_status(status: str | None) -> str:
