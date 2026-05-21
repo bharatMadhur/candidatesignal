@@ -531,6 +531,393 @@ h3 {
   line-height: 20px;
 }
 
+.stitchPublicHome {
+  min-height: 100vh;
+  display: grid;
+  align-content: start;
+  background: #ffffff;
+  color: var(--ink);
+}
+
+.stitchPublicNav {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  min-height: 78px;
+  display: grid;
+  grid-template-columns: minmax(220px, auto) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 28px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(14px);
+  padding: 0 max(24px, calc((100vw - 1200px) / 2));
+}
+
+.stitchPublicBrand strong {
+  color: var(--ink);
+  font-family: Manrope, Inter, sans-serif;
+  font-size: 19px;
+  letter-spacing: -0.03em;
+}
+
+.stitchPublicBrand span {
+  color: var(--primary);
+}
+
+.stitchPublicNav nav,
+.stitchNavActions {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.stitchPublicNav nav {
+  justify-content: center;
+}
+
+.stitchPublicNav nav a {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.stitchNavActions button {
+  min-height: 40px;
+  padding: 0 16px;
+}
+
+.stitchPublicHero,
+.stitchSuiteSection,
+.stitchSignalPreview,
+.stitchRoleSection,
+.stitchFinalCta,
+.stitchPublicFooter {
+  width: min(1200px, calc(100vw - 48px));
+  margin: 0 auto;
+}
+
+.stitchPublicHero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(360px, 450px);
+  gap: 64px;
+  align-items: start;
+  padding: 88px 0 74px;
+}
+
+.stitchHeroCopy {
+  display: grid;
+  gap: 28px;
+  padding-top: 18px;
+}
+
+.stitchHeroCopy h1 {
+  display: grid;
+  gap: 4px;
+  color: #0f172a;
+  font-family: Manrope, Inter, sans-serif;
+  font-size: clamp(56px, 6.4vw, 92px);
+  line-height: 1.02;
+  letter-spacing: -0.055em;
+}
+
+.stitchHeroCopy h1 span,
+.stitchHeroCopy h1 em {
+  display: block;
+  font-style: normal;
+}
+
+.stitchHeroCopy h1 em {
+  color: var(--primary);
+}
+
+.stitchHeroCopy > p {
+  max-width: 720px;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 32px;
+}
+
+.stitchAuthCard {
+  position: sticky;
+  top: 104px;
+  width: 100%;
+  border-radius: 16px;
+  padding: 28px;
+  box-shadow: 0 22px 55px rgba(15, 23, 42, 0.12);
+}
+
+.stitchSuiteSection,
+.stitchRoleSection {
+  display: grid;
+  gap: 28px;
+  padding: 44px 0;
+}
+
+.stitchSectionHeader {
+  display: grid;
+  gap: 8px;
+}
+
+.stitchSectionHeader.centered {
+  justify-items: center;
+  text-align: center;
+}
+
+.stitchSectionHeader h2,
+.stitchSignalHeader h2,
+.stitchFinalCta h2 {
+  color: #0f172a;
+  font-family: Manrope, Inter, sans-serif;
+  font-size: clamp(32px, 4vw, 44px);
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+}
+
+.stitchSectionHeader p,
+.stitchSignalHeader p,
+.stitchFinalCta p {
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 26px;
+}
+
+.stitchSuiteGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.stitchSuiteGrid article,
+.stitchRoleGrid article {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  padding: 24px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.stitchSuiteGrid article svg {
+  color: var(--primary);
+}
+
+.stitchSuiteGrid h3,
+.stitchRoleGrid h3 {
+  color: #0f172a;
+  font-family: Manrope, Inter, sans-serif;
+  font-size: 18px;
+}
+
+.stitchSuiteGrid p,
+.stitchRoleGrid p,
+.stitchRoleGrid li {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.stitchSignalPreview {
+  display: grid;
+  gap: 34px;
+  border: 1px solid #003ea8;
+  border-radius: 28px;
+  background: #00174b;
+  color: white;
+  padding: 48px;
+}
+
+.stitchSignalHeader {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.stitchSignalHeader h2,
+.stitchSignalHeader p {
+  color: white;
+}
+
+.stitchSignalHeader p {
+  color: #b4c5ff;
+}
+
+.stitchSignalGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr);
+  gap: 20px;
+  align-items: center;
+}
+
+.rawSignalCard,
+.structuredSignalCard {
+  min-height: 280px;
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  border-radius: 16px;
+  padding: 22px;
+}
+
+.rawSignalCard {
+  border: 1px solid #004ac6;
+  background: #002b75;
+  color: #dbeafe;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.rawSignalCard header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border-bottom: 1px solid rgba(180, 197, 255, 0.22);
+  padding-bottom: 12px;
+}
+
+.rawSignalCard header span {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: rgba(180, 197, 255, 0.65);
+}
+
+.rawSignalCard b {
+  margin-left: 8px;
+  color: #b4c5ff;
+  font-size: 12px;
+}
+
+.rawSignalCard mark {
+  background: rgba(0, 74, 198, 0.45);
+  color: #bfdbfe;
+  padding: 6px;
+}
+
+.signalArrow {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(180, 197, 255, 0.3);
+  border-radius: 999px;
+  background: rgba(0, 74, 198, 0.28);
+  color: #dbeafe;
+}
+
+.structuredSignalCard {
+  border: 1px solid var(--line);
+  background: white;
+  color: var(--ink);
+}
+
+.structuredSignalCard header,
+.structuredSignalCard div {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-low);
+  padding: 13px;
+}
+
+.structuredSignalCard header {
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+}
+
+.structuredSignalCard header svg {
+  color: var(--primary);
+}
+
+.structuredSignalCard em {
+  color: var(--ok);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.structuredSignalCard span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.stitchRoleGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px;
+}
+
+.roleIcon {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+}
+
+.primaryRole {
+  background: var(--primary);
+  color: white;
+}
+
+.mutedRole {
+  border: 1px solid var(--line);
+  background: var(--surface-mid);
+  color: var(--ink);
+}
+
+.stitchRoleGrid ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.stitchFinalCta {
+  display: grid;
+  justify-items: center;
+  gap: 18px;
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background: linear-gradient(180deg, rgba(0, 74, 198, 0.06), transparent 70%), white;
+  margin-top: 38px;
+  padding: 64px 24px;
+  text-align: center;
+}
+
+.stitchPublicFooter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 24px;
+  border-top: 1px solid var(--line);
+  margin-top: 64px;
+  padding: 34px 0 48px;
+}
+
+.stitchPublicFooter p {
+  color: var(--muted);
+}
+
+.stitchPublicFooter div {
+  display: flex;
+  gap: 18px;
+}
+
+.stitchPublicFooter a {
+  color: var(--muted);
+  font-weight: 800;
+  text-decoration: none;
+}
+
 .loginHelpBox span {
   color: var(--muted);
 }
@@ -10442,6 +10829,61 @@ h3 {
   .stitchParserPreview,
   .stitchPersonaGrid {
     grid-template-columns: 1fr;
+  }
+
+  .stitchPublicNav,
+  .stitchPublicHero,
+  .stitchSignalGrid,
+  .stitchRoleGrid,
+  .stitchPublicFooter {
+    grid-template-columns: 1fr;
+  }
+
+  .stitchPublicNav {
+    position: static;
+    padding: 16px;
+  }
+
+  .stitchPublicNav nav,
+  .stitchNavActions,
+  .stitchHeroActions,
+  .stitchPublicFooter div {
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+
+  .stitchPublicHero,
+  .stitchSuiteSection,
+  .stitchSignalPreview,
+  .stitchRoleSection,
+  .stitchFinalCta,
+  .stitchPublicFooter {
+    width: min(100% - 32px, 1200px);
+  }
+
+  .stitchPublicHero {
+    gap: 28px;
+    padding: 44px 0;
+  }
+
+  .stitchHeroCopy h1 {
+    font-size: clamp(40px, 13vw, 58px);
+  }
+
+  .stitchAuthCard {
+    position: static;
+  }
+
+  .stitchSuiteGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .stitchSignalPreview {
+    padding: 24px;
+  }
+
+  .signalArrow {
+    justify-self: center;
   }
 
   .mergedLoginPanel {

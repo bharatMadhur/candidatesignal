@@ -1270,103 +1270,8 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     const showApplicantComingSoon = applicantLoginSelected && !isAdminLogin && !inviteMode;
     const showMergedHome = showPublicHome && !lockedLoginMode && !inviteMode;
     const canShowPublicLoginTabs = showMergedHome && !inviteMode;
-    return (
-      <main className={showMergedHome ? "loginShell mergedHomeLoginShell stitchHomeShell" : "loginShell"}>
-        {showMergedHome ? (
-          <section className="mergedHomeContent stitchHomeContent">
-            <header className="stitchHomeNav">
-              <a className="publicBrand mergedHomeBrand" href="/">
-                <BrandMark />
-                <strong>candidateSignal.ai</strong>
-              </a>
-              <nav aria-label="Homepage sections">
-                <a href="#solutions">Solutions</a>
-                <a href="#privacy">Privacy</a>
-                <a href="#security">Security</a>
-              </nav>
-            </header>
-            <div className="mergedHomeHero stitchHomeHero">
-              <span className="stitchHomePill"><CheckCircle2 size={15} /> Evidence-backed recruiting intelligence</span>
-              <h1>
-                <span>Upload resumes.</span>
-                <span>Understand candidates.</span>
-                <em>Find the right fit faster.</em>
-              </h1>
-              <p>Built for calm, evidence-backed hiring. candidateSignal.ai turns resumes, notes, raw CV text, and job campaigns into recruiter decisions without mixing company data.</p>
-              <div className="stitchHeroActions">
-                <button className="primary" type="button" onClick={() => setApplicantLoginSelected(false)}>
-                  <LogIn size={16} /> Company Login
-                </button>
-                <button className="secondary" type="button" onClick={() => setApplicantLoginSelected(true)}>
-                  <Users size={16} /> Applicant Login
-                </button>
-              </div>
-            </div>
-            <div className="stitchHomeFeatureGrid" id="solutions">
-              <article>
-                <FileSearch size={24} />
-                <strong>Intelligent parsing</strong>
-                <span>Extract skills, timelines, PII links, locations, portfolio URLs, and evidence from raw CVs without forcing templates.</span>
-              </article>
-              <article>
-                <CheckCircle2 size={24} />
-                <strong>Evidence matching</strong>
-                <span>Every recommendation highlights source text, gaps, uncertainty, and the next recruiter action.</span>
-              </article>
-              <article>
-                <Search size={24} />
-                <strong>Search Copilot</strong>
-                <span>Ask natural-language hiring questions across your company talent pool and get ranked candidates with evidence.</span>
-              </article>
-              <article id="privacy">
-                <ShieldCheck size={24} />
-                <strong>Tenant privacy</strong>
-                <span>Company data stays isolated. Platform admins manage companies and seats, not candidate databases.</span>
-              </article>
-            </div>
-            <section className="stitchParserPreview" id="security">
-              <div>
-                <span className="eyebrow">Raw resume</span>
-                <p>“Led Spark migration, healthcare analytics, Azure Data Factory, Python, SQL, Tableau...”</p>
-              </div>
-              <div>
-                <span className="eyebrow">Structured signal</span>
-                <strong>Data engineering, healthcare domain, Azure stack, verified evidence snippets.</strong>
-              </div>
-            </section>
-            <div className="stitchPersonaGrid">
-              <article>
-                <strong>For recruiters and hiring teams</strong>
-                <span>Upload, parse, search, match, shortlist, and present candidates with defensible evidence.</span>
-              </article>
-              <article>
-                <strong>For applicants and students</strong>
-                <span>Coming soon: a personal portal to understand resume signal and application fit.</span>
-              </article>
-            </div>
-          </section>
-        ) : (
-          <section className="landingIntro loginIntroCompact">
-            <span className="eyebrow">candidateSignal.ai</span>
-            <h1>{inviteMode ? "Accept company invite." : isAdminLogin ? "Platform admin login." : "Company workspace login."}</h1>
-            <p>
-              {inviteMode
-                ? "Use the invite token from your company admin to create a tenant-scoped account."
-                : isAdminLogin
-                  ? "Use this only to create companies, manage seats, and review platform audit data."
-                  : "Use this for resumes, candidates, campaigns, requirements, matching, and Team Settings."}
-            </p>
-            <div className="loginBoundaryCard">
-              <strong>{isAdminLogin ? "Admin system" : "Company workspace"}</strong>
-              <span>
-                {isAdminLogin
-                  ? "No candidate database access from this side."
-                  : "Your candidate database is isolated to your company."}
-              </span>
-            </div>
-          </section>
-        )}
-        <section className={showMergedHome ? "loginPanel mergedLoginPanel" : "loginPanel"}>
+    const loginPanel = (
+        <section className={showMergedHome ? "loginPanel stitchAuthCard" : "loginPanel"}>
           <ShieldCheck size={28} />
           {inviteMode ? (
             <>
@@ -1488,6 +1393,186 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
           )}
           <div className="status">{busy ? <Loader2 className="spin" size={16} /> : null}{busy ? "Working..." : status}</div>
         </section>
+    );
+
+    if (showMergedHome) {
+      return (
+        <main className="stitchPublicHome">
+          <header className="stitchPublicNav">
+            <a className="publicBrand stitchPublicBrand" href="/">
+              <BrandMark />
+              <strong>candidateSignal<span>.ai</span></strong>
+            </a>
+            <nav aria-label="Homepage sections">
+              <a href="#solutions">Solutions</a>
+              <a href="#privacy">Privacy</a>
+              <a href="#security">Security</a>
+            </nav>
+            <div className="stitchNavActions">
+              <button className="plain" type="button" onClick={() => setApplicantLoginSelected(true)}>Applicant Login</button>
+              <button className="primary" type="button" onClick={() => setApplicantLoginSelected(false)}>Company Login</button>
+            </div>
+          </header>
+
+          <section className="stitchPublicHero">
+            <div className="stitchHeroCopy">
+              <span className="stitchHomePill"><CheckCircle2 size={15} /> Next-gen recruiting intelligence</span>
+              <h1>
+                <span>Upload resumes.</span>
+                <span>Understand candidates.</span>
+                <em>Find the right fit faster.</em>
+              </h1>
+              <p>Built for calm, evidence-backed hiring. Cut through traditional screening noise and discover the real professional signal in your company talent pool without mixing company data.</p>
+              <div className="stitchHeroActions">
+                <button className="primary" type="button" onClick={() => setApplicantLoginSelected(false)}>
+                  <Rocket size={16} /> Get Started
+                </button>
+                <button className="secondary" type="button" onClick={() => setApplicantLoginSelected(true)}>
+                  <Users size={16} /> Applicant Portal
+                </button>
+              </div>
+            </div>
+            {loginPanel}
+          </section>
+
+          <section className="stitchSuiteSection" id="solutions">
+            <div className="stitchSectionHeader">
+              <h2>The Intelligence Suite</h2>
+              <p>Everything needed to extract signal from noise.</p>
+            </div>
+            <div className="stitchSuiteGrid">
+              <article>
+                <FileSearch size={25} />
+                <h3>Intelligent Parsing</h3>
+                <p>Extract skills, timelines, locations, PII links, portfolio URLs, and source-backed evidence from raw resumes.</p>
+              </article>
+              <article>
+                <CheckCircle2 size={25} />
+                <h3>Evidence Matching</h3>
+                <p>Every recommendation shows source text, gaps, uncertainty, and the next recruiter action.</p>
+              </article>
+              <article>
+                <Search size={25} />
+                <h3>Search Copilot</h3>
+                <p>Ask natural-language questions across your talent pool and get ranked candidates with evidence.</p>
+              </article>
+              <article id="privacy">
+                <ShieldCheck size={25} />
+                <h3>Tenant Privacy</h3>
+                <p>Company data stays isolated. Platform admins manage companies and seats, not candidate databases.</p>
+              </article>
+            </div>
+          </section>
+
+          <section className="stitchSignalPreview" id="security">
+            <div className="stitchSignalHeader">
+              <h2>From Raw Text to Structured Signal</h2>
+              <p>The engine understands context, skills, timelines, and evidence without manual data entry.</p>
+            </div>
+            <div className="stitchSignalGrid">
+              <article className="rawSignalCard">
+                <header><span /> <span /> <span /><b>resume_upload.pdf</b></header>
+                <p>...managed healthcare analytics migration from Hadoop to Spark...</p>
+                <mark>Python, SQL, Azure Data Factory, Databricks, Tableau</mark>
+                <p>Led cross-functional data engineering delivery across enterprise stakeholders...</p>
+              </article>
+              <div className="signalArrow"><Search size={22} /></div>
+              <article className="structuredSignalCard">
+                <header>
+                  <Database size={18} />
+                  <strong>Extracted Signals</strong>
+                  <em>Evidence-backed</em>
+                </header>
+                <div>
+                  <span>Core competencies</span>
+                  <p>Data engineering, healthcare analytics, cloud migration</p>
+                </div>
+                <div>
+                  <span>Technical stack</span>
+                  <p>Spark, Python, SQL, Azure Data Factory, Databricks</p>
+                </div>
+                <div>
+                  <span>Recruiter action</span>
+                  <p>Strong fit; verify current location and recent hands-on Spark depth.</p>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section className="stitchRoleSection">
+            <div className="stitchSectionHeader centered">
+              <h2>First-Class Workspaces for Every Role</h2>
+              <p>Dedicated portals designed around the people using the product.</p>
+            </div>
+            <div className="stitchRoleGrid">
+              <article>
+                <div className="roleIcon primaryRole"><Rocket size={26} /></div>
+                <h3>For Recruiters & Hiring Teams</h3>
+                <p>The company workspace for resume upload, search, matching, campaigns, notes, and evidence-backed shortlists.</p>
+                <ul>
+                  <li>Defensible candidate decisions with exact CV evidence.</li>
+                  <li>Bulk parsing and campaign-specific uploads.</li>
+                  <li>Natural-language search across the tenant database.</li>
+                </ul>
+              </article>
+              <article>
+                <div className="roleIcon mutedRole"><Users size={26} /></div>
+                <h3>For Applicants & Students</h3>
+                <p>Coming soon: a personal portal for resume signal, application fit, and transparent candidate experiences.</p>
+                <ul>
+                  <li>Understand what the system extracts from a resume.</li>
+                  <li>Track profile strength and missing signals.</li>
+                  <li>Manage future application context in one place.</li>
+                </ul>
+              </article>
+            </div>
+          </section>
+
+          <section className="stitchFinalCta">
+            <h2>Ready to hire with evidence?</h2>
+            <p>Start with company access, upload resumes, and turn candidate data into recruiter-ready decisions.</p>
+            <button className="primary" type="button" onClick={() => setApplicantLoginSelected(false)}>Start with Company Login</button>
+          </section>
+
+          <footer className="stitchPublicFooter">
+            <a className="publicBrand" href="/">
+              <BrandMark />
+              <strong>candidateSignal.ai</strong>
+            </a>
+            <p>Evidence-backed hiring intelligence for modern recruiting teams.</p>
+            <div>
+              <a href="#solutions">Product</a>
+              <a href="#privacy">Privacy</a>
+              <a href="#security">Security</a>
+              <a href="/admin">Admin</a>
+            </div>
+          </footer>
+        </main>
+      );
+    }
+
+    return (
+      <main className="loginShell">
+        <section className="landingIntro loginIntroCompact">
+          <span className="eyebrow">candidateSignal.ai</span>
+          <h1>{inviteMode ? "Accept company invite." : isAdminLogin ? "Platform admin login." : "Company workspace login."}</h1>
+          <p>
+            {inviteMode
+              ? "Use the invite token from your company admin to create a tenant-scoped account."
+              : isAdminLogin
+                ? "Use this only to create companies, manage seats, and review platform audit data."
+                : "Use this for resumes, candidates, campaigns, requirements, matching, and Team Settings."}
+          </p>
+          <div className="loginBoundaryCard">
+            <strong>{isAdminLogin ? "Admin system" : "Company workspace"}</strong>
+            <span>
+              {isAdminLogin
+                ? "No candidate database access from this side."
+                : "Your candidate database is isolated to your company."}
+            </span>
+          </div>
+        </section>
+        {loginPanel}
       </main>
     );
   }
