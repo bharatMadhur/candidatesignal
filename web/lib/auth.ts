@@ -5,7 +5,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { Pool } from "pg";
 
-const databaseUrl = process.env.DATABASE_URL ?? readParentEnv("DATABASE_URL");
+const databaseUrl =
+  process.env.DATABASE_URL ??
+  readParentEnv("DATABASE_URL") ??
+  readSecretFile(process.env.DATABASE_URL_FILE ?? readParentEnv("DATABASE_URL_FILE"));
 
 if (!databaseUrl) {
   throw new Error("DATABASE_URL is required for Better Auth");
@@ -94,7 +97,10 @@ function readParentEnv(key: string) {
 }
 
 function resolveBetterAuthSecret() {
-  const secret = process.env.BETTER_AUTH_SECRET ?? readParentEnv("BETTER_AUTH_SECRET") ?? readSecretFile(process.env.BETTER_AUTH_SECRET_FILE);
+  const secret =
+    process.env.BETTER_AUTH_SECRET ??
+    readParentEnv("BETTER_AUTH_SECRET") ??
+    readSecretFile(process.env.BETTER_AUTH_SECRET_FILE ?? readParentEnv("BETTER_AUTH_SECRET_FILE"));
   if (secret) return secret;
   if (isStrictProductionRuntime()) {
     throw new Error("BETTER_AUTH_SECRET is required in production");

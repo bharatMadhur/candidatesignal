@@ -5,6 +5,7 @@ import unittest
 from tempfile import NamedTemporaryFile
 from unittest.mock import patch
 
+from resume_intel.db import database_url
 from resume_intel.settings import load_settings
 
 
@@ -28,6 +29,15 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.ocr_mode, "remote")
         self.assertEqual(settings.ocr_remote_url, "https://ocr.example.com")
         self.assertEqual(settings.ocr_remote_token, "ocr-token")
+
+    def test_database_url_can_be_loaded_from_secret_file(self) -> None:
+        with NamedTemporaryFile("w") as secret_file:
+            secret_file.write("postgresql://user:pass@db:5432/resume_intel")
+            secret_file.flush()
+            with patch.dict(os.environ, {"DATABASE_URL_FILE": secret_file.name}, clear=True), patch("resume_intel.db.load_dotenv"):
+                value = database_url()
+
+        self.assertEqual(value, "postgresql://user:pass@db:5432/resume_intel")
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ from fastapi import HTTPException
 
 from resume_intel import web
 from resume_intel.auth import _better_auth_secret, _session_token_from_bearer
+from resume_intel.routers import health as health_router
 from resume_intel.tenancy import _is_platform_role, normalize_email, require_tenant_admin, require_tenant_write, validate_tenant_creation_request
 from resume_intel.web import _can_view_pii, _redact_campaign_pii, _redact_copilot_thread_pii, _redact_summary_pii
 
@@ -215,10 +216,10 @@ class BetterAuthSecurityTests(unittest.TestCase):
 
     def test_deep_health_reports_latest_migration(self) -> None:
         with (
-            patch.object(web, "db", lambda: _HealthDb()),
-            patch.object(web, "applied_migrations", return_value=[{"version": "baseline"}, {"version": "20260513_0005"}]),
+            patch.object(health_router, "db", lambda: _HealthDb()),
+            patch.object(health_router, "applied_migrations", return_value=[{"version": "baseline"}, {"version": "20260513_0005"}]),
         ):
-            payload = web.healthz_deep()
+            payload = health_router.healthz_deep()
 
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["database"], "ready")

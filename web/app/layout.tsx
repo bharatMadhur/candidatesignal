@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import "./styles/base.css";
 import "./styles.css";
 import "./styles/public-home.css";
 

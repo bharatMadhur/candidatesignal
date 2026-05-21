@@ -50,13 +50,32 @@ class ProductionConfigTests(unittest.TestCase):
         self.assertEqual(self.run_checker(env), 1)
 
     def test_accepts_secret_file_without_plaintext_secret_env(self) -> None:
-        with NamedTemporaryFile("w") as secret_file:
+        with NamedTemporaryFile("w") as secret_file, NamedTemporaryFile("w") as database_file:
             secret_file.write("file-backed-production-secret-with-more-than-32-chars")
             secret_file.flush()
+            database_file.write("postgresql://user:pass@db:5432/resume_intel")
+            database_file.flush()
             env = {
                 key: value
-                for key, value in (BASE_ENV | {"BETTER_AUTH_SECRET_FILE": secret_file.name, "RESUME_INTEL_LITELLM_API_KEY": "sk-test"}).items()
-                if key != "BETTER_AUTH_SECRET"
+                for key, value in (
+                    BASE_ENV
+                    | {
+                        "DATABASE_URL_FILE": database_file.name,
+                        "BETTER_AUTH_SECRET_FILE": secret_file.name,
+                        "RESUME_INTEL_LITELLM_API_KEY": "sk-test",
+                    }
+                ).items()
+                if key not in {"DATABASE_URL", "BETTER_AUTH_SECRET"}
+            }
+            self.assertEqual(self.run_checker(env), 0)
+
+    def test_accepts_alert_webhook_secret_file(self) -> None:
+        with NamedTemporaryFile("w") as webhook_file:
+            webhook_file.write("https://hooks.example.com/services/redacted")
+            webhook_file.flush()
+            env = BASE_ENV | {
+                "RESUME_INTEL_ALERT_WEBHOOK_URL_FILE": webhook_file.name,
+                "RESUME_INTEL_LITELLM_API_KEY": "sk-test",
             }
             self.assertEqual(self.run_checker(env), 0)
 

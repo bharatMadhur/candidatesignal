@@ -93,6 +93,15 @@ Other secrets are generated if omitted:
 - `OCR_INTERNAL_TOKEN`
 - `RESUME_INTEL_BOOTSTRAP_TOKEN`
 
+Optional external alert delivery:
+
+- `RESUME_INTEL_ALERT_WEBHOOK_URL`
+
+If this is unset, worker failures, OCR warnings, stale indexes, and dead-letter
+alerts stay visible in the in-app Operations view only. Set it only to a
+company-owned webhook endpoint because alert payloads include operational
+metadata.
+
 Create/update secrets:
 
 ```bash
@@ -135,6 +144,12 @@ Uploaded documents are stored in the private GCS bucket with object versioning
 enabled. Noncurrent object versions are deleted after 30 days to control storage
 cost while still protecting against accidental file overwrites/deletes.
 
+Verify the current storage and network posture:
+
+```bash
+deploy/gcp/08_verify_security_posture.sh
+```
+
 ## VM App Bootstrap
 
 SSH to the VM:
@@ -150,16 +165,19 @@ cd /opt/candidatesignal
 git clone https://github.com/bharatMadhur/candidatesignal.git .
 ```
 
-Render the VM env locally:
+Render the VM env bundle locally. The `.env` file contains non-secret runtime
+configuration. Secret values are rendered into separate files under
+`secrets/`, which is mounted read-only into the API, worker, and UI containers.
 
 ```bash
-deploy/gcp/06_render_vm_env.sh > /tmp/candidatesignal.env
+RENDER_VM_ENV_OUTPUT_DIR=/tmp/candidatesignal-vm deploy/gcp/06_render_vm_env.sh
 ```
 
 Copy it to the VM:
 
 ```bash
-gcloud compute scp /tmp/candidatesignal.env candidatesignal-app-1:/opt/candidatesignal/.env --zone=us-central1-a
+gcloud compute scp /tmp/candidatesignal-vm/.env candidatesignal-app-1:/opt/candidatesignal/.env --zone=us-central1-a
+gcloud compute scp --recurse /tmp/candidatesignal-vm/secrets candidatesignal-app-1:/opt/candidatesignal/secrets --zone=us-central1-a
 ```
 
 On the VM:
@@ -200,8 +218,13 @@ Before heavier production traffic, consider upgrading Cloud SQL to at least
 - VM service account receives `roles/run.invoker`.
 - Worker calls OCR with `OCR_REMOTE_AUTH=google_id_token`.
 - Optional app-level OCR token is still passed as `X-OCR-Token`.
+- Runtime secrets are mounted as local secret files, not stored as literal values
+  in the Docker Compose environment.
 - Resume files are stored in private GCS.
 - Raw CV preview must continue going through authenticated API routes.
+- Cloud SQL should have no authorized public networks. The current cheapest
+  deployment connects through Cloud SQL Auth Proxy; private IP/PSC or HA is a
+  later paid topology upgrade.
 
 ## DNS
 

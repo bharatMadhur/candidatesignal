@@ -73,7 +73,11 @@ def create_user(email: str, password: str, role: str = "recruiter", name: str | 
 
 
 def bootstrap_platform_admin(email: str, password: str, name: str | None = None, setup_token: str | None = None) -> dict[str, Any]:
-    required_token = os.getenv("RESUME_INTEL_BOOTSTRAP_TOKEN", "").strip()
+    required_token = (
+        os.getenv("RESUME_INTEL_BOOTSTRAP_TOKEN")
+        or _secret_file("RESUME_INTEL_BOOTSTRAP_TOKEN_FILE")
+        or ""
+    ).strip()
     with db() as conn:
         existing_admin = conn.execute(
             "select 1 from users where role in ('admin', 'platform_admin') limit 1"

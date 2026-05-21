@@ -170,9 +170,13 @@ def _upsert_alert(
     with db() as conn:
         existing = conn.execute(
             """
-            select id
+            select id, status
             from operational_alerts
-            where tenant_id=%s and alert_type=%s and entity_type=%s and entity_id=%s and status='open'
+            where tenant_id=%s
+              and alert_type=%s
+              and entity_type=%s
+              and entity_id=%s
+              and status in ('open', 'acknowledged')
             limit 1
             """,
             (tenant_id, alert_type, entity_type, entity_id),

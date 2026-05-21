@@ -18,6 +18,8 @@ web/node_modules/
 web/.next/
 web/out/
 web/.turbo/
+web/test-results/
+web/playwright-report/
 web/npm-debug.log*
 web/yarn-debug.log*
 web/yarn-error.log*

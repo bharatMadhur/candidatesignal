@@ -31,17 +31,18 @@ services:
       context: .
       dockerfile: Dockerfile.api
     environment:
-      DATABASE_URL: postgresql://${SQL_USER}:${DATABASE_PASSWORD}@cloudsql-proxy:5432/${SQL_DATABASE}
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      DATABASE_URL_FILE: /run/candidatesignal-secrets/database-url
+      BETTER_AUTH_SECRET_FILE: /run/candidatesignal-secrets/better-auth-secret
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
-      RESUME_INTEL_BOOTSTRAP_TOKEN: ${RESUME_INTEL_BOOTSTRAP_TOKEN}
+      RESUME_INTEL_BOOTSTRAP_TOKEN_FILE: /run/candidatesignal-secrets/bootstrap-token
       RESUME_INTEL_ENABLE_LEGACY_AUTH: "0"
       RESUME_INTEL_ALLOW_UNSIGNED_BETTER_AUTH_BEARER: "0"
       RESUME_INTEL_JSON_LOGS: "1"
       RESUME_INTEL_STORAGE_BACKEND: gcs
       RESUME_INTEL_GCS_BUCKET: ${RESUME_INTEL_GCS_BUCKET}
+      RESUME_INTEL_ALERT_WEBHOOK_URL_FILE: /run/candidatesignal-secrets/alert-webhook-url
       RESUME_INTEL_LITELLM_BASE_URL: ${RESUME_INTEL_LITELLM_BASE_URL:-https://api.openai.com/v1}
-      RESUME_INTEL_LITELLM_API_KEY: ${RESUME_INTEL_LITELLM_API_KEY}
+      RESUME_INTEL_LITELLM_API_KEY_FILE: /run/candidatesignal-secrets/litellm-api-key
       RESUME_INTEL_LITELLM_MODEL: ${RESUME_INTEL_LITELLM_MODEL:-openai/gpt-5-nano}
       RESUME_INTEL_EMBEDDING_MODEL: ${RESUME_INTEL_EMBEDDING_MODEL:-openai/text-embedding-3-small}
       RESUME_INTEL_ALLOW_HASH_EMBEDDING_FALLBACK: "0"
@@ -49,12 +50,13 @@ services:
       OCR_REMOTE_URL: ${OCR_REMOTE_URL}
       OCR_REMOTE_AUTH: google_id_token
       OCR_REMOTE_AUDIENCE: ${OCR_REMOTE_AUDIENCE}
-      OCR_REMOTE_TOKEN: ${OCR_INTERNAL_TOKEN}
+      OCR_REMOTE_TOKEN_FILE: /run/candidatesignal-secrets/ocr-internal-token
       OCR_REMOTE_TIMEOUT_SECONDS: ${OCR_REMOTE_TIMEOUT_SECONDS:-1800}
     ports:
       - "127.0.0.1:${API_PORT:-8010}:8010"
     volumes:
       - app_data:/app/data
+      - ./secrets:/run/candidatesignal-secrets:ro
     depends_on:
       - cloudsql-proxy
     restart: unless-stopped
@@ -65,12 +67,13 @@ services:
       dockerfile: Dockerfile.api
     command: ["python", "scripts/run_parse_worker.py", "--worker-id", "gcp-vm-worker"]
     environment:
-      DATABASE_URL: postgresql://${SQL_USER}:${DATABASE_PASSWORD}@cloudsql-proxy:5432/${SQL_DATABASE}
+      DATABASE_URL_FILE: /run/candidatesignal-secrets/database-url
       RESUME_INTEL_JSON_LOGS: "1"
       RESUME_INTEL_STORAGE_BACKEND: gcs
       RESUME_INTEL_GCS_BUCKET: ${RESUME_INTEL_GCS_BUCKET}
+      RESUME_INTEL_ALERT_WEBHOOK_URL_FILE: /run/candidatesignal-secrets/alert-webhook-url
       RESUME_INTEL_LITELLM_BASE_URL: ${RESUME_INTEL_LITELLM_BASE_URL:-https://api.openai.com/v1}
-      RESUME_INTEL_LITELLM_API_KEY: ${RESUME_INTEL_LITELLM_API_KEY}
+      RESUME_INTEL_LITELLM_API_KEY_FILE: /run/candidatesignal-secrets/litellm-api-key
       RESUME_INTEL_LITELLM_MODEL: ${RESUME_INTEL_LITELLM_MODEL:-openai/gpt-5-nano}
       RESUME_INTEL_EMBEDDING_MODEL: ${RESUME_INTEL_EMBEDDING_MODEL:-openai/text-embedding-3-small}
       RESUME_INTEL_ALLOW_HASH_EMBEDDING_FALLBACK: "0"
@@ -78,10 +81,11 @@ services:
       OCR_REMOTE_URL: ${OCR_REMOTE_URL}
       OCR_REMOTE_AUTH: google_id_token
       OCR_REMOTE_AUDIENCE: ${OCR_REMOTE_AUDIENCE}
-      OCR_REMOTE_TOKEN: ${OCR_INTERNAL_TOKEN}
+      OCR_REMOTE_TOKEN_FILE: /run/candidatesignal-secrets/ocr-internal-token
       OCR_REMOTE_TIMEOUT_SECONDS: ${OCR_REMOTE_TIMEOUT_SECONDS:-1800}
     volumes:
       - app_data:/app/data
+      - ./secrets:/run/candidatesignal-secrets:ro
     depends_on:
       - cloudsql-proxy
     restart: unless-stopped
@@ -93,16 +97,18 @@ services:
       args:
         NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-/api}
     environment:
-      DATABASE_URL: postgresql://${SQL_USER}:${DATABASE_PASSWORD}@cloudsql-proxy:5432/${SQL_DATABASE}
+      DATABASE_URL_FILE: /run/candidatesignal-secrets/database-url
       NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE}
       SERVER_API_BASE: http://api:8010
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_SECRET_FILE: /run/candidatesignal-secrets/better-auth-secret
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
       BETTER_AUTH_TRUSTED_ORIGINS: ${BETTER_AUTH_TRUSTED_ORIGINS}
     ports:
       - "127.0.0.1:${UI_PORT:-3001}:3001"
     depends_on:
       - api
+    volumes:
+      - ./secrets:/run/candidatesignal-secrets:ro
     restart: unless-stopped
 
 volumes:

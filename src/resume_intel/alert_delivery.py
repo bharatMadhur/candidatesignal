@@ -17,7 +17,7 @@ def deliver_operational_alert(alert: dict[str, Any]) -> None:
     stay in Postgres/UI only and no external network transfer happens.
     """
 
-    webhook_url = (os.getenv("RESUME_INTEL_ALERT_WEBHOOK_URL") or "").strip()
+    webhook_url = _env_or_file("RESUME_INTEL_ALERT_WEBHOOK_URL", "RESUME_INTEL_ALERT_WEBHOOK_URL_FILE")
     if not webhook_url:
         return
     payload = _webhook_payload(alert)
@@ -95,3 +95,17 @@ def _redacted_destination(value: str) -> str:
     prefix, rest = value.split("://", 1)
     host = rest.split("/", 1)[0]
     return f"{prefix}://{host}/..."
+
+
+def _env_or_file(name: str, file_name: str) -> str:
+    value = (os.getenv(name) or "").strip()
+    if value:
+        return value
+    path = os.getenv(file_name)
+    if not path:
+        return ""
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            return handle.read().strip()
+    except OSError:
+        return ""

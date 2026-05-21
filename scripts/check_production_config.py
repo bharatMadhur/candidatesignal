@@ -6,7 +6,7 @@ import sys
 from dotenv import load_dotenv
 
 
-REQUIRED = ["DATABASE_URL", "BETTER_AUTH_URL"]
+REQUIRED = ["BETTER_AUTH_URL"]
 INSECURE_SECRET_VALUES = {
     "",
     "change-me-in-production",
@@ -22,6 +22,8 @@ def main() -> int:
     for name in REQUIRED:
         if not os.getenv(name):
             errors.append(f"{name} is required")
+    if not _secret_value("DATABASE_URL", "DATABASE_URL_FILE"):
+        errors.append("DATABASE_URL or DATABASE_URL_FILE is required")
 
     secret = _secret_value("BETTER_AUTH_SECRET", "BETTER_AUTH_SECRET_FILE", "RESUME_INTEL_BETTER_AUTH_SECRET_FILE")
     if secret in INSECURE_SECRET_VALUES or len(secret) < 32:
@@ -58,7 +60,7 @@ def main() -> int:
     if not _secret_value("RESUME_INTEL_LITELLM_API_KEY", "RESUME_INTEL_LITELLM_API_KEY_FILE", "OPENAI_API_KEY", "OPENAI_API_KEY_FILE"):
         warnings.append("RESUME_INTEL_LITELLM_API_KEY is not set; deep LLM parsing/synthesis will fail unless another provider key is configured")
 
-    if not os.getenv("RESUME_INTEL_ALERT_WEBHOOK_URL"):
+    if not _secret_value("RESUME_INTEL_ALERT_WEBHOOK_URL", "RESUME_INTEL_ALERT_WEBHOOK_URL_FILE"):
         warnings.append("RESUME_INTEL_ALERT_WEBHOOK_URL is not set; operational alerts will stay in-app only")
 
     for item in warnings:

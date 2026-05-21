@@ -19,10 +19,22 @@ LOCAL_DEV_RECRUITER_EMAIL = "recruiter@example.com"
 
 def database_url() -> str:
     load_dotenv()
-    value = os.getenv("DATABASE_URL")
+    value = os.getenv("DATABASE_URL") or _secret_file("DATABASE_URL_FILE")
     if not value:
         raise RuntimeError("DATABASE_URL is not set")
     return value
+
+
+def _secret_file(name: str) -> str | None:
+    path = os.getenv(name)
+    if not path:
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            value = handle.read().strip()
+    except OSError:
+        return None
+    return value or None
 
 
 def _hash_password(password: str, salt: bytes | None = None) -> str:

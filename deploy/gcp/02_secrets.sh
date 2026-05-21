@@ -79,6 +79,15 @@ else
   fi
 fi
 
+if [[ -n "${RESUME_INTEL_ALERT_WEBHOOK_URL:-}" ]]; then
+  upsert_secret "operational-alert-webhook-url" "${RESUME_INTEL_ALERT_WEBHOOK_URL}"
+  echo "Loaded operational alert webhook from environment."
+elif secret_exists "operational-alert-webhook-url"; then
+  echo "Keeping existing operational-alert-webhook-url secret."
+else
+  echo "No operational alert webhook configured. Alerts will remain in-app until the secret is added."
+fi
+
 for account in "${VM_SERVICE_ACCOUNT}" "${OCR_SERVICE_ACCOUNT}"; do
   email="$(service_account_email "${account}")"
   gcloud secrets add-iam-policy-binding "ocr-internal-token" \
@@ -96,6 +105,9 @@ gcloud secrets add-iam-policy-binding "resume-intel-bootstrap-token" \
   --member="serviceAccount:$(service_account_email "${VM_SERVICE_ACCOUNT}")" \
   --role="roles/secretmanager.secretAccessor" >/dev/null
 gcloud secrets add-iam-policy-binding "litellm-api-key" \
+  --member="serviceAccount:$(service_account_email "${VM_SERVICE_ACCOUNT}")" \
+  --role="roles/secretmanager.secretAccessor" >/dev/null 2>&1 || true
+gcloud secrets add-iam-policy-binding "operational-alert-webhook-url" \
   --member="serviceAccount:$(service_account_email "${VM_SERVICE_ACCOUNT}")" \
   --role="roles/secretmanager.secretAccessor" >/dev/null 2>&1 || true
 

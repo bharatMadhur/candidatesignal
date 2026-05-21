@@ -37,7 +37,7 @@ from .campaigns import (
 )
 from .copilot_synthesis import synthesize_copilot_answer
 from .copilot_threads import append_copilot_message, archive_copilot_thread, create_copilot_thread, get_copilot_thread, list_copilot_threads
-from .db import applied_migrations, db, migrate
+from .db import db, migrate
 from .db_store import (
     add_note_db,
     candidate_document_metadata,
@@ -77,8 +77,7 @@ from .maintenance_jobs import (
     retry_candidate_maintenance_job,
     run_candidate_rederive_job,
 )
-from .operations import acknowledge_alert, list_alert_deliveries, list_operational_alerts
-from .parse_jobs import cancel_batch, cancel_job, create_parse_batch, create_reparse_job_for_candidate, get_parse_batch, get_parse_job, get_worker_status, list_dead_letters, list_parse_batches, resolve_dead_letter, retry_job, run_job, run_next_job
+from .parse_jobs import cancel_batch, cancel_job, create_parse_batch, create_reparse_job_for_candidate, get_parse_batch, get_parse_job, get_worker_status, list_parse_batches, retry_job, run_job, run_next_job
 from .pii import redact_contact_pii_text
 from .pipeline import SUPPORTED_EXTENSIONS
 from .requirements import (
@@ -95,6 +94,8 @@ from .requirements import (
     match_requirement,
     set_match_status,
 )
+from .routers.health import router as health_router
+from .routers.operations import router as operations_router
 from .settings import load_settings
 from .tenancy import (
     accept_invitation,
@@ -142,6 +143,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(health_router)
+app.include_router(operations_router)
 
 
 @app.middleware("http")
@@ -311,46 +314,6 @@ class CandidateMaintenanceRequest(BaseModel):
 
 class CandidateReparseRequest(BaseModel):
     auto_start: bool = True
-
-
-@app.get("/health")
-def health() -> dict:
-    return {"ok": True}
-
-
-@app.get("/healthz")
-def healthz() -> dict:
-    return {"ok": True, "service": "candidateSignal.ai-api"}
-
-
-@app.get("/readyz")
-def readyz() -> dict:
-    try:
-        with db() as conn:
-            conn.execute("select 1").fetchone()
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"database not ready: {exc}") from exc
-    return {"ok": True, "database": "ready"}
-
-
-@app.get("/healthz/deep")
-def healthz_deep() -> dict:
-    try:
-        with db() as conn:
-            conn.execute("select 1").fetchone()
-        migrations = applied_migrations()
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"deep health check failed: {exc}") from exc
-    return {
-        "ok": True,
-        "service": "candidateSignal.ai-api",
-        "database": "ready",
-        "migrations": {
-            "status": "ready" if migrations else "missing",
-            "applied_count": len(migrations),
-            "latest": migrations[-1]["version"] if migrations else None,
-        },
-    }
 
 
 @app.on_event("startup")
@@ -1482,70 +1445,6 @@ def cancel_candidate_rederive_job(job_id: str, user: dict = Depends(current_user
         raise HTTPException(status_code=404, detail="maintenance job not found or not cancellable") from exc
 
 
-@app.get("/parse-dead-letters")
-def parse_dead_letters(
-    status: str = Query("open"),
-    limit: int = Query(50, ge=1, le=200),
-    user: dict = Depends(current_user),
-) -> dict:
-    require_tenant_admin(user)
-    return {"dead_letters": list_dead_letters(_tenant_id(user), status=status, limit=limit), "user": user}
-
-
-@app.get("/parse-file-reviews")
-def parse_file_reviews(
-    status: str = Query("open"),
-    limit: int = Query(50, ge=1, le=200),
-    user: dict = Depends(current_user),
-) -> dict:
-    require_tenant_admin(user)
-    return {"file_reviews": list_dead_letters(_tenant_id(user), status=status, limit=limit), "user": user}
-
-
-@app.get("/operational-alerts")
-def operational_alerts(
-    status: str = Query("open"),
-    limit: int = Query(100, ge=1, le=200),
-    user: dict = Depends(current_user),
-) -> dict:
-    require_tenant_admin(user)
-    return {"alerts": list_operational_alerts(_tenant_id(user), status=status, limit=limit), "user": user}
-
-
-@app.post("/operational-alerts/{alert_id}/acknowledge")
-def operational_alert_acknowledge(alert_id: str, user: dict = Depends(current_user)) -> dict:
-    require_tenant_write(user)
-    try:
-        return {"alert": acknowledge_alert(alert_id, _tenant_id(user), user["id"]), "user": user}
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="alert not found or already closed") from exc
-
-
-@app.get("/operational-alert-deliveries")
-def operational_alert_delivery_history(
-    limit: int = Query(100, ge=1, le=200),
-    user: dict = Depends(current_user),
-) -> dict:
-    require_tenant_admin(user)
-    return {"deliveries": list_alert_deliveries(_tenant_id(user), limit=limit), "user": user}
-
-
-@app.post("/parse-dead-letters/{dead_letter_id}/resolve")
-def parse_dead_letter_resolve(dead_letter_id: str, user: dict = Depends(current_user)) -> dict:
-    require_tenant_write(user)
-    try:
-        return {"dead_letter": resolve_dead_letter(dead_letter_id, _tenant_id(user), user["id"]), "user": user}
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="dead-letter item not found or already resolved") from exc
-
-
-@app.post("/parse-file-reviews/{review_id}/resolve")
-def parse_file_review_resolve(review_id: str, user: dict = Depends(current_user)) -> dict:
-    require_tenant_write(user)
-    try:
-        return {"file_review": resolve_dead_letter(review_id, _tenant_id(user), user["id"]), "user": user}
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="file review item not found or already resolved") from exc
 
 
 def _tenant_id(user: dict) -> str:
