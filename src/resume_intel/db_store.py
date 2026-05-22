@@ -270,10 +270,9 @@ def add_note_db(
         conn.commit()
     note = _note_row(note_row)
     record.setdefault("notes", []).append(note)
-    enrich_record_pii(record, raw_text)
-    enrich_record_locations(record, raw_text)
-    normalize_domain_years(record, raw_text)
-    enrich_fact_verification(record, raw_text)
+    # Note writes must feel immediate. Heavy candidate enrichment is owned by
+    # parse/reparse/maintenance jobs; notes only change recruiter context and
+    # search chunks.
     record["primary_key_coverage"] = primary_key_coverage(record)
     with db() as conn:
         conn.execute(
@@ -325,10 +324,7 @@ def update_note_db(
         raise FileNotFoundError(note_id)
     raw_text = raw_row["raw_text"] if raw_row else None
     _sync_notes_from_db(record, tenant_id, document_id)
-    enrich_record_pii(record, raw_text)
-    enrich_record_locations(record, raw_text)
-    normalize_domain_years(record, raw_text)
-    enrich_fact_verification(record, raw_text)
+    # Keep note edits on the fast path. Profile facts are not re-derived here.
     record["primary_key_coverage"] = primary_key_coverage(record)
     with db() as conn:
         conn.execute("update candidates set record_json=%s, updated_at=now() where document_id=%s and tenant_id=%s", (Jsonb(record), document_id, tenant_id))
@@ -375,10 +371,7 @@ def delete_note_db(
         raise FileNotFoundError(note_id)
     raw_text = raw_row["raw_text"] if raw_row else None
     _sync_notes_from_db(record, tenant_id, document_id)
-    enrich_record_pii(record, raw_text)
-    enrich_record_locations(record, raw_text)
-    normalize_domain_years(record, raw_text)
-    enrich_fact_verification(record, raw_text)
+    # Keep note deletes on the fast path. Search reindexing runs after response.
     record["primary_key_coverage"] = primary_key_coverage(record)
     with db() as conn:
         conn.execute("update candidates set record_json=%s, updated_at=now() where document_id=%s and tenant_id=%s", (Jsonb(record), document_id, tenant_id))

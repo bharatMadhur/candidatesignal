@@ -905,15 +905,18 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
 
   async function handleDeleteNote(noteId: string) {
     if (!candidate || !token || !noteId) return;
+    const previousCandidate = candidate;
     setDeletingNoteId(noteId);
     setNoteSaveState("idle");
     setNoteSaveError("");
+    setCandidate({ ...candidate, notes: (candidate.notes ?? []).filter((item) => item.id !== noteId) });
     try {
       const result = await run("Deleting recruiter note", () => deleteNote(candidate.document_id, noteId, token));
       if (!result) throw new Error("No candidate returned after deleting note");
       setCandidate(result);
       setStatus("Note deleted. Search index will update in the background.");
     } catch (error) {
+      setCandidate(previousCandidate);
       setNoteSaveState("error");
       setNoteSaveError(`Could not delete note: ${readableError(error)}`);
     } finally {
@@ -2015,10 +2018,10 @@ function Dashboard({
             <strong>{newToday || newThisWeek}</strong>
             <em>Candidate profiles from recent resume activity</em>
           </button>
-          <button className="stitchMetricCard attention" onClick={() => setView("upload")}>
+          <button className="stitchMetricCard attention" onClick={() => setView("operations")}>
             <div><span>Needs Review</span><b><AlertTriangle size={20} /></b></div>
             <strong>{reviewCount}</strong>
-            <em>Only tasks with a clear next action</em>
+            <em>Open failed files, exact errors, retries, and profile fixes</em>
           </button>
           <button className="stitchMetricCard" onClick={() => setView("database")}>
             <div><span>Ready Candidates</span><b><CheckCircle2 size={20} /></b></div>

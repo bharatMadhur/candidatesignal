@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "lint": "eslint app lib tests --no-error-on-unmatched-pattern",
     "start": "next start",
     "smoke": "node tests/smoke.mjs",
     "e2e": "playwright test"
