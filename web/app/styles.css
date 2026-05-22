@@ -1980,9 +1980,12 @@ a:focus {
 }
 
 .actionHeader span {
+  min-width: 58px;
+  text-align: center;
   border-radius: 999px;
-  background: #bc4800;
-  color: white;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
   padding: 6px 12px;
   font-weight: 800;
 }
