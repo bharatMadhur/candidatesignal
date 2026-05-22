@@ -1785,8 +1785,7 @@ a:focus {
 .stitchMetricCard.attention {
   position: relative;
   overflow: hidden;
-  border-left: 5px solid var(--warn);
-  background: #fffbfa;
+  background: var(--surface);
 }
 
 .stitchMetricCard div {
@@ -4531,6 +4530,33 @@ button:disabled {
   color: var(--muted);
 }
 
+.candidateCorrectionSection {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.candidateCorrectionSubhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.candidateCorrectionSubhead strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.candidateCorrectionSubhead span {
+  flex: 1;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .candidateCorrectionGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -4562,6 +4588,32 @@ button:disabled {
 .candidateCorrectionGrid textarea {
   min-height: 92px;
   resize: vertical;
+}
+
+.candidateEditableList {
+  display: grid;
+  gap: 12px;
+}
+
+.candidateEditableCard {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fbfcfd;
+  padding: 12px;
+}
+
+.candidateEditableCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.candidateEditableCardHeader strong {
+  color: var(--ink);
+  font-size: 13px;
 }
 
 .candidateCorrectionActions {
@@ -9343,8 +9395,7 @@ h3 {
 }
 
 .stitchMetricCard.attention {
-  border-left-width: 3px;
-  background: #fffaf6;
+  background: var(--surface);
 }
 
 .stitchMetricCard b {

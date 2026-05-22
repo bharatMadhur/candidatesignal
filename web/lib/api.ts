@@ -115,6 +115,7 @@ export type Candidate = {
     start_date?: string | null;
     end_date?: string | null;
     bullets: string[];
+    technologies?: string[];
     workstreams?: Array<{
       name?: string | null;
       role?: string | null;
@@ -172,6 +173,9 @@ export type CandidateProfileUpdate = {
   total_years_experience?: number | null;
   skills?: string[];
   countries?: string[];
+  experience?: Candidate["experience"];
+  education?: Candidate["education"];
+  certifications?: string[];
 };
 
 export type Requirement = {

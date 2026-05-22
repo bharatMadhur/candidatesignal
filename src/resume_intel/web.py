@@ -96,6 +96,7 @@ from .requirements import (
 )
 from .routers.health import router as health_router
 from .routers.operations import router as operations_router
+from .schema import Education, Experience
 from .settings import load_settings
 from .tenancy import (
     accept_invitation,
@@ -194,8 +195,11 @@ class CandidateProfileUpdateRequest(BaseModel):
     current_title: str | None = None
     current_company: str | None = None
     total_years_experience: float | int | None = None
-    skills: list[str] = Field(default_factory=list)
-    countries: list[str] = Field(default_factory=list)
+    skills: list[str] | None = None
+    countries: list[str] | None = None
+    experience: list[Experience] | None = None
+    education: list[Education] | None = None
+    certifications: list[str] | None = None
 
 
 class MatchStatusRequest(BaseModel):
@@ -553,7 +557,7 @@ def update_candidate_profile(document_id: str, request: CandidateProfileUpdateRe
     require_tenant_write(user)
     try:
         tenant_id = _tenant_id(user)
-        record = update_candidate_profile_db(document_id, user["id"], request.model_dump(), tenant_id)
+        record = update_candidate_profile_db(document_id, user["id"], request.model_dump(exclude_unset=True), tenant_id)
         live_matches = find_matches_for_record(record, tenant_id=tenant_id)
         persist_matches(record, live_matches, tenant_id)
         matches = list_matches_for_candidate(document_id, tenant_id)

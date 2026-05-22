@@ -15,6 +15,7 @@ from .fact_verification import enrich_fact_verification
 from .geo import current_job_location, enrich_record_locations
 from .pii import enrich_record_pii
 from .profile_verification import enrich_profile_verification
+from .timeline import build_timeline_profile
 from .vector_search import upsert_candidate_search_chunks
 
 
@@ -407,6 +408,8 @@ def update_candidate_profile_db(document_id: str, user_id: str, updates: dict[st
         raw_row = conn.execute("select raw_text from candidates where document_id=%s and tenant_id=%s", (document_id, tenant_id)).fetchone()
     raw_text = raw_row["raw_text"] if raw_row else None
     applied = _apply_candidate_profile_updates(record, updates)
+    if any(field in applied for field in ("experience", "education")):
+        _refresh_timeline_derivations(record, updates)
     enrich_record_pii(record, raw_text)
     enrich_profile_verification(record)
     enrich_record_locations(record, raw_text)
@@ -482,9 +485,110 @@ def _apply_candidate_profile_updates(record: dict[str, Any], updates: dict[str, 
         else:
             derived[target] = values
         applied.append(field)
+    if "experience" in updates:
+        record["experience"] = _manual_experience_list(updates.get("experience"))
+        applied.append("experience")
+    if "education" in updates:
+        record["education"] = _manual_education_list(updates.get("education"))
+        applied.append("education")
+    if "certifications" in updates:
+        record["certifications"] = _manual_list(updates.get("certifications"))
+        applied.append("certifications")
     if applied:
         record.setdefault("manual_corrections", []).append({"fields": applied})
     return applied
+
+
+def _refresh_timeline_derivations(record: dict[str, Any], updates: dict[str, Any]) -> None:
+    timeline_profile = build_timeline_profile(record)
+    derived = record.setdefault("derived", {})
+    hr_profile = derived.setdefault("hr_profile", {})
+    derived["timeline"] = timeline_profile
+    hr_profile["total_years_experience"] = timeline_profile["experience_accounting"]["total_years_unique"]
+    hr_profile["total_months_experience"] = timeline_profile["experience_accounting"]["total_months_unique"]
+    if "current_title" not in updates:
+        current_role = _manual_current_experience(record)
+        if current_role and _clean_manual_text(current_role.get("title")):
+            hr_profile["current_title"] = _clean_manual_text(current_role.get("title"))
+    if "current_company" not in updates:
+        current_role = _manual_current_experience(record)
+        if current_role and _clean_manual_text(current_role.get("company")):
+            hr_profile["current_company"] = _clean_manual_text(current_role.get("company"))
+
+
+def _manual_current_experience(record: dict[str, Any]) -> dict[str, Any] | None:
+    experiences = [item for item in record.get("experience") or [] if isinstance(item, dict)]
+    current = [
+        item
+        for item in experiences
+        if str(item.get("end_date") or "").strip().lower() in {"", "present", "current", "now"}
+    ]
+    return (current or experiences)[0] if experiences else None
+
+
+def _manual_experience_list(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    rows: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        row = {
+            "company": _clean_manual_text(item.get("company")),
+            "title": _clean_manual_text(item.get("title")),
+            "location": _clean_manual_text(item.get("location")),
+            "start_date": _clean_manual_text(item.get("start_date")),
+            "end_date": _clean_manual_text(item.get("end_date")),
+            "bullets": _manual_text_lines(item.get("bullets")),
+            "technologies": _manual_list(item.get("technologies")),
+            "workstreams": _manual_workstream_list(item.get("workstreams")),
+        }
+        if any(row.get(field) for field in ("company", "title", "location", "start_date", "end_date")) or row["bullets"]:
+            rows.append(row)
+    return rows
+
+
+def _manual_education_list(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    rows: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        row = {
+            "school": _clean_manual_text(item.get("school")),
+            "degree": _clean_manual_text(item.get("degree")),
+            "field": _clean_manual_text(item.get("field")),
+            "location": _clean_manual_text(item.get("location")),
+            "start_date": _clean_manual_text(item.get("start_date")),
+            "end_date": _clean_manual_text(item.get("end_date")),
+            "details": _manual_text_lines(item.get("details")),
+        }
+        if any(row.get(field) for field in ("school", "degree", "field", "location", "start_date", "end_date")) or row["details"]:
+            rows.append(row)
+    return rows
+
+
+def _manual_workstream_list(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    rows: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        row = {
+            "name": _clean_manual_text(item.get("name")),
+            "role": _clean_manual_text(item.get("role")),
+            "location": _clean_manual_text(item.get("location")),
+            "start_date": _clean_manual_text(item.get("start_date")),
+            "end_date": _clean_manual_text(item.get("end_date")),
+            "bullets": _manual_text_lines(item.get("bullets")),
+            "technologies": _manual_list(item.get("technologies")),
+            "evidence_note": _clean_manual_text(item.get("evidence_note")),
+        }
+        if any(row.get(field) for field in ("name", "role", "location", "start_date", "end_date", "evidence_note")) or row["bullets"]:
+            rows.append(row)
+    return rows
 
 
 def _clean_manual_text(value: Any) -> str | None:
@@ -499,6 +603,14 @@ def _manual_list(value: Any) -> list[str]:
         raw = value
     else:
         raw = re.split(r"[\n,;]+", str(value or ""))
+    return [str(item).strip() for item in raw if str(item).strip()]
+
+
+def _manual_text_lines(value: Any) -> list[str]:
+    if isinstance(value, list):
+        raw = value
+    else:
+        raw = str(value or "").splitlines()
     return [str(item).strip() for item in raw if str(item).strip()]
 
 

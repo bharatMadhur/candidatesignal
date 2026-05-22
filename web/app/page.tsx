@@ -1956,16 +1956,16 @@ function Dashboard({
   const domainCounts = topDomainCounts(candidates);
   const actionItems = [
     ...(deadLetterCount ? [{
-      title: "Resume files need review",
-      body: `${deadLetterCount} resume file${deadLetterCount === 1 ? "" : "s"} could not be parsed after retries. Open review to inspect the file, understand the issue, and retry it.`,
-      action: "Open review",
+      title: "Resume files are waiting for review",
+      body: `${deadLetterCount} file${deadLetterCount === 1 ? "" : "s"} need a retry, replacement, or ignore decision. Details are kept in Upload Review so the dashboard stays calm.`,
+      action: "Open Upload Review",
       label: "File review",
       run: () => setView("operations"),
     }] : []),
     ...(operationalAlertCount ? [{
-      title: "Resume processing needs attention",
-      body: `${operationalAlertCount} processing alert${operationalAlertCount === 1 ? "" : "s"} need an admin review. Recruiters can keep working while these are handled.`,
-      action: "Open review",
+      title: "Processing items are waiting",
+      body: `${operationalAlertCount} processing item${operationalAlertCount === 1 ? "" : "s"} are available for admin review. Recruiters can keep working.`,
+      action: "Open Operations",
       label: "Processing review",
       run: () => setView("operations"),
     }] : []),
@@ -2019,9 +2019,9 @@ function Dashboard({
             <em>Candidate profiles from recent resume activity</em>
           </button>
           <button className="stitchMetricCard attention" onClick={() => setView("operations")}>
-            <div><span>Needs Review</span><b><AlertTriangle size={20} /></b></div>
+            <div><span>Review Center</span><b><AlertTriangle size={20} /></b></div>
             <strong>{reviewCount}</strong>
-            <em>Open failed files, exact errors, retries, and profile fixes</em>
+            <em>Files or profiles waiting for a clear recruiter/admin decision</em>
           </button>
           <button className="stitchMetricCard" onClick={() => setView("database")}>
             <div><span>Ready Candidates</span><b><CheckCircle2 size={20} /></b></div>
@@ -2066,12 +2066,12 @@ function Dashboard({
       </main>
       <aside className="snapshotAside">
         <div className="actionHeader">
-          <h3><AlertTriangle size={22} /> {RECRUITER_COPY.reviewQueueTitle}</h3>
-          <span>{reviewCount || 0} Tasks</span>
+          <h3><CheckCircle2 size={22} /> {RECRUITER_COPY.reviewQueueTitle}</h3>
+          <span>{reviewCount || 0} item{reviewCount === 1 ? "" : "s"}</span>
         </div>
         <div className="stitchActionList">
-          {actionItems.length ? actionItems.slice(0, 3).map((item, index) => (
-            <article className={index === 0 ? "urgent" : ""} key={item.title}>
+          {actionItems.length ? actionItems.slice(0, 3).map((item) => (
+            <article key={item.title}>
               <div className="actionPerson">
                 <div className="avatarDot">{item.title.slice(0, 1)}</div>
                 <div>
@@ -3923,7 +3923,33 @@ type CandidateCorrectionForm = {
   total_years_experience: string;
   skills: string;
   countries: string;
+  certifications: string;
+  experience: CandidateCorrectionExperience[];
+  education: CandidateCorrectionEducation[];
 };
+
+type CandidateCorrectionExperience = {
+  company: string;
+  title: string;
+  location: string;
+  start_date: string;
+  end_date: string;
+  bullets: string;
+  technologies: string[];
+  workstreams: Candidate["experience"][number]["workstreams"];
+};
+
+type CandidateCorrectionEducation = {
+  school: string;
+  degree: string;
+  field: string;
+  location: string;
+  start_date: string;
+  end_date: string;
+  details: string;
+};
+
+type CandidateCorrectionTextField = Exclude<keyof CandidateCorrectionForm, "experience" | "education">;
 
 function CandidateCorrectionPanel({
   form,
@@ -3936,26 +3962,100 @@ function CandidateCorrectionPanel({
   save: () => void;
   cancel: () => void;
 }) {
-  const update = (key: keyof CandidateCorrectionForm, value: string) => setForm({ ...form, [key]: value });
+  const update = (key: CandidateCorrectionTextField, value: string) => setForm({ ...form, [key]: value });
+  const updateExperience = (index: number, key: keyof CandidateCorrectionExperience, value: string) => {
+    setForm({
+      ...form,
+      experience: form.experience.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item),
+    });
+  };
+  const updateEducation = (index: number, key: keyof CandidateCorrectionEducation, value: string) => {
+    setForm({
+      ...form,
+      education: form.education.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item),
+    });
+  };
+  const addExperience = () => setForm({ ...form, experience: [...form.experience, emptyExperienceCorrection()] });
+  const removeExperience = (index: number) => setForm({ ...form, experience: form.experience.filter((_, itemIndex) => itemIndex !== index) });
+  const addEducation = () => setForm({ ...form, education: [...form.education, emptyEducationCorrection()] });
+  const removeEducation = (index: number) => setForm({ ...form, education: form.education.filter((_, itemIndex) => itemIndex !== index) });
   return (
     <section className="candidateCorrectionPanel">
       <div>
         <span className="reportLabel">Manual correction</span>
-        <h3>Fix extracted candidate fields</h3>
-        <p>Use this when the parser missed a field or coverage is below 80%. Changes update the candidate profile, coverage, search index, and matching context.</p>
+        <h3>Edit extracted profile data</h3>
+        <p>Use this when the parser missed or confused a field. The original CV stays unchanged; these corrections update the candidate profile, timeline, coverage, search index, and matching context.</p>
       </div>
-      <div className="candidateCorrectionGrid">
-        <label><span>Name</span><input value={form.name} onChange={(event) => update("name", event.target.value)} /></label>
-        <label><span>Email</span><input value={form.email} onChange={(event) => update("email", event.target.value)} /></label>
-        <label><span>Phone</span><input value={form.phone} onChange={(event) => update("phone", event.target.value)} /></label>
-        <label><span>Current location</span><input value={form.location} onChange={(event) => update("location", event.target.value)} /></label>
-        <label><span>Current title</span><input value={form.current_title} onChange={(event) => update("current_title", event.target.value)} /></label>
-        <label><span>Current company</span><input value={form.current_company} onChange={(event) => update("current_company", event.target.value)} /></label>
-        <label><span>Total years</span><input value={form.total_years_experience} onChange={(event) => update("total_years_experience", event.target.value)} /></label>
-        <label><span>Countries</span><input value={form.countries} onChange={(event) => update("countries", event.target.value)} placeholder="United States, India" /></label>
-        <label className="wide"><span>Summary</span><textarea value={form.summary} onChange={(event) => update("summary", event.target.value)} /></label>
-        <label className="wide"><span>Skills</span><textarea value={form.skills} onChange={(event) => update("skills", event.target.value)} placeholder="Python, Spark, Databricks" /></label>
-      </div>
+      <section className="candidateCorrectionSection">
+        <div className="candidateCorrectionSubhead">
+          <strong>Basics</strong>
+          <span>Identity, contact, location, and headline fields.</span>
+        </div>
+        <div className="candidateCorrectionGrid">
+          <label><span>Name</span><input value={form.name} onChange={(event) => update("name", event.target.value)} /></label>
+          <label><span>Email</span><input value={form.email} onChange={(event) => update("email", event.target.value)} /></label>
+          <label><span>Phone</span><input value={form.phone} onChange={(event) => update("phone", event.target.value)} /></label>
+          <label><span>Current location</span><input value={form.location} onChange={(event) => update("location", event.target.value)} /></label>
+          <label><span>Current title</span><input value={form.current_title} onChange={(event) => update("current_title", event.target.value)} /></label>
+          <label><span>Current company</span><input value={form.current_company} onChange={(event) => update("current_company", event.target.value)} /></label>
+          <label><span>Total years</span><input value={form.total_years_experience} onChange={(event) => update("total_years_experience", event.target.value)} /></label>
+          <label><span>Countries</span><input value={form.countries} onChange={(event) => update("countries", event.target.value)} placeholder="United States, India" /></label>
+          <label className="wide"><span>Summary</span><textarea value={form.summary} onChange={(event) => update("summary", event.target.value)} /></label>
+          <label className="wide"><span>Skills</span><textarea value={form.skills} onChange={(event) => update("skills", event.target.value)} placeholder="Python, Spark, Databricks" /></label>
+          <label className="wide"><span>Certifications</span><textarea value={form.certifications} onChange={(event) => update("certifications", event.target.value)} placeholder="AWS Solutions Architect, PMP" /></label>
+        </div>
+      </section>
+      <section className="candidateCorrectionSection">
+        <div className="candidateCorrectionSubhead">
+          <strong>Work history & dates</strong>
+          <span>These rows drive the visible timeline and non-overlapping experience calculation.</span>
+          <button className="plain small" type="button" onClick={addExperience}>Add role</button>
+        </div>
+        <div className="candidateEditableList">
+          {form.experience.length ? form.experience.map((item, index) => (
+            <article className="candidateEditableCard" key={`experience-${index}`}>
+              <div className="candidateEditableCardHeader">
+                <strong>Role {index + 1}</strong>
+                <button className="plain danger small" type="button" onClick={() => removeExperience(index)}>Remove</button>
+              </div>
+              <div className="candidateCorrectionGrid">
+                <label><span>Company</span><input value={item.company} onChange={(event) => updateExperience(index, "company", event.target.value)} /></label>
+                <label><span>Title</span><input value={item.title} onChange={(event) => updateExperience(index, "title", event.target.value)} /></label>
+                <label><span>Location</span><input value={item.location} onChange={(event) => updateExperience(index, "location", event.target.value)} placeholder="City, country, remote" /></label>
+                <label><span>Start date</span><input value={item.start_date} onChange={(event) => updateExperience(index, "start_date", event.target.value)} placeholder="2022-01" /></label>
+                <label><span>End date</span><input value={item.end_date} onChange={(event) => updateExperience(index, "end_date", event.target.value)} placeholder="Present" /></label>
+                <label className="wide"><span>Bullets</span><textarea value={item.bullets} onChange={(event) => updateExperience(index, "bullets", event.target.value)} placeholder="One bullet per line" /></label>
+              </div>
+            </article>
+          )) : <EmptyPanel title="No work history rows" body="Add roles here if the parser missed the candidate's experience." />}
+        </div>
+      </section>
+      <section className="candidateCorrectionSection">
+        <div className="candidateCorrectionSubhead">
+          <strong>Education</strong>
+          <span>Education appears in the candidate report and matching context.</span>
+          <button className="plain small" type="button" onClick={addEducation}>Add education</button>
+        </div>
+        <div className="candidateEditableList">
+          {form.education.length ? form.education.map((item, index) => (
+            <article className="candidateEditableCard" key={`education-${index}`}>
+              <div className="candidateEditableCardHeader">
+                <strong>Education {index + 1}</strong>
+                <button className="plain danger small" type="button" onClick={() => removeEducation(index)}>Remove</button>
+              </div>
+              <div className="candidateCorrectionGrid">
+                <label><span>School</span><input value={item.school} onChange={(event) => updateEducation(index, "school", event.target.value)} /></label>
+                <label><span>Degree</span><input value={item.degree} onChange={(event) => updateEducation(index, "degree", event.target.value)} /></label>
+                <label><span>Field</span><input value={item.field} onChange={(event) => updateEducation(index, "field", event.target.value)} /></label>
+                <label><span>Location</span><input value={item.location} onChange={(event) => updateEducation(index, "location", event.target.value)} /></label>
+                <label><span>Start date</span><input value={item.start_date} onChange={(event) => updateEducation(index, "start_date", event.target.value)} /></label>
+                <label><span>End date</span><input value={item.end_date} onChange={(event) => updateEducation(index, "end_date", event.target.value)} /></label>
+                <label className="wide"><span>Details</span><textarea value={item.details} onChange={(event) => updateEducation(index, "details", event.target.value)} placeholder="One detail per line" /></label>
+              </div>
+            </article>
+          )) : <EmptyPanel title="No education rows" body="Add education if the CV contains it but parsing missed it." />}
+        </div>
+      </section>
       <div className="candidateCorrectionActions">
         <button className="plain" onClick={cancel}>Cancel</button>
         <button className="primary" onClick={save}>Save corrections</button>
@@ -3977,6 +4077,26 @@ function candidateCorrectionForm(candidate: Candidate): CandidateCorrectionForm 
     total_years_experience: textValue(hr.total_years_experience),
     skills: (candidate.skills ?? []).join(", "),
     countries: toTextList(candidate.derived?.countries_associated ?? []).join(", "),
+    certifications: (candidate.certifications ?? []).join(", "),
+    experience: (candidate.experience ?? []).map((item) => ({
+      company: textValue(item.company),
+      title: textValue(item.title),
+      location: textValue(item.location),
+      start_date: textValue(item.start_date),
+      end_date: textValue(item.end_date),
+      bullets: (item.bullets ?? []).join("\n"),
+      technologies: item.technologies ?? [],
+      workstreams: item.workstreams ?? [],
+    })),
+    education: (candidate.education ?? []).map((item) => ({
+      school: textValue(item.school),
+      degree: textValue(item.degree),
+      field: textValue(item.field),
+      location: textValue(item.location),
+      start_date: textValue(item.start_date),
+      end_date: textValue(item.end_date),
+      details: (item.details ?? []).join("\n"),
+    })),
   };
 }
 
@@ -3993,7 +4113,52 @@ function candidateCorrectionPayload(form: CandidateCorrectionForm): CandidatePro
     total_years_experience: Number.isFinite(years) ? years : null,
     skills: candidateInputList(form.skills),
     countries: candidateInputList(form.countries),
+    certifications: candidateInputList(form.certifications),
+    experience: form.experience.map((item) => ({
+      company: nullableCandidateText(item.company),
+      title: nullableCandidateText(item.title),
+      location: nullableCandidateText(item.location),
+      start_date: nullableCandidateText(item.start_date),
+      end_date: nullableCandidateText(item.end_date),
+      bullets: candidateTextLines(item.bullets),
+      technologies: item.technologies ?? [],
+      workstreams: item.workstreams ?? [],
+    })).filter((item) => hasCandidateExperienceContent(item)),
+    education: form.education.map((item) => ({
+      school: nullableCandidateText(item.school),
+      degree: nullableCandidateText(item.degree),
+      field: nullableCandidateText(item.field),
+      location: nullableCandidateText(item.location),
+      start_date: nullableCandidateText(item.start_date),
+      end_date: nullableCandidateText(item.end_date),
+      details: candidateTextLines(item.details),
+    })).filter((item) => hasCandidateEducationContent(item)),
   };
+}
+
+function emptyExperienceCorrection(): CandidateCorrectionExperience {
+  return { company: "", title: "", location: "", start_date: "", end_date: "", bullets: "", technologies: [], workstreams: [] };
+}
+
+function emptyEducationCorrection(): CandidateCorrectionEducation {
+  return { school: "", degree: "", field: "", location: "", start_date: "", end_date: "", details: "" };
+}
+
+function nullableCandidateText(value: string) {
+  const text = value.trim();
+  return text || null;
+}
+
+function candidateTextLines(value: string) {
+  return value.split(/\n+/).map((item) => item.trim()).filter(Boolean);
+}
+
+function hasCandidateExperienceContent(item: Candidate["experience"][number]) {
+  return Boolean(item.company || item.title || item.location || item.start_date || item.end_date || item.bullets.length);
+}
+
+function hasCandidateEducationContent(item: Candidate["education"][number]) {
+  return Boolean(item.school || item.degree || item.field || item.location || item.start_date || item.end_date || item.details?.length);
 }
 
 function coverageGapReasons(coverage?: Candidate["primary_key_coverage"]) {
