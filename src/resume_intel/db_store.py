@@ -198,6 +198,15 @@ def list_candidates_db(tenant_id: str | None = None) -> list[dict[str, Any]]:
             """,
             (tenant_id, tenant_id),
         ).fetchall()
+        review_rows = conn.execute(
+            """
+            select document_id, array_agg(signal_key order by signal_key) as reviewed_signals
+            from candidate_review_signals
+            where tenant_id=%s and status='reviewed'
+            group by document_id
+            """,
+            (tenant_id,),
+        ).fetchall()
     duplicate_risk = {
         row["document_id"]: {
             "duplicate_risk_score": float(row["duplicate_risk_score"] or 0),
@@ -205,6 +214,7 @@ def list_candidates_db(tenant_id: str | None = None) -> list[dict[str, Any]]:
         }
         for row in duplicate_rows
     }
+    reviewed_signals = {row["document_id"]: list(row["reviewed_signals"] or []) for row in review_rows}
     candidates = []
     for row in rows:
         record = row["record_json"]
@@ -235,12 +245,68 @@ def list_candidates_db(tenant_id: str | None = None) -> list[dict[str, Any]]:
                     if isinstance(item, dict) and item.get("country")
                 ],
                 "coverage": record.get("primary_key_coverage", {}).get("score"),
+                "reviewed_signals": reviewed_signals.get(row["document_id"], []),
                 **duplicate_risk.get(row["document_id"], {"duplicate_risk_score": 0, "duplicate_status": None}),
                 "source_file": record.get("original_filename") or Path(row["source_file"] or "Uploaded CV").name,
                 "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
             }
         )
     return candidates
+
+
+def reviewed_candidate_signals_db(document_id: str, tenant_id: str) -> list[str]:
+    with db() as conn:
+        rows = conn.execute(
+            """
+            select signal_key
+            from candidate_review_signals
+            where tenant_id=%s and document_id=%s and status='reviewed'
+            order by signal_key
+            """,
+            (tenant_id, document_id),
+        ).fetchall()
+    return [row["signal_key"] for row in rows]
+
+
+def mark_candidate_review_signal_db(
+    document_id: str,
+    tenant_id: str,
+    user_id: str,
+    signal_key: str,
+    note: str | None = None,
+) -> dict[str, Any]:
+    load_candidate_db(document_id, tenant_id)
+    signal_key = _clean_review_signal(signal_key)
+    note = _clean_manual_text(note)
+    with db() as conn:
+        row = conn.execute(
+            """
+            insert into candidate_review_signals (
+              tenant_id, document_id, signal_key, status, reviewed_by_user_id, reviewed_at, note, updated_at
+            )
+            values (%s, %s, %s, 'reviewed', %s, now(), %s, now())
+            on conflict (tenant_id, document_id, signal_key) do update set
+              status='reviewed',
+              reviewed_by_user_id=excluded.reviewed_by_user_id,
+              reviewed_at=now(),
+              note=excluded.note,
+              updated_at=now()
+            returning *
+            """,
+            (tenant_id, document_id, signal_key, user_id, note),
+        ).fetchone()
+        _record_activity_event(
+            conn,
+            tenant_id,
+            document_id,
+            user_id,
+            "candidate.review_signal_reviewed",
+            "Candidate review item completed",
+            signal_key,
+            {"signal_key": signal_key, "note": note},
+        )
+        conn.commit()
+    return _candidate_review_signal_row(row)
 
 
 def add_note_db(
@@ -622,6 +688,13 @@ def _manual_number(value: Any) -> float | int | None:
     except (TypeError, ValueError):
         return None
     return int(number) if number.is_integer() else number
+
+
+def _clean_review_signal(value: Any) -> str:
+    signal = re.sub(r"[^a-z0-9_.:-]+", "_", str(value or "").strip().lower()).strip("_")
+    if not signal:
+        raise ValueError("review signal is required")
+    return signal[:120]
 
 
 def soft_delete_candidate_db(document_id: str, tenant_id: str, user_id: str, reason: str = "removed_by_recruiter") -> dict[str, Any]:
@@ -1120,4 +1193,18 @@ def _note_row(row: Any) -> dict[str, Any]:
         "content": row["content"],
         "created_at": row["created_at"].isoformat() if row["created_at"] else None,
         "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
+    }
+
+
+def _candidate_review_signal_row(row: Any) -> dict[str, Any]:
+    return {
+        "id": str(row["id"]),
+        "tenant_id": str(row["tenant_id"]),
+        "document_id": row["document_id"],
+        "signal_key": row["signal_key"],
+        "status": row["status"],
+        "reviewed_by_user_id": str(row["reviewed_by_user_id"]) if row.get("reviewed_by_user_id") else None,
+        "reviewed_at": row["reviewed_at"].isoformat() if row.get("reviewed_at") else None,
+        "note": row.get("note"),
+        "metadata": row.get("metadata") or {},
     }

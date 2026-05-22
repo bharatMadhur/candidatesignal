@@ -46,8 +46,10 @@ from .db_store import (
     list_document_pages_db,
     load_candidate_db,
     load_raw_text_db,
+    mark_candidate_review_signal_db,
     public_candidate_record,
     reindex_candidate_search_db,
+    reviewed_candidate_signals_db,
     soft_delete_candidate_db,
     update_candidate_profile_db,
     update_note_db,
@@ -200,6 +202,10 @@ class CandidateProfileUpdateRequest(BaseModel):
     experience: list[Experience] | None = None
     education: list[Education] | None = None
     certifications: list[str] | None = None
+
+
+class CandidateReviewSignalRequest(BaseModel):
+    note: str | None = None
 
 
 class MatchStatusRequest(BaseModel):
@@ -535,6 +541,7 @@ def candidate(document_id: str, user: dict = Depends(current_user)) -> dict:
             matches = list_matches_for_candidate(document_id, tenant_id)
         record = public_candidate_record(raw_record, allow_pii=_can_view_pii(user))
         record["candidate_versions"] = {"matches": matches}
+        record["reviewed_signals"] = reviewed_candidate_signals_db(document_id, tenant_id)
         if _can_view_pii(user):
             _audit_pii_access(user, document_id, _candidate_pii_fields(record), action="view_candidate_detail")
         return record
@@ -562,9 +569,28 @@ def update_candidate_profile(document_id: str, request: CandidateProfileUpdateRe
         persist_matches(record, live_matches, tenant_id)
         matches = list_matches_for_candidate(document_id, tenant_id)
         record["candidate_versions"] = {"matches": matches}
-        return public_candidate_record(record, allow_pii=_can_view_pii(user))
+        public_record = public_candidate_record(record, allow_pii=_can_view_pii(user))
+        public_record["reviewed_signals"] = reviewed_candidate_signals_db(document_id, tenant_id)
+        return public_record
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="candidate not found") from exc
+
+
+@app.post("/candidates/{document_id}/review-signals/{signal_key}/reviewed")
+def mark_candidate_review_signal(
+    document_id: str,
+    signal_key: str,
+    request: CandidateReviewSignalRequest,
+    user: dict = Depends(current_user),
+) -> dict:
+    require_tenant_write(user)
+    try:
+        review = mark_candidate_review_signal_db(document_id, _tenant_id(user), user["id"], signal_key, request.note)
+        return {"review": review, "user": user}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="candidate not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/candidates/{document_id}/source")

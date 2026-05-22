@@ -40,6 +40,7 @@ export type CandidateSummary = {
   coverage?: number | null;
   duplicate_risk_score?: number;
   duplicate_status?: string | null;
+  reviewed_signals?: string[];
   source_file?: string | null;
   updated_at?: string | null;
 };
@@ -159,6 +160,7 @@ export type Candidate = {
     enrichment_missing_keys?: string[];
   };
   candidate_versions?: { matches: CandidateVersionMatch[] };
+  reviewed_signals?: string[];
   _metadata?: any;
 };
 
@@ -735,6 +737,14 @@ export async function updateCandidateProfile(token: string, id: string, payload:
     method: "PATCH",
     token,
     body: JSON.stringify(payload),
+  });
+}
+
+export async function markCandidateReviewSignal(token: string, id: string, signalKey: string, note = ""): Promise<{ review: any }> {
+  return request(`/candidates/${id}/review-signals/${encodeURIComponent(signalKey)}/reviewed`, {
+    method: "POST",
+    token,
+    body: JSON.stringify({ note }),
   });
 }
 

@@ -55,6 +55,7 @@ class CandidateVersionDiffTests(unittest.TestCase):
             patch.object(web, "list_matches_for_candidate", side_effect=[[], persisted_matches]),
             patch.object(web, "find_matches_for_record", return_value=live_matches),
             patch.object(web, "persist_matches") as persist_matches,
+            patch.object(web, "reviewed_candidate_signals_db", return_value=[]),
             patch.object(web, "_can_view_pii", return_value=False),
             patch.object(web, "public_candidate_record", side_effect=lambda record, **_kwargs: dict(record)),
         ):
@@ -73,6 +74,7 @@ class CandidateVersionDiffTests(unittest.TestCase):
             patch.object(web, "list_matches_for_candidate", return_value=persisted_matches),
             patch.object(web, "find_matches_for_record") as find_matches,
             patch.object(web, "persist_matches") as persist_matches,
+            patch.object(web, "reviewed_candidate_signals_db", return_value=[]),
             patch.object(web, "_can_view_pii", return_value=False),
             patch.object(web, "public_candidate_record", side_effect=lambda record, **_kwargs: dict(record)),
         ):
@@ -93,6 +95,7 @@ class CandidateVersionDiffTests(unittest.TestCase):
             patch.object(web, "find_matches_for_record", return_value=live_matches),
             patch.object(web, "persist_matches") as persist_matches,
             patch.object(web, "list_matches_for_candidate", return_value=persisted_matches),
+            patch.object(web, "reviewed_candidate_signals_db", return_value=[]),
             patch.object(web, "_can_view_pii", return_value=False),
             patch.object(web, "public_candidate_record", side_effect=lambda record, **_kwargs: dict(record)),
         ):

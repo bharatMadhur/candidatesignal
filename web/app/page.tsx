@@ -100,6 +100,7 @@ import {
   me,
   matchRequirement,
   matchCampaign,
+  markCandidateReviewSignal,
   reactivateTenant,
   rejectMatch,
   resendInvitation,
@@ -136,6 +137,17 @@ type WorkspaceChatMessage = CopilotMessage & {
   clarifying_questions?: string[];
   suggested_actions?: string[];
   metadata?: Record<string, any>;
+};
+
+type CandidateReviewSignal = "low_coverage" | "role_fact_review";
+type ReviewCenterItem = {
+  title: string;
+  body: string;
+  action: string;
+  doneAction?: string;
+  label: string;
+  run: () => void;
+  done?: () => void;
 };
 
 const COPILOT_GREETING: WorkspaceChatMessage = {
@@ -932,6 +944,21 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     await refresh();
   }
 
+  async function handleMarkCandidateReviewSignal(documentId: string, signalKey: CandidateReviewSignal) {
+    if (!token) return;
+    const result = await run("Marking review item complete", () => markCandidateReviewSignal(token, documentId, signalKey));
+    if (!result) return;
+    setCandidates((items) => items.map((item) => (
+      item.document_id === documentId
+        ? { ...item, reviewed_signals: Array.from(new Set([...(item.reviewed_signals ?? []), signalKey])) }
+        : item
+    )));
+    if (candidate?.document_id === documentId) {
+      setCandidate({ ...candidate, reviewed_signals: Array.from(new Set([...(candidate.reviewed_signals ?? []), signalKey])) });
+    }
+    await refresh();
+  }
+
   async function handleCreateRequirement() {
     const result = requirementFile
       ? await run("Reading requirement PDF", () => uploadRequirement(token, requirementFile))
@@ -1565,6 +1592,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               operationalAlertCount={operationalAlerts.length}
               setView={setView}
               openCandidate={handleOpenCandidate}
+              markReviewSignal={handleMarkCandidateReviewSignal}
             />
           ) : null}
 
@@ -1695,6 +1723,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               activeTab={candidateDetailTab}
               setActiveTab={setCandidateDetailTab}
               openCandidateVersions={handleOpenCandidateVersions}
+              markReviewSignal={(signal) => handleMarkCandidateReviewSignal(candidate.document_id, signal)}
             />
           ) : null}
 
@@ -1932,6 +1961,7 @@ function Dashboard({
   operationalAlertCount,
   setView,
   openCandidate,
+  markReviewSignal,
 }: {
   candidates: CandidateSummary[];
   requirements: Requirement[];
@@ -1941,9 +1971,10 @@ function Dashboard({
   operationalAlertCount: number;
   setView: (view: View) => void;
   openCandidate: (id: string, tab?: CandidateDetailTab) => void;
+  markReviewSignal: (documentId: string, signalKey: CandidateReviewSignal) => void;
 }) {
-  const urgentCoverageCandidates = candidates.filter((item) => (item.coverage ?? 1) > 0 && (item.coverage ?? 1) < 0.65);
-  const roleFactReviewCandidates = candidates.filter(candidateRoleFactsNeedReview);
+  const urgentCoverageCandidates = candidates.filter((item) => (item.coverage ?? 1) > 0 && (item.coverage ?? 1) < 0.65 && !candidateReviewSignalDone(item, "low_coverage"));
+  const roleFactReviewCandidates = candidates.filter((item) => candidateRoleFactsNeedReview(item) && !candidateReviewSignalDone(item, "role_fact_review"));
   const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
   const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const newToday = candidates.filter((item) => item.updated_at && new Date(item.updated_at).getTime() >= dayAgo).length;
@@ -1954,7 +1985,7 @@ function Dashboard({
     .filter(Boolean)
     .sort((a, b) => b - a)[0];
   const domainCounts = topDomainCounts(candidates);
-  const actionItems = [
+  const actionItems: ReviewCenterItem[] = [
     ...(deadLetterCount ? [{
       title: "Resume files are waiting for review",
       body: `${deadLetterCount} file${deadLetterCount === 1 ? "" : "s"} need a retry, replacement, or ignore decision. Details are kept in Upload Review so the dashboard stays calm.`,
@@ -1970,7 +2001,7 @@ function Dashboard({
       run: () => setView("operations"),
     }] : []),
     ...candidates
-      .filter((item) => (item.duplicate_risk_score ?? 0) >= 0.75)
+      .filter((item) => (item.duplicate_risk_score ?? 0) >= 0.75 && normalizeCandidateVersionStatus(item.duplicate_status) === "suggested")
       .slice(0, 2)
       .map((item) => ({
         title: `${item.name ?? "Candidate"} has a possible newer resume version`,
@@ -1985,8 +2016,10 @@ function Dashboard({
         title: `${item.name ?? "Candidate"} has unusable profile coverage`,
         body: `Profile completeness is ${Math.round((item.coverage ?? 0) * 100)}%. Edit extracted fields, reparse, or remove the upload if it was not a resume.`,
         action: "Fix profile",
+        doneAction: "Mark reviewed",
         label: "Profile fix",
         run: () => openCandidate(item.document_id),
+        done: () => markReviewSignal(item.document_id, "low_coverage" as const),
       })),
     ...roleFactReviewCandidates
       .slice(0, 2)
@@ -1994,8 +2027,10 @@ function Dashboard({
         title: `${item.name ?? "Candidate"} needs role fact review`,
         body: "The latest role was not fully supported by source evidence. Open Evidence to verify or edit extracted fields.",
         action: "Review evidence",
+        doneAction: "Mark reviewed",
         label: "Fact review",
         run: () => openCandidate(item.document_id, "evidence"),
+        done: () => markReviewSignal(item.document_id, "role_fact_review" as const),
       })),
   ].slice(0, 5);
   const reviewCount = actionItems.length;
@@ -2080,7 +2115,10 @@ function Dashboard({
                 </div>
               </div>
               <p>{item.body}</p>
-              <button onClick={item.run}>{item.action}</button>
+              <div className="actionButtons">
+                <button onClick={item.run}>{item.action}</button>
+                {item.done ? <button className="quietActionButton" onClick={item.done}>{item.doneAction ?? "Mark reviewed"}</button> : null}
+              </div>
             </article>
           )) : <EmptyPanel title="No decisions needed" body={RECRUITER_COPY.reviewQueueEmpty} />}
         </div>
@@ -3174,6 +3212,7 @@ function CandidateDetail({
   activeTab,
   setActiveTab,
   openCandidateVersions,
+  markReviewSignal,
 }: {
   candidate: Candidate;
   token: string;
@@ -3197,6 +3236,7 @@ function CandidateDetail({
   activeTab: CandidateDetailTab;
   setActiveTab: (tab: CandidateDetailTab) => void;
   openCandidateVersions: () => void;
+  markReviewSignal: (signalKey: CandidateReviewSignal) => void;
 }) {
   const hr = candidate.derived?.hr_profile;
   const [previewUrl, setPreviewUrl] = useState<string>("");
@@ -3221,7 +3261,8 @@ function CandidateDetail({
   const portfolioUrls = toTextList(piiIntel.portfolio_websites ?? []);
   const profileVerification = candidate.derived?.profile_verification ?? {};
   const factVerification = candidate.derived?.fact_verification ?? {};
-  const roleFactNeedsReview = factVerification.current_role_status && factVerification.current_role_status !== "verified";
+  const reviewedSignals = candidate.reviewed_signals ?? [];
+  const roleFactNeedsReview = Boolean(factVerification.current_role_status && factVerification.current_role_status !== "verified" && !reviewedSignals.includes("role_fact_review"));
   const timelineEvents = timeline?.timeline_events ?? [];
   const accounting = timeline?.experience_accounting;
   const bestFitRoles = toTextList(finalProfile?.best_fit_roles ?? intelligence?.hr_intelligence?.good_fit_roles);
@@ -3260,7 +3301,7 @@ function CandidateDetail({
   const currentLocation = latestJobLocation;
   const coverage = candidate.primary_key_coverage;
   const coverageScore = Number(coverage?.score ?? 0);
-  const needsUploadReview = coverageScore > 0 && coverageScore < 0.8;
+  const needsUploadReview = coverageScore > 0 && coverageScore < 0.8 && !reviewedSignals.includes("low_coverage");
   const verifiedFactRows = [
     candidate.name ? { label: "Name", value: candidate.name, source: "Parsed identity field", query: [candidate.name] } : null,
     candidate.contact?.email ? { label: "Email", value: candidate.contact.email, source: "Parsed contact field", query: [candidate.contact.email] } : null,
@@ -3421,6 +3462,7 @@ function CandidateDetail({
           <button className="plain" type="button" onClick={() => setActiveTab("cv")}>View CV</button>
           <button className="plain" type="button" onClick={() => setActiveTab("notes")}>Recruiter Notes</button>
           {canReparse ? <button className="plain" type="button" onClick={() => reparseCandidate(candidate.document_id)}>Reparse CV</button> : null}
+          {roleFactNeedsReview ? <button className="plain" type="button" onClick={() => markReviewSignal("role_fact_review")}>Mark role reviewed</button> : null}
           <button className="plain danger" type="button" onClick={() => deleteCandidate(candidate.document_id)}>Remove Upload</button>
           <button className="primary" type="button" onClick={match}>Match to Role</button>
         </section>
@@ -3438,6 +3480,7 @@ function CandidateDetail({
             ) : null}
           </div>
           <button className="plain" onClick={() => setShowCorrectionPanel((value) => !value)}>Edit extracted fields</button>
+          <button className="plain" onClick={() => markReviewSignal("low_coverage")}>Mark reviewed</button>
           <button className="plain danger" onClick={() => deleteCandidate(candidate.document_id)}>Remove from database</button>
         </article>
       ) : null}
@@ -6989,6 +7032,10 @@ function candidateRoleFactsNeedReview(candidate: CandidateSummary) {
     && candidate.current_role_verification_status !== "verified"
     && candidate.current_role_verification_status !== "missing"
   );
+}
+
+function candidateReviewSignalDone(candidate: CandidateSummary | Candidate, signalKey: CandidateReviewSignal) {
+  return Boolean(candidate.reviewed_signals?.includes(signalKey));
 }
 
 function domainLabel(value: string) {
