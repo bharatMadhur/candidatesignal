@@ -732,7 +732,13 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   async function handleLinkedInImport() {
     if (!token || !linkedinImportUrl.trim()) return;
     const campaignId = linkedinImportCampaignId === "workspace" ? undefined : linkedinImportCampaignId;
-    const result = await run("Importing LinkedIn profile", () => importLinkedInCandidate(token, linkedinImportUrl.trim(), campaignId));
+    const result = await run("Importing LinkedIn profile", () => importLinkedInCandidate(
+      token,
+      linkedinImportUrl.trim(),
+      campaignId,
+      noteName.trim() || "Recruiter Notes",
+      note.trim()
+    ));
     if (!result) return;
     setLinkedinImportJob(result.import);
     setStatus("LinkedIn profile import started.");
@@ -2714,6 +2720,7 @@ function UploadResumeView(props: {
   uploadCampaignRequirement: (id: string, file: File) => Promise<void>;
   busy: boolean;
 }) {
+  const [activeIntakeMode, setActiveIntakeMode] = useState<"cv" | "linkedin">("cv");
   const [requirementTextDraft, setRequirementTextDraft] = useState("");
   const [campaignRequirementFile, setCampaignRequirementFile] = useState<File | null>(null);
   const selectedCampaign = props.campaigns.find((item) => item.id === props.bulkCampaignId);
@@ -2745,95 +2752,129 @@ function UploadResumeView(props: {
         <p>{RECRUITER_COPY.uploadSubtitle}</p>
       </header>
       <section className="uploadLandingGrid">
-        <article className="uploadTypePanel resumeUploadPanel">
+        <article className="uploadTypePanel candidateIntakePanel">
           <div className="uploadTypeHeader">
             <span className="eyebrow">Candidate intake</span>
-            <h3>Upload CVs / resumes</h3>
-            <p>Add resumes to the company database or directly into a campaign pipeline.</p>
+            <h3>Add candidates</h3>
+            <p>Use CV upload when you have resumes. Use LinkedIn when the recruiter only has a profile URL and notes.</p>
           </div>
-          <label className="stitchDropZone refinedUploadDrop">
-            <FileUp size={34} />
-            <strong>{props.bulkFiles.length ? `${props.bulkFiles.length} file${props.bulkFiles.length === 1 ? "" : "s"} selected` : "Drop resumes or browse files"}</strong>
-            <span>{DOCUMENT_FORMAT_LABEL}. Scanned PDFs and image resumes are handled automatically only when needed.</span>
-            <b>Browse resumes</b>
-            <input
-              type="file"
-              multiple
-              accept={DOCUMENT_FILE_ACCEPT}
-              onChange={(event) => props.setBulkFiles(Array.from(event.target.files ?? []))}
-            />
-          </label>
-          <section className="stitchProgressCard refinedUploadCard">
-            <div>
-              <strong>Resume Processing</strong>
-              <span>{Math.round(activeProgress)}%</span>
+
+          <div className="intakeToggleTabs" role="tablist" aria-label="Candidate intake type">
+            <button
+              className={activeIntakeMode === "cv" ? "active" : ""}
+              type="button"
+              onClick={() => setActiveIntakeMode("cv")}
+            >
+              CV upload
+            </button>
+            <button
+              className={activeIntakeMode === "linkedin" ? "active" : ""}
+              type="button"
+              onClick={() => setActiveIntakeMode("linkedin")}
+            >
+              LinkedIn
+            </button>
+          </div>
+
+          {activeIntakeMode === "cv" ? (
+            <div className="intakeModePane">
+              <label className="stitchDropZone refinedUploadDrop compact">
+                <FileUp size={30} />
+                <strong>{props.bulkFiles.length ? `${props.bulkFiles.length} file${props.bulkFiles.length === 1 ? "" : "s"} selected` : "Drop resumes or browse"}</strong>
+                <span>{DOCUMENT_FORMAT_LABEL}. OCR runs only when needed.</span>
+                <b>Browse resumes</b>
+                <input
+                  type="file"
+                  multiple
+                  accept={DOCUMENT_FILE_ACCEPT}
+                  onChange={(event) => props.setBulkFiles(Array.from(event.target.files ?? []))}
+                />
+              </label>
+              <section className="stitchProgressCard refinedUploadCard compact">
+                <div>
+                  <strong>Processing</strong>
+                  <span>{Math.round(activeProgress)}%</span>
+                </div>
+                <ProgressBar value={activeProgress} />
+                <div className="stitchBatchControls">
+                  <div className="autoBatchName">
+                    <span>Batch</span>
+                    <strong>{shownBatchName}</strong>
+                  </div>
+                  <input
+                    value={props.bulkContextNote}
+                    onChange={(event) => {
+                      props.setBulkContextNote(event.target.value);
+                      props.setBatchName("");
+                    }}
+                    placeholder="Optional: add note or campaign name"
+                  />
+                  <select value={props.bulkCampaignId} onChange={(event) => props.setBulkCampaignId(event.target.value)}>
+                    <option value="workspace">Candidate database only</option>
+                    {props.campaigns.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
+                  </select>
+                  <button className="primary" disabled={!props.bulkFiles.length || props.busy} onClick={props.bulkUpload}>
+                    {selectedCampaign ? "Queue into campaign" : "Queue resumes"}
+                  </button>
+                </div>
+                <p>
+                  {activeBatch
+                    ? `${activeBatch.completed_count + activeBatch.failed_count} of ${activeBatch.total_files} files processed. Profiles update automatically.`
+                    : "Select resumes and queue them. Profiles update automatically after processing."}
+                </p>
+              </section>
             </div>
-            <ProgressBar value={activeProgress} />
-            <div className="stitchBatchControls">
-              <div className="autoBatchName">
-                <span>Batch</span>
-                <strong>{shownBatchName}</strong>
+          ) : (
+            <div className="intakeModePane linkedinIntakePane">
+              <label>
+                <span>LinkedIn profile URL</span>
+                <input
+                  value={props.linkedinImportUrl}
+                  onChange={(event) => props.setLinkedinImportUrl(event.target.value)}
+                  placeholder="https://www.linkedin.com/in/..."
+                />
+              </label>
+              <label>
+                <span>Destination</span>
+                <select value={props.linkedinImportCampaignId} onChange={(event) => props.setLinkedinImportCampaignId(event.target.value)}>
+                  <option value="workspace">Candidate database only</option>
+                  {props.campaigns.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
+                </select>
+              </label>
+              <div className="linkedinRecruiterNoteBox">
+                <label>
+                  <span>Recruiter note title</span>
+                  <input value={props.noteName} onChange={(event) => props.setNoteName(event.target.value)} placeholder="Recruiter Notes" />
+                </label>
+                <label>
+                  <span>Recruiter notes</span>
+                  <textarea value={props.note} onChange={(event) => props.setNote(event.target.value)} placeholder="Add context like OPT, salary, availability, source, or why this person should be tracked." />
+                </label>
               </div>
-              <input
-                value={props.bulkContextNote}
-                onChange={(event) => {
-                  props.setBulkContextNote(event.target.value);
-                  props.setBatchName("");
-                }}
-                placeholder="Optional: add note or campaign name"
-              />
-              <select value={props.bulkCampaignId} onChange={(event) => props.setBulkCampaignId(event.target.value)}>
-                <option value="workspace">Unassigned (Workspace)</option>
-                {props.campaigns.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
-              </select>
-              <button className="primary" disabled={!props.bulkFiles.length || props.busy} onClick={props.bulkUpload}>
-                {selectedCampaign ? "Queue into campaign" : "Queue resumes"}
+              <button className="primary" disabled={!props.linkedinImportUrl.trim() || props.busy} onClick={props.importLinkedIn}>
+                {props.busy ? "Working..." : selectedLinkedInCampaign ? "Import into campaign" : "Import LinkedIn profile"}
               </button>
+              {props.linkedinImportJob ? (
+                <div className="linkedinImportStatus">
+                  <span className={`queueStatus ${props.linkedinImportJob.status}`}>{domainLabel(props.linkedinImportJob.status)}</span>
+                  <strong>{props.linkedinImportJob.profile_snapshot?.full_name ?? props.linkedinImportJob.linkedin_url ?? "LinkedIn profile"}</strong>
+                  <small>
+                    {props.linkedinImportJob.error_message ||
+                      (props.linkedinImportJob.document_id
+                        ? `Candidate profile created${props.linkedinImportJob.has_note ? " with recruiter note." : "."}`
+                        : domainLabel(props.linkedinImportJob.stage ?? "queued"))}
+                  </small>
+                </div>
+              ) : null}
             </div>
-            <p>
-              {activeBatch
-                ? `Processing ${activeBatch.completed_count + activeBatch.failed_count} of ${activeBatch.total_files} files. Profiles update automatically when parsing completes.`
-                : "Select resumes and queue them. Profiles update automatically after processing."}
-            </p>
-          </section>
+          )}
         </article>
-        <article className="uploadTypePanel linkedinImportPanel">
-          <div className="uploadTypeHeader">
-            <span className="eyebrow">LinkedIn intake</span>
-            <h3>Add candidate from LinkedIn</h3>
-            <p>Paste a LinkedIn profile URL when you do not have a CV yet. The profile becomes a candidate record and stays searchable.</p>
-          </div>
-          <label>
-            <span>LinkedIn profile URL</span>
-            <input
-              value={props.linkedinImportUrl}
-              onChange={(event) => props.setLinkedinImportUrl(event.target.value)}
-              placeholder="https://www.linkedin.com/in/..."
-            />
-          </label>
-          <label>
-            <span>Destination</span>
-            <select value={props.linkedinImportCampaignId} onChange={(event) => props.setLinkedinImportCampaignId(event.target.value)}>
-              <option value="workspace">Candidate database only</option>
-              {props.campaigns.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
-            </select>
-          </label>
-          <button className="primary" disabled={!props.linkedinImportUrl.trim() || props.busy} onClick={props.importLinkedIn}>
-            {props.busy ? "Working..." : selectedLinkedInCampaign ? "Import into campaign" : "Import LinkedIn profile"}
-          </button>
-          {props.linkedinImportJob ? (
-            <div className="linkedinImportStatus">
-              <span className={`queueStatus ${props.linkedinImportJob.status}`}>{domainLabel(props.linkedinImportJob.status)}</span>
-              <strong>{props.linkedinImportJob.profile_snapshot?.full_name ?? props.linkedinImportJob.linkedin_url ?? "LinkedIn profile"}</strong>
-              <small>{props.linkedinImportJob.error_message || (props.linkedinImportJob.document_id ? "Candidate profile created." : domainLabel(props.linkedinImportJob.stage ?? "queued"))}</small>
-            </div>
-          ) : null}
-        </article>
+
         <article className="uploadTypePanel campaignRequirementUploadTab">
-          <div>
-            <span className="eyebrow">Campaign requirement</span>
-            <h3>Attach the requirement to a campaign</h3>
-            <p>Requirement upload is not standalone. Pick a campaign, upload or paste the requirement, then edit the extracted scorecard in Campaigns.</p>
+          <div className="uploadTypeHeader">
+            <span className="eyebrow">Requirement intake</span>
+            <h3>Attach requirement</h3>
+            <p>Every requirement belongs to a campaign. Upload or paste it here, then edit the extracted scorecard in Campaigns.</p>
           </div>
           <label>
             <span>Campaign</span>
@@ -2849,7 +2890,7 @@ function UploadResumeView(props: {
               <span>PDF, DOCX, TXT, or MD</span>
               <input type="file" accept={DOCUMENT_FILE_ACCEPT} onChange={(event) => setCampaignRequirementFile(event.target.files?.[0] ?? null)} />
             </label>
-            <button className="secondary" disabled={!requirementCampaignReady || !campaignRequirementFile || props.busy} onClick={submitRequirementFile}>Extract file into campaign</button>
+            <button className="secondary" disabled={!requirementCampaignReady || !campaignRequirementFile || props.busy} onClick={submitRequirementFile}>Extract file</button>
             <textarea value={requirementTextDraft} onChange={(event) => setRequirementTextDraft(event.target.value)} placeholder="Paste job requirement, client email, or hiring-manager notes..." />
             <button className="primary" disabled={!requirementCampaignReady || !requirementTextDraft.trim() || props.busy} onClick={submitRequirementText}>Extract pasted requirement</button>
           </div>
@@ -3531,6 +3572,8 @@ function CandidateDetail({
   const primaryLinkedIn = linkedinProfileUrls[0];
   const primaryPortfolio = portfolioUrls[0];
   const linkedinVerified = isLinkedInVerified(linkedinRun, profileVerification.linkedin, linkedinExternal);
+  const linkedinConfidence = linkedinMatchConfidence(linkedinRun, linkedinExternal);
+  const linkedinConfidenceLabel = typeof linkedinConfidence === "number" ? `${Math.round(linkedinConfidence * 100)}% match` : null;
   const linkedinVerificationBusy = linkedinVerifyState === "running" || linkedinRun?.status === "running" || linkedinRun?.status === "queued";
   const versionMatches = candidate.candidate_versions?.matches ?? [];
   const versionLinks = candidateVersionLinks(candidate, versionMatches);
@@ -3597,7 +3640,7 @@ function CandidateDetail({
                   {linkedinVerified ? <CheckCircle2 size={15} /> : null}
                   <a href={primaryLinkedIn} target="_blank" rel="noreferrer">LinkedIn</a>
                   {linkedinVerified ? (
-                    <b>Verified</b>
+                    <b>{linkedinConfidenceLabel ? `Verified · ${linkedinConfidenceLabel}` : "Verified"}</b>
                   ) : (
                     <button type="button" onClick={() => void verifyLinkedIn()} disabled={linkedinVerificationBusy}>
                       {linkedinVerificationBusy ? "Verifying..." : "Verify"}
@@ -4035,6 +4078,7 @@ function CandidateDetail({
                 <div><span>Experience</span><strong>{formatYears(accounting?.total_years_unique ?? hr?.total_years_experience)}</strong></div>
                 <div><span>Top domain</span><strong>{domainRows[0] ? domainLabel(domainRows[0].domain) : "Not found"}</strong></div>
                 <div><span>Location</span><strong>{currentLocation || resumeHeaderLocation || "Unknown"}</strong></div>
+                <div><span>LinkedIn</span><strong>{linkedinVerified ? (linkedinConfidenceLabel ?? "Verified") : primaryLinkedIn ? "Not verified" : "Not found"}</strong></div>
                 <div><span>Versions</span><strong>{versionSummary.quickFact}</strong></div>
               </div>
               <div className="profileVerificationList compact">
@@ -4140,6 +4184,13 @@ function LinkedInVerificationSummary({ run, external }: { run: LinkedInVerificat
       {gaps.length ? <p className="muted">{gaps[0]}</p> : null}
     </div>
   );
+}
+
+function linkedinMatchConfidence(run: LinkedInVerificationRun | null, external: any): number | null {
+  const direct = run?.match_confidence;
+  if (typeof direct === "number") return direct;
+  const comparison = run?.comparison && Object.keys(run.comparison).length ? run.comparison : external?.comparison ?? {};
+  return typeof comparison.match_confidence === "number" ? comparison.match_confidence : null;
 }
 
 function linkedinVerificationStatus(run: LinkedInVerificationRun | null, external: any) {

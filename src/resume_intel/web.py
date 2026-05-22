@@ -343,6 +343,8 @@ class LinkedInVerificationRequest(BaseModel):
 class LinkedInImportRequest(BaseModel):
     linkedin_url: str
     campaign_id: str | None = None
+    note_name: str | None = None
+    note_content: str | None = None
     auto_start: bool = True
 
 
@@ -457,6 +459,8 @@ def import_candidate_from_linkedin(
             user_id=user["id"],
             linkedin_url=request.linkedin_url,
             campaign_id=request.campaign_id,
+            note_name=request.note_name,
+            note_content=request.note_content,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

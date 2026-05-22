@@ -12,7 +12,7 @@ from psycopg.types.json import Jsonb
 from .candidate_versions import find_matches_for_record, persist_matches
 from .candidate_facts import factual_current_company, factual_current_title
 from .db import db
-from .db_store import load_candidate_db, load_raw_text_db, save_candidate_db
+from .db_store import add_note_db, load_candidate_db, load_raw_text_db, save_candidate_db
 from .pii import _canonical_linkedin_profile_url
 from .settings import Settings, load_settings
 from .timeline import build_timeline_profile
@@ -181,6 +181,8 @@ def enqueue_linkedin_import(
     user_id: str,
     linkedin_url: str,
     campaign_id: str | None = None,
+    note_name: str | None = None,
+    note_content: str | None = None,
 ) -> dict[str, Any]:
     canonical_url = canonical_linkedin_url(linkedin_url)
     if not canonical_url:
@@ -198,12 +200,22 @@ def enqueue_linkedin_import(
             """
             insert into linkedin_import_jobs (
               tenant_id, requested_by_user_id, campaign_id, linkedin_url, canonical_url,
-              status, stage, provider, actor_id
+              status, stage, provider, actor_id, note_name, note_content
             )
-            values (%s, %s, %s, %s, %s, 'queued', 'queued', %s, %s)
+            values (%s, %s, %s, %s, %s, 'queued', 'queued', %s, %s, %s, %s)
             returning *
             """,
-            (tenant_id, user_id, campaign_id, linkedin_url, canonical_url, PROVIDER, settings.linkedin_actor_id),
+            (
+                tenant_id,
+                user_id,
+                campaign_id,
+                linkedin_url,
+                canonical_url,
+                PROVIDER,
+                settings.linkedin_actor_id,
+                (note_name or "Recruiter Notes").strip() or "Recruiter Notes",
+                (note_content or "").strip() or None,
+            ),
         ).fetchone()
         conn.execute(
             """
@@ -270,6 +282,15 @@ def run_linkedin_import(import_id: str, tenant_id: str) -> dict[str, Any]:
             activity_title="LinkedIn profile imported",
             activity_body=snapshot.get("linkedin_url"),
         )
+        if str(job.get("note_content") or "").strip():
+            record = add_note_db(
+                record["document_id"],
+                str(job["requested_by_user_id"]) if job.get("requested_by_user_id") else None,
+                str(job.get("note_name") or "Recruiter Notes"),
+                str(job.get("note_content") or ""),
+                tenant_id,
+                reindex_search=True,
+            )
         _link_candidate_profile(
             tenant_id=tenant_id,
             document_id=record["document_id"],
@@ -997,6 +1018,8 @@ def _import_job_row(row: dict[str, Any] | None) -> dict[str, Any]:
         "actor_id": row.get("actor_id"),
         "document_id": row.get("document_id"),
         "profile_snapshot": row.get("profile_snapshot") or {},
+        "note_name": row.get("note_name"),
+        "has_note": bool(row.get("note_content")),
         "error_message": row.get("error_message"),
         "credits_used": int(row.get("credits_used") or 0),
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,

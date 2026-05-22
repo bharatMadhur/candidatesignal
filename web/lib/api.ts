@@ -190,6 +190,8 @@ export type LinkedInImportJob = {
   stage?: string | null;
   document_id?: string | null;
   profile_snapshot?: Record<string, any>;
+  note_name?: string | null;
+  has_note?: boolean;
   error_message?: string | null;
   credits_used?: number;
   created_at?: string | null;
@@ -817,11 +819,24 @@ export async function verifyLinkedInProfile(token: string, id: string, linkedinU
   });
 }
 
-export async function importLinkedInCandidate(token: string, linkedinUrl: string, campaignId?: string, autoStart = true): Promise<{ import: LinkedInImportJob }> {
+export async function importLinkedInCandidate(
+  token: string,
+  linkedinUrl: string,
+  campaignId?: string,
+  noteName?: string,
+  noteContent?: string,
+  autoStart = true,
+): Promise<{ import: LinkedInImportJob }> {
   return request("/candidates/linkedin-imports", {
     method: "POST",
     token,
-    body: JSON.stringify({ linkedin_url: linkedinUrl, campaign_id: campaignId || null, auto_start: autoStart }),
+    body: JSON.stringify({
+      linkedin_url: linkedinUrl,
+      campaign_id: campaignId || null,
+      note_name: noteName || null,
+      note_content: noteContent || null,
+      auto_start: autoStart,
+    }),
   });
 }
 

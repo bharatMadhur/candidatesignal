@@ -316,7 +316,7 @@ def mark_candidate_review_signal_db(
 
 def add_note_db(
     document_id: str,
-    user_id: str,
+    user_id: str | None,
     name: str,
     content: str,
     tenant_id: str | None = None,

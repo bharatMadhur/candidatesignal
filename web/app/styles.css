@@ -11007,9 +11007,9 @@ h3 {
 
 .uploadLandingGrid {
   display: grid;
-  grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.92fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 18px;
-  align-items: stretch;
+  align-items: start;
 }
 
 .uploadTypePanel {
@@ -11053,8 +11053,93 @@ h3 {
     radial-gradient(circle at top left, rgba(53, 92, 125, 0.08), transparent 34%);
 }
 
+.refinedUploadDrop.compact {
+  min-height: 190px;
+}
+
 .refinedUploadCard {
   box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+}
+
+.refinedUploadCard.compact {
+  box-shadow: none;
+}
+
+.candidateIntakePanel,
+.campaignRequirementUploadTab {
+  min-height: 620px;
+}
+
+.intakeToggleTabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-low);
+  padding: 5px;
+}
+
+.intakeToggleTabs button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.intakeToggleTabs button.active {
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+}
+
+.intakeModePane,
+.linkedinIntakePane {
+  display: grid;
+  gap: 14px;
+}
+
+.linkedinIntakePane label,
+.linkedinRecruiterNoteBox label {
+  display: grid;
+  gap: 8px;
+}
+
+.linkedinIntakePane label span,
+.linkedinRecruiterNoteBox label span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.linkedinIntakePane input,
+.linkedinIntakePane select,
+.linkedinRecruiterNoteBox textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  padding: 12px 13px;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.linkedinRecruiterNoteBox {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-low);
+  padding: 12px;
+}
+
+.linkedinRecruiterNoteBox textarea {
+  min-height: 124px;
+  resize: vertical;
 }
 
 .campaignRequirementUploadTab {
