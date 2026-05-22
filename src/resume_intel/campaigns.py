@@ -7,7 +7,7 @@ from psycopg.types.json import Jsonb
 
 from .candidate_facts import factual_current_company, factual_current_title
 from .db import db
-from .geo import current_job_location
+from .geo import candidate_current_location
 from .requirements import CAMPAIGN_MATCH_VISIBILITY_THRESHOLD, create_requirement_from_text, match_requirement, update_requirement_scorecard
 from .settings import load_settings
 
@@ -693,7 +693,7 @@ def _candidate_summary(record: dict[str, Any], updated_at: Any = None) -> dict[s
         "current_role_flags": fact_verification.get("current_role_flags") or [],
         "total_years_experience": hr_profile.get("total_years_experience"),
         "seniority": hr_profile.get("seniority_level"),
-        "location": location_intelligence.get("current_job_location") or current_job_location(record),
+        "location": candidate_current_location(record),
         "countries": [
             item.get("country")
             for item in record.get("derived", {}).get("countries_associated", [])

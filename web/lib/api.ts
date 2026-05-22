@@ -182,6 +182,21 @@ export type LinkedInVerificationRun = {
   completed_at?: string | null;
 };
 
+export type LinkedInImportJob = {
+  id: string;
+  campaign_id?: string | null;
+  linkedin_url?: string | null;
+  status: "queued" | "running" | "succeeded" | "failed" | "retrying" | string;
+  stage?: string | null;
+  document_id?: string | null;
+  profile_snapshot?: Record<string, any>;
+  error_message?: string | null;
+  credits_used?: number;
+  created_at?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+};
+
 export type CandidateProfileUpdate = {
   name?: string | null;
   email?: string | null;
@@ -800,6 +815,22 @@ export async function verifyLinkedInProfile(token: string, id: string, linkedinU
     token,
     body: JSON.stringify({ linkedin_url: linkedinUrl || null, auto_start: autoStart }),
   });
+}
+
+export async function importLinkedInCandidate(token: string, linkedinUrl: string, campaignId?: string, autoStart = true): Promise<{ import: LinkedInImportJob }> {
+  return request("/candidates/linkedin-imports", {
+    method: "POST",
+    token,
+    body: JSON.stringify({ linkedin_url: linkedinUrl, campaign_id: campaignId || null, auto_start: autoStart }),
+  });
+}
+
+export async function getLinkedInImport(token: string, importId: string): Promise<{ import: LinkedInImportJob }> {
+  return request(`/candidates/linkedin-imports/${importId}`, { token });
+}
+
+export async function listLinkedInImports(token: string, limit = 10): Promise<{ imports: LinkedInImportJob[] }> {
+  return request(`/candidates/linkedin-imports?limit=${encodeURIComponent(String(limit))}`, { token });
 }
 
 export async function uploadResume(file: File, noteName: string, note: string, token: string): Promise<{ batch: ParseBatch; job: ParseJob; message: string }> {

@@ -27,6 +27,7 @@ import {
   CampaignScorecard,
   CandidateMaintenanceJob,
   CandidateSummary,
+  LinkedInImportJob,
   LinkedInVerificationRun,
   AuditEvent,
   CopilotMessage,
@@ -74,6 +75,7 @@ import {
   getCampaign,
   getCandidateDocumentHtml,
   getLinkedInVerification,
+  getLinkedInImport,
   getCopilotThread,
   getTenantAdminDetail,
   getCandidateRawText,
@@ -86,6 +88,7 @@ import {
   getParseBatch,
   getWorkerStatus,
   inviteTeamMember,
+  importLinkedInCandidate,
   listCandidates,
   listCampaigns,
   listCopilotThreads,
@@ -226,6 +229,9 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   const [batchName, setBatchName] = useState("");
   const [bulkContextNote, setBulkContextNote] = useState("");
   const [bulkCampaignId, setBulkCampaignId] = useState("workspace");
+  const [linkedinImportUrl, setLinkedinImportUrl] = useState("");
+  const [linkedinImportCampaignId, setLinkedinImportCampaignId] = useState("workspace");
+  const [linkedinImportJob, setLinkedinImportJob] = useState<LinkedInImportJob | null>(null);
   const [requirementFile, setRequirementFile] = useState<File | null>(null);
   const [requirementText, setRequirementText] = useState("");
   const [campaignName, setCampaignName] = useState("New job campaign");
@@ -721,6 +727,33 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     setParseBatches((items) => [result.batch, ...items.filter((item) => item.id !== result.batch.id)]);
     setSelectedBatch(result.batch);
     await refresh();
+  }
+
+  async function handleLinkedInImport() {
+    if (!token || !linkedinImportUrl.trim()) return;
+    const campaignId = linkedinImportCampaignId === "workspace" ? undefined : linkedinImportCampaignId;
+    const result = await run("Importing LinkedIn profile", () => importLinkedInCandidate(token, linkedinImportUrl.trim(), campaignId));
+    if (!result) return;
+    setLinkedinImportJob(result.import);
+    setStatus("LinkedIn profile import started.");
+    const completed = await pollLinkedInImport(result.import.id);
+    if (completed?.status === "succeeded" && completed.document_id) {
+      setLinkedinImportUrl("");
+      await refresh();
+      await handleOpenCandidate(completed.document_id);
+    } else if (completed?.status === "failed") {
+      setStatus(completed.error_message || "LinkedIn import failed");
+    }
+  }
+
+  async function pollLinkedInImport(importId: string) {
+    for (let attempt = 0; attempt < 18; attempt += 1) {
+      await delay(1500);
+      const result = await getLinkedInImport(token, importId);
+      setLinkedinImportJob(result.import);
+      if (["succeeded", "failed"].includes(result.import.status)) return result.import;
+    }
+    return null;
   }
 
   async function handleSelectBatch(batch: ParseBatch) {
@@ -1653,12 +1686,18 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               campaigns={campaigns}
               bulkCampaignId={bulkCampaignId}
               setBulkCampaignId={setBulkCampaignId}
+              linkedinImportUrl={linkedinImportUrl}
+              setLinkedinImportUrl={setLinkedinImportUrl}
+              linkedinImportCampaignId={linkedinImportCampaignId}
+              setLinkedinImportCampaignId={setLinkedinImportCampaignId}
+              linkedinImportJob={linkedinImportJob}
               noteName={noteName}
               setNoteName={setNoteName}
               note={note}
               setNote={setNote}
               upload={handleUploadResume}
               bulkUpload={handleBulkUpload}
+              importLinkedIn={handleLinkedInImport}
               batches={parseBatches}
               deadLetters={parseDeadLetters}
               workerStatus={workerStatus}
@@ -2649,12 +2688,18 @@ function UploadResumeView(props: {
   campaigns: JobCampaign[];
   bulkCampaignId: string;
   setBulkCampaignId: (value: string) => void;
+  linkedinImportUrl: string;
+  setLinkedinImportUrl: (value: string) => void;
+  linkedinImportCampaignId: string;
+  setLinkedinImportCampaignId: (value: string) => void;
+  linkedinImportJob: LinkedInImportJob | null;
   noteName: string;
   setNoteName: (value: string) => void;
   note: string;
   setNote: (value: string) => void;
   upload: () => void;
   bulkUpload: () => void;
+  importLinkedIn: () => void;
   batches: ParseBatch[];
   deadLetters: ParseDeadLetter[];
   workerStatus: WorkerStatus | null;
@@ -2672,6 +2717,7 @@ function UploadResumeView(props: {
   const [requirementTextDraft, setRequirementTextDraft] = useState("");
   const [campaignRequirementFile, setCampaignRequirementFile] = useState<File | null>(null);
   const selectedCampaign = props.campaigns.find((item) => item.id === props.bulkCampaignId);
+  const selectedLinkedInCampaign = props.campaigns.find((item) => item.id === props.linkedinImportCampaignId);
   const activeBatch = props.selectedBatch ?? props.batches[0] ?? null;
   const activeProgress = activeBatch ? (activeBatch.progress_percent ?? batchProgress(activeBatch)) : 0;
   const generatedBatchName = autoBatchNameForFiles(props.bulkFiles, selectedCampaign?.name);
@@ -2750,6 +2796,38 @@ function UploadResumeView(props: {
                 : "Select resumes and queue them. Profiles update automatically after processing."}
             </p>
           </section>
+        </article>
+        <article className="uploadTypePanel linkedinImportPanel">
+          <div className="uploadTypeHeader">
+            <span className="eyebrow">LinkedIn intake</span>
+            <h3>Add candidate from LinkedIn</h3>
+            <p>Paste a LinkedIn profile URL when you do not have a CV yet. The profile becomes a candidate record and stays searchable.</p>
+          </div>
+          <label>
+            <span>LinkedIn profile URL</span>
+            <input
+              value={props.linkedinImportUrl}
+              onChange={(event) => props.setLinkedinImportUrl(event.target.value)}
+              placeholder="https://www.linkedin.com/in/..."
+            />
+          </label>
+          <label>
+            <span>Destination</span>
+            <select value={props.linkedinImportCampaignId} onChange={(event) => props.setLinkedinImportCampaignId(event.target.value)}>
+              <option value="workspace">Candidate database only</option>
+              {props.campaigns.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
+            </select>
+          </label>
+          <button className="primary" disabled={!props.linkedinImportUrl.trim() || props.busy} onClick={props.importLinkedIn}>
+            {props.busy ? "Working..." : selectedLinkedInCampaign ? "Import into campaign" : "Import LinkedIn profile"}
+          </button>
+          {props.linkedinImportJob ? (
+            <div className="linkedinImportStatus">
+              <span className={`queueStatus ${props.linkedinImportJob.status}`}>{domainLabel(props.linkedinImportJob.status)}</span>
+              <strong>{props.linkedinImportJob.profile_snapshot?.full_name ?? props.linkedinImportJob.linkedin_url ?? "LinkedIn profile"}</strong>
+              <small>{props.linkedinImportJob.error_message || (props.linkedinImportJob.document_id ? "Candidate profile created." : domainLabel(props.linkedinImportJob.stage ?? "queued"))}</small>
+            </div>
+          ) : null}
         </article>
         <article className="uploadTypePanel campaignRequirementUploadTab">
           <div>
@@ -3308,9 +3386,10 @@ function CandidateDetail({
   }).sort((left, right) => right.years - left.years);
   const skillTaxonomyEntries = Object.entries(intelligence?.hr_intelligence?.skill_taxonomy ?? {});
   const locationSignals = locationIntel?.location_signals ?? locationIntel?.countries_associated ?? candidate.derived?.countries_associated ?? [];
-  const latestJobLocation = textValue(locationIntel?.current_job_location) || textValue(candidate.experience?.[0]?.location);
+  const latestJobLocation = textValue(locationIntel?.latest_role_location) || textValue(locationIntel?.current_job_location) || textValue(candidate.experience?.[0]?.location);
   const resumeHeaderLocation = textValue(locationIntel?.resume_header_location) || textValue(candidate.contact?.location);
-  const currentLocation = latestJobLocation;
+  const currentLocation = resumeHeaderLocation || textValue(locationIntel?.current_location) || latestJobLocation;
+  const currentLocationSource = resumeHeaderLocation && currentLocation === resumeHeaderLocation ? "resume_header" : textValue(locationIntel?.current_location_source);
   const coverage = candidate.primary_key_coverage;
   const coverageScore = Number(coverage?.score ?? 0);
   const needsUploadReview = coverageScore > 0 && coverageScore < 0.8 && !reviewedSignals.includes("low_coverage");
@@ -3320,7 +3399,8 @@ function CandidateDetail({
     candidate.contact?.phone ? { label: "Phone", value: candidate.contact.phone, source: "Parsed contact field", query: [candidate.contact.phone] } : null,
     linkedinProfileUrls.length ? { label: "LinkedIn", value: linkedinProfileUrls[0], source: "Deterministic PII/link extraction", query: linkedinProfileUrls.slice(0, 2) } : null,
     portfolioUrls.length ? { label: "Portfolio", value: portfolioUrls[0], source: "Deterministic PII/link extraction", query: portfolioUrls.slice(0, 2) } : null,
-    currentLocation ? { label: "Latest job location", value: currentLocation, source: "Latest experience location", query: [currentLocation] } : null,
+    currentLocation ? { label: "Current location", value: currentLocation, source: currentLocationSource === "resume_header" ? "Resume contact/header location" : "Latest experience location", query: [currentLocation] } : null,
+    latestJobLocation ? { label: "Latest role location", value: latestJobLocation, source: "Latest experience location", query: [latestJobLocation] } : null,
     resumeHeaderLocation ? { label: "Resume header location", value: resumeHeaderLocation, source: "Resume contact/header location", query: [resumeHeaderLocation] } : null,
     hr?.current_title ? { label: "Current title", value: hr.current_title, source: "Derived HR profile", query: [hr.current_title] } : null,
     hr?.current_company ? { label: "Current company", value: hr.current_company, source: "Derived HR profile", query: [hr.current_company] } : null,
@@ -3450,6 +3530,8 @@ function CandidateDetail({
   const locationChips = candidateLocationChips(locationSignals, currentLocation);
   const primaryLinkedIn = linkedinProfileUrls[0];
   const primaryPortfolio = portfolioUrls[0];
+  const linkedinVerified = isLinkedInVerified(linkedinRun, profileVerification.linkedin, linkedinExternal);
+  const linkedinVerificationBusy = linkedinVerifyState === "running" || linkedinRun?.status === "running" || linkedinRun?.status === "queued";
   const versionMatches = candidate.candidate_versions?.matches ?? [];
   const versionLinks = candidateVersionLinks(candidate, versionMatches);
   const versionSummary = candidateVersionSummary(versionLinks);
@@ -3508,7 +3590,22 @@ function CandidateDetail({
           <div className="candidateReportAvatar">{candidateInitials(candidate.name)}</div>
           <div>
             <span className="reportLabel">Candidate Report</span>
-            <h2>{candidate.name ?? "Unknown Candidate"}</h2>
+            <h2 className="candidateNameLine">
+              {candidate.name ?? "Unknown Candidate"}
+              {primaryLinkedIn ? (
+                <span className={linkedinVerified ? "linkedinHeaderBadge verified" : "linkedinHeaderBadge"}>
+                  {linkedinVerified ? <CheckCircle2 size={15} /> : null}
+                  <a href={primaryLinkedIn} target="_blank" rel="noreferrer">LinkedIn</a>
+                  {linkedinVerified ? (
+                    <b>Verified</b>
+                  ) : (
+                    <button type="button" onClick={() => void verifyLinkedIn()} disabled={linkedinVerificationBusy}>
+                      {linkedinVerificationBusy ? "Verifying..." : "Verify"}
+                    </button>
+                  )}
+                </span>
+              ) : null}
+            </h2>
             <p>
               {hr?.current_title ?? finalProfile?.summary_card?.current_or_target_title ?? "Role not extracted"}
               {hr?.current_company ? ` at ${hr.current_company}` : ""}
@@ -3516,10 +3613,9 @@ function CandidateDetail({
             <div className="candidateReportBadges">
               <span>{formatYears(accounting?.total_years_unique ?? hr?.total_years_experience)} experience</span>
               {roleFactNeedsReview ? <span className="factReviewBadge">Role facts need review</span> : <span className="factVerifiedBadge">Role facts verified</span>}
-              {currentLocation ? <span className="currentLocationBadge">Latest role: {currentLocation}</span> : <span className="currentLocationBadge muted">Latest role location not stated</span>}
+              {currentLocation ? <span className="currentLocationBadge">Current location: {currentLocation}</span> : <span className="currentLocationBadge muted">Current location not stated</span>}
               <span className={versionSummary.needsReview ? "versionReviewBadge" : ""}>{versionSummary.badge}</span>
               {reparseStatusBatch ? <span className="reparseStatusBadge">Reparse: {domainLabel(reparseStatusBatch.status)}</span> : null}
-              {primaryLinkedIn ? <a href={primaryLinkedIn} target="_blank" rel="noreferrer">LinkedIn</a> : null}
               {primaryPortfolio ? <a href={primaryPortfolio} target="_blank" rel="noreferrer">Portfolio</a> : null}
             </div>
           </div>
@@ -3595,15 +3691,16 @@ function CandidateDetail({
                 <div className="candidateSectionHeader">
                   <div>
                     <h3>Identity & Location</h3>
-                    <p>Current location is only highlighted when it appears in the latest role or resume header. Missing data stays marked as unknown.</p>
+                    <p>Current location prefers the resume header/profile location. Latest role location is shown separately when it differs.</p>
                   </div>
                   <span>{currentLocation ? "Current location found" : "Current location unknown"}</span>
                 </div>
                 <div className="identityLocationGrid">
                   <div className="currentLocationCallout">
-                    <span>Latest role location</span>
-                    <strong>{currentLocation || "Not stated in latest role"}</strong>
-                    {resumeHeaderLocation && resumeHeaderLocation !== currentLocation ? <em>Resume header: {resumeHeaderLocation}</em> : null}
+                    <span>Current location</span>
+                    <strong>{currentLocation || "Not stated"}</strong>
+                    {currentLocationSource ? <em>Source: {domainLabel(currentLocationSource)}</em> : null}
+                    {latestJobLocation && latestJobLocation !== currentLocation ? <em>Latest role: {latestJobLocation}</em> : null}
                   </div>
                   <div className="locationChipList">
                     {locationChips.length ? locationChips.map((item, index) => (
@@ -3950,6 +4047,7 @@ function CandidateDetail({
               </div>
             </article>
 
+            {(!primaryLinkedIn || linkedinVerifyError || linkedinRun?.status === "failed") ? (
             <article className="briefCard linkedinVerifyCard">
               <div className="railCardHeader">
                 <div>
@@ -3974,6 +4072,7 @@ function CandidateDetail({
               {linkedinVerifyError ? <p className="noteSaveFeedback error">{linkedinVerifyError}</p> : null}
               <LinkedInVerificationSummary run={linkedinRun} external={linkedinExternal} />
             </article>
+            ) : null}
 
             {noteSignalCount(recruiterNoteSignals) ? (
               <article className="briefCard noteSignalCard">
@@ -4051,6 +4150,12 @@ function linkedinVerificationStatus(run: LinkedInVerificationRun | null, externa
 function linkedinVerificationLabel(run: LinkedInVerificationRun | null, external: any) {
   const status = run?.status === "succeeded" ? run.result_status : run?.status;
   return domainLabel(status || external?.comparison?.status || "not checked");
+}
+
+function isLinkedInVerified(run: LinkedInVerificationRun | null, verificationItem: any, external: any) {
+  if (run?.status === "succeeded" && run.result_status === "verified") return true;
+  if (verificationItem?.status === "verified") return true;
+  return external?.comparison?.status === "verified";
 }
 
 function noteSignalItems(signals: any): Array<{ category: string; label: string; value?: string | null }> {

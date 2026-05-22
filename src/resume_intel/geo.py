@@ -33,6 +33,8 @@ CITY_TO_COUNTRY: dict[str, str] = {
     "dallas": "United States",
     "los angeles": "United States",
     "washington": "United States",
+    "pittsburgh": "United States",
+    "pittsburg": "United States",
     "bengaluru": "India",
     "bangalore": "India",
     "mumbai": "India",
@@ -133,12 +135,16 @@ def build_location_intelligence(record: dict[str, Any], raw_text: str | None = N
     location_signals = _location_signals(record, raw_mentions)
     latest_location = current_job_location(record)
     resume_header_location = _clean(record.get("contact", {}).get("location"))
+    best_current_location, best_current_source = _best_current_location(resume_header_location, latest_location)
 
     return {
-        "current_location": latest_location,
+        "current_location": best_current_location,
+        "current_location_source": best_current_source,
+        "current_location_confidence": best_current_source if best_current_location else "not_stated",
+        "latest_role_location": latest_location,
         "current_job_location": latest_location,
-        "current_location_confidence": "latest_role" if latest_location else "not_stated",
         "resume_header_location": resume_header_location,
+        "location_conflict": bool(resume_header_location and latest_location and _location_key(resume_header_location) != _location_key(latest_location)),
         "structured_locations": sorted(set(structured_locations), key=str.lower),
         "countries_associated": countries,
         "raw_location_mentions": raw_mentions,
@@ -193,16 +199,29 @@ def _structured_locations(record: dict[str, Any]) -> list[str]:
 
 
 def current_job_location(record: dict[str, Any]) -> str | None:
-    """Only the latest role can establish current location.
-
-    Contact/header locations are associated signals, but they are not reliable enough
-    to label as current if the latest job does not state a location.
-    """
+    """Return the latest role's stated location, not the person's current location."""
     for item in record.get("experience") or []:
         if not isinstance(item, dict):
             continue
         return _clean(item.get("location"))
     return None
+
+
+def candidate_current_location(record: dict[str, Any]) -> str | None:
+    intelligence = (record.get("derived") or {}).get("location_intelligence") or {}
+    return _clean(record.get("contact", {}).get("location")) or _clean(intelligence.get("current_location")) or current_job_location(record)
+
+
+def _best_current_location(resume_header_location: str | None, latest_role_location: str | None) -> tuple[str | None, str]:
+    if resume_header_location:
+        return resume_header_location, "resume_header"
+    if latest_role_location:
+        return latest_role_location, "latest_role"
+    return None, "not_stated"
+
+
+def _location_key(value: str | None) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", str(value or "").lower()).strip()
 
 
 def _location_signals(record: dict[str, Any], raw_mentions: list[str]) -> list[dict[str, Any]]:

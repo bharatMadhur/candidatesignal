@@ -12,7 +12,7 @@ from .coverage import primary_key_coverage
 from .db import db
 from .derive import normalize_domain_years
 from .fact_verification import enrich_fact_verification
-from .geo import current_job_location, enrich_record_locations
+from .geo import candidate_current_location, enrich_record_locations
 from .note_signals import candidate_note_signal_summary, delete_note_signals, replace_note_signals
 from .pii import enrich_record_pii
 from .profile_verification import enrich_profile_verification
@@ -27,6 +27,10 @@ def save_candidate_db(
     tenant_id: str | None = None,
     *,
     reindex_search: bool = True,
+    training_source_type: str = "resume_parse",
+    activity_event_type: str = "candidate.parsed",
+    activity_title: str = "Resume parsed",
+    activity_body: str | None = None,
 ) -> dict[str, Any]:
     if not tenant_id:
         tenant_id = _default_tenant_id()
@@ -93,15 +97,15 @@ def save_candidate_db(
             _replace_document_pages(conn, record, tenant_id, str(document_row["id"]))
         _replace_llm_usage_events(conn, record, tenant_id)
         _replace_normalized_candidate_tables(conn, record, tenant_id)
-        _upsert_training_data_example(conn, record, raw_text, tenant_id, "resume_parse")
+        _upsert_training_data_example(conn, record, raw_text, tenant_id, training_source_type)
         _record_activity_event(
             conn,
             tenant_id,
             record["document_id"],
             user_id,
-            "candidate.parsed",
-            "Resume parsed",
-            record.get("original_filename") or Path(record.get("source_file") or "Uploaded CV").name,
+            activity_event_type,
+            activity_title,
+            activity_body if activity_body is not None else record.get("original_filename") or Path(record.get("source_file") or "Uploaded CV").name,
             {"coverage": (record.get("primary_key_coverage") or {}).get("score")},
         )
         conn.commit()
@@ -239,7 +243,7 @@ def list_candidates_db(tenant_id: str | None = None) -> list[dict[str, Any]]:
                 "total_years_experience": hr_profile.get("total_years_experience"),
                 "seniority": hr_profile.get("seniority_level"),
                 "top_domains": top_domains,
-                "location": location_intelligence.get("current_job_location") or current_job_location(record),
+                "location": candidate_current_location(record),
                 "countries": [
                     item.get("country")
                     for item in record.get("derived", {}).get("countries_associated", [])

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .db import db
-from .geo import countries_for_search, current_job_location
+from .geo import candidate_current_location, countries_for_search
 from .settings import load_settings
 
 
@@ -124,6 +124,8 @@ def candidate_chunks(record: dict[str, Any], raw_text: str | None = None) -> lis
             " ".join(
                 [
                     record.get("contact", {}).get("location") or "",
+                    location_intelligence.get("current_location") or "",
+                    location_intelligence.get("latest_role_location") or "",
                     location_intelligence.get("current_job_location") or "",
                     location_intelligence.get("resume_header_location") or "",
                     " ".join(countries_for_search(record)),
@@ -448,7 +450,7 @@ def _candidate_summary(row: Any, scores: dict[str, Any]) -> dict[str, Any]:
         "total_years_experience": hr_profile.get("total_years_experience"),
         "seniority": hr_profile.get("seniority_level"),
         "top_domains": top_domains,
-        "location": location_intelligence.get("current_job_location") or current_job_location(record),
+        "location": candidate_current_location(record),
         "countries": countries_for_search(record),
         "coverage": record.get("primary_key_coverage", {}).get("score"),
         "source_file": record.get("original_filename") or Path(row["source_file"] or "Uploaded CV").name,

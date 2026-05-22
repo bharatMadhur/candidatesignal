@@ -57,7 +57,15 @@ from .db_store import (
 from .candidate_versions import candidate_version_requirements, decide_match, find_matches_for_record, list_clusters, list_matches_for_candidate, persist_matches
 from .governance import get_tenant_governance_policy, list_pii_access_events, role_can_view_contact_pii, update_tenant_governance_policy
 from .llm_provider import Message, NormalizedProvider
-from .linkedin_verification import enqueue_linkedin_verification, latest_linkedin_verification, run_linkedin_verification
+from .linkedin_verification import (
+    enqueue_linkedin_import,
+    enqueue_linkedin_verification,
+    get_linkedin_import_job,
+    latest_linkedin_imports,
+    latest_linkedin_verification,
+    run_linkedin_import,
+    run_linkedin_verification,
+)
 from .logging_config import configure_logging
 from .matching import (
     apply_copilot_direct_evidence_policy as _apply_copilot_direct_evidence_policy,
@@ -332,6 +340,12 @@ class LinkedInVerificationRequest(BaseModel):
     auto_start: bool = True
 
 
+class LinkedInImportRequest(BaseModel):
+    linkedin_url: str
+    campaign_id: str | None = None
+    auto_start: bool = True
+
+
 @app.on_event("startup")
 def startup() -> None:
     migrate()
@@ -408,6 +422,49 @@ def candidate_search(request: SemanticSearchRequest, user: dict = Depends(curren
     else:
         _audit_search_pii_access(user, "candidate_search", request.query, results)
     return {"results": results, "user": user}
+
+
+@app.get("/candidates/linkedin-imports")
+def candidate_linkedin_imports(limit: int = Query(10, ge=1, le=50), user: dict = Depends(current_user)) -> dict:
+    if not _can_view_pii(user):
+        raise HTTPException(status_code=403, detail="LinkedIn imports contain profile PII and require recruiter permission")
+    return {"imports": latest_linkedin_imports(_tenant_id(user), limit), "user": user}
+
+
+@app.get("/candidates/linkedin-imports/{import_id}")
+def candidate_linkedin_import(import_id: str, user: dict = Depends(current_user)) -> dict:
+    if not _can_view_pii(user):
+        raise HTTPException(status_code=403, detail="LinkedIn imports contain profile PII and require recruiter permission")
+    job = get_linkedin_import_job(import_id, _tenant_id(user))
+    if not job:
+        raise HTTPException(status_code=404, detail="LinkedIn import not found")
+    return {"import": job, "user": user}
+
+
+@app.post("/candidates/linkedin-imports", status_code=202)
+def import_candidate_from_linkedin(
+    request: LinkedInImportRequest,
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(current_user),
+) -> dict:
+    require_tenant_write(user)
+    if not _can_view_pii(user):
+        raise HTTPException(status_code=403, detail="LinkedIn import requires recruiter PII permission")
+    tenant_id = _tenant_id(user)
+    try:
+        job = enqueue_linkedin_import(
+            tenant_id=tenant_id,
+            user_id=user["id"],
+            linkedin_url=request.linkedin_url,
+            campaign_id=request.campaign_id,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if request.auto_start:
+        background_tasks.add_task(run_linkedin_import, job["id"], tenant_id)
+    return {"import": job, "user": user}
 
 
 @app.get("/analytics/workspace")

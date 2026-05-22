@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
@@ -8,11 +9,13 @@ from typing import Any
 import httpx
 from psycopg.types.json import Jsonb
 
+from .candidate_versions import find_matches_for_record, persist_matches
 from .candidate_facts import factual_current_company, factual_current_title
 from .db import db
-from .db_store import load_candidate_db, load_raw_text_db
+from .db_store import load_candidate_db, load_raw_text_db, save_candidate_db
 from .pii import _canonical_linkedin_profile_url
 from .settings import Settings, load_settings
+from .timeline import build_timeline_profile
 from .vector_search import upsert_candidate_search_chunks
 
 
@@ -172,6 +175,170 @@ def run_linkedin_verification(run_id: str, tenant_id: str) -> dict[str, Any]:
         return _run_row(row)
 
 
+def enqueue_linkedin_import(
+    *,
+    tenant_id: str,
+    user_id: str,
+    linkedin_url: str,
+    campaign_id: str | None = None,
+) -> dict[str, Any]:
+    canonical_url = canonical_linkedin_url(linkedin_url)
+    if not canonical_url:
+        raise ValueError("paste a valid LinkedIn /in/ profile URL")
+    settings = load_settings()
+    with db() as conn:
+        if campaign_id:
+            campaign = conn.execute(
+                "select id from job_campaigns where id=%s and tenant_id=%s",
+                (campaign_id, tenant_id),
+            ).fetchone()
+            if not campaign:
+                raise FileNotFoundError("campaign not found")
+        row = conn.execute(
+            """
+            insert into linkedin_import_jobs (
+              tenant_id, requested_by_user_id, campaign_id, linkedin_url, canonical_url,
+              status, stage, provider, actor_id
+            )
+            values (%s, %s, %s, %s, %s, 'queued', 'queued', %s, %s)
+            returning *
+            """,
+            (tenant_id, user_id, campaign_id, linkedin_url, canonical_url, PROVIDER, settings.linkedin_actor_id),
+        ).fetchone()
+        conn.execute(
+            """
+            insert into audit_logs (tenant_id, user_id, action, entity_type, entity_id, metadata)
+            values (%s, %s, 'candidate.linkedin_import_queued', 'linkedin_import_job', %s, %s)
+            """,
+            (tenant_id, user_id, str(row["id"]), Jsonb({"linkedin_url": canonical_url, "campaign_id": campaign_id})),
+        )
+        conn.commit()
+    return _import_job_row(row)
+
+
+def latest_linkedin_imports(tenant_id: str, limit: int = 10) -> list[dict[str, Any]]:
+    with db() as conn:
+        rows = conn.execute(
+            """
+            select *
+            from linkedin_import_jobs
+            where tenant_id=%s
+            order by created_at desc
+            limit %s
+            """,
+            (tenant_id, max(1, min(limit, 50))),
+        ).fetchall()
+    return [_import_job_row(row) for row in rows]
+
+
+def get_linkedin_import_job(import_id: str, tenant_id: str) -> dict[str, Any] | None:
+    with db() as conn:
+        row = conn.execute("select * from linkedin_import_jobs where id=%s and tenant_id=%s", (import_id, tenant_id)).fetchone()
+    return _import_job_row(row) if row else None
+
+
+def run_linkedin_import(import_id: str, tenant_id: str) -> dict[str, Any]:
+    with db() as conn:
+        job = conn.execute(
+            """
+            update linkedin_import_jobs
+            set status='running', stage='fetching_linkedin', started_at=coalesce(started_at, now()), updated_at=now()
+            where id=%s and tenant_id=%s and status in ('queued', 'retrying', 'running')
+            returning *
+            """,
+            (import_id, tenant_id),
+        ).fetchone()
+        conn.commit()
+    if not job:
+        raise FileNotFoundError(import_id)
+    try:
+        settings = load_settings()
+        if not settings.apify_api_token:
+            raise RuntimeError("APIFY_API_TOKEN is not configured")
+        raw_profile = fetch_linkedin_profile(str(job["canonical_url"]), settings)
+        snapshot = normalize_linkedin_profile(raw_profile, str(job["canonical_url"]))
+        external_profile_id = _upsert_external_profile(raw_profile, snapshot)
+        raw_text = linkedin_profile_raw_text(snapshot)
+        record = linkedin_snapshot_to_candidate_record(snapshot, raw_profile, tenant_id)
+        record = save_candidate_db(
+            record,
+            raw_text,
+            str(job["requested_by_user_id"]) if job.get("requested_by_user_id") else None,
+            tenant_id,
+            training_source_type="linkedin_profile_import",
+            activity_event_type="candidate.linkedin_imported",
+            activity_title="LinkedIn profile imported",
+            activity_body=snapshot.get("linkedin_url"),
+        )
+        _link_candidate_profile(
+            tenant_id=tenant_id,
+            document_id=record["document_id"],
+            external_profile_id=external_profile_id,
+            requested_by_user_id=str(job["requested_by_user_id"]) if job.get("requested_by_user_id") else None,
+            run_id=None,
+            comparison={
+                "status": "verified",
+                "match_confidence": 1.0,
+                "reasons": ["Candidate was created directly from the LinkedIn profile source."],
+                "gaps": [],
+            },
+            source="linkedin_import",
+        )
+        if job.get("campaign_id"):
+            _attach_linkedin_import_to_campaign(
+                tenant_id=tenant_id,
+                campaign_id=str(job["campaign_id"]),
+                document_id=record["document_id"],
+                linkedin_url=str(job["canonical_url"]),
+            )
+        matches = find_matches_for_record(record, tenant_id=tenant_id)
+        persist_matches(record, matches, tenant_id)
+        with db() as conn:
+            row = conn.execute(
+                """
+                update linkedin_import_jobs
+                set status='succeeded',
+                    stage='completed',
+                    document_id=%s,
+                    external_profile_id=%s,
+                    profile_snapshot=%s,
+                    credits_used=1,
+                    completed_at=now(),
+                    updated_at=now()
+                where id=%s and tenant_id=%s
+                returning *
+                """,
+                (record["document_id"], external_profile_id, Jsonb(snapshot), import_id, tenant_id),
+            ).fetchone()
+            conn.execute(
+                """
+                insert into audit_logs (tenant_id, user_id, action, entity_type, entity_id, metadata)
+                values (%s, %s, 'candidate.linkedin_import_completed', 'candidate', %s, %s)
+                """,
+                (
+                    tenant_id,
+                    str(job["requested_by_user_id"]) if job.get("requested_by_user_id") else None,
+                    record["document_id"],
+                    Jsonb({"import_id": import_id, "linkedin_url": job["canonical_url"], "campaign_id": str(job["campaign_id"]) if job.get("campaign_id") else None}),
+                ),
+            )
+            conn.commit()
+        return _import_job_row(row)
+    except Exception as exc:
+        with db() as conn:
+            row = conn.execute(
+                """
+                update linkedin_import_jobs
+                set status='failed', stage='failed', error_message=%s, completed_at=now(), updated_at=now()
+                where id=%s and tenant_id=%s
+                returning *
+                """,
+                (str(exc), import_id, tenant_id),
+            ).fetchone()
+            conn.commit()
+        return _import_job_row(row)
+
+
 def fetch_linkedin_profile(linkedin_url: str, settings: Settings) -> dict[str, Any]:
     url = f"https://api.apify.com/v2/acts/{settings.linkedin_actor_id}/run-sync-get-dataset-items"
     payload = {
@@ -226,6 +393,172 @@ def normalize_linkedin_profile(raw: dict[str, Any], fallback_url: str) -> dict[s
         "connections_count": raw.get("connectionsCount"),
         "fetched_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+def linkedin_snapshot_to_candidate_record(snapshot: dict[str, Any], raw_profile: dict[str, Any] | None, tenant_id: str) -> dict[str, Any]:
+    linkedin_url = snapshot.get("linkedin_url")
+    document_id = _linkedin_document_id(tenant_id, str(linkedin_url or snapshot.get("public_identifier") or snapshot.get("provider_profile_id") or "profile"))
+    current_role = snapshot.get("current_role") or {}
+    experience = [
+        {
+            "company": item.get("company"),
+            "title": item.get("title"),
+            "location": item.get("location"),
+            "start_date": item.get("start_date"),
+            "end_date": item.get("end_date") or ("Present" if item is current_role else None),
+            "bullets": _profile_description_lines(item.get("description")),
+            "technologies": [],
+            "workstreams": [],
+        }
+        for item in snapshot.get("experience") or []
+        if isinstance(item, dict)
+    ]
+    education = [
+        {
+            "school": item.get("school"),
+            "degree": item.get("degree"),
+            "field": item.get("field"),
+            "location": None,
+            "start_date": item.get("start_date"),
+            "end_date": item.get("end_date"),
+            "details": _profile_description_lines(item.get("description")),
+        }
+        for item in snapshot.get("education") or []
+        if isinstance(item, dict)
+    ]
+    contact_links = [url for url in [linkedin_url] if url]
+    headline = snapshot.get("headline")
+    about = snapshot.get("about")
+    name = snapshot.get("full_name") or snapshot.get("public_identifier") or "LinkedIn Candidate"
+    current_title = current_role.get("title") or headline
+    current_company = current_role.get("company")
+    certifications = [item for item in snapshot.get("certifications") or [] if item]
+    record: dict[str, Any] = {
+        "document_id": document_id,
+        "tenant_id": tenant_id,
+        "source_file": linkedin_url or f"linkedin://{document_id}",
+        "original_filename": f"LinkedIn - {name}",
+        "mime_type": "application/linkedin-profile+json",
+        "name": name,
+        "contact": {
+            "email": None,
+            "phone": None,
+            "location": snapshot.get("location"),
+            "links": contact_links,
+        },
+        "summary": about or headline,
+        "skills": _linkedin_skills(raw_profile or {}),
+        "experience": experience,
+        "education": education,
+        "projects": [],
+        "certifications": certifications,
+        "awards": [],
+        "publications": _linkedin_publications(raw_profile or {}),
+        "languages": _linkedin_languages(raw_profile or {}),
+        "notes": [],
+        "other_sections": {
+            "linkedin_headline": headline,
+            "linkedin_open_to_work": snapshot.get("open_to_work"),
+            "linkedin_connections": snapshot.get("connections_count"),
+            "linkedin_followers": snapshot.get("follower_count"),
+        },
+        "derived": {
+            "source_type": "linkedin_profile",
+            "hr_profile": {
+                "current_title": current_title,
+                "current_company": current_company,
+                "current_location": snapshot.get("location"),
+                "seniority_level": _linkedin_seniority(current_title),
+            },
+            "profile_verification": {
+                "external_verification_status": "verified",
+                "linkedin": {
+                    "status": "verified",
+                    "url": linkedin_url,
+                    "reason": "Candidate was imported directly from LinkedIn.",
+                    "match_confidence": 1.0,
+                    "last_checked_at": snapshot.get("fetched_at"),
+                },
+                "linkedin_external": {
+                    "profile": snapshot,
+                    "comparison": {
+                        "status": "verified",
+                        "match_confidence": 1.0,
+                        "reasons": ["Candidate was imported directly from LinkedIn."],
+                        "gaps": [],
+                    },
+                    "diff": {"summary": ["LinkedIn is the source record for this candidate."]},
+                },
+            },
+        },
+        "candidate_intelligence": {
+            "final_candidate_profile": {
+                "summary_card": {
+                    "headline": headline or about,
+                    "current_or_target_title": current_title,
+                    "seniority_read": _linkedin_seniority(current_title),
+                },
+                "recruiter_brief": [text for text in [headline, about] if text][:3],
+                "ai_notes": ["Profile was imported from LinkedIn. Verify key facts before client submission."],
+                "best_fit_roles": [current_title] if current_title else [],
+                "questions_to_ask": ["Confirm current availability, work authorization, and interest in the target role."],
+            }
+        },
+        "_metadata": {
+            "source_type": "linkedin_profile",
+            "extraction_method": "linkedin_profile_import",
+            "source_url": linkedin_url,
+            "pages": [{"page_number": 1, "text": linkedin_profile_raw_text(snapshot), "extraction_method": "linkedin_profile_import", "quality_flags": []}],
+        },
+    }
+    timeline = build_timeline_profile(record)
+    record["derived"]["timeline"] = timeline
+    record["derived"]["hr_profile"]["total_years_experience"] = timeline["experience_accounting"]["total_years_unique"]
+    record["derived"]["hr_profile"]["total_months_experience"] = timeline["experience_accounting"]["total_months_unique"]
+    return record
+
+
+def linkedin_profile_raw_text(snapshot: dict[str, Any]) -> str:
+    sections = [
+        f"Name: {snapshot.get('full_name') or ''}",
+        f"Headline: {snapshot.get('headline') or ''}",
+        f"Location: {snapshot.get('location') or ''}",
+        f"LinkedIn: {snapshot.get('linkedin_url') or ''}",
+        f"About: {snapshot.get('about') or ''}",
+        "Experience:",
+        *[
+            "\n".join(
+                filter(
+                    None,
+                    [
+                        f"{item.get('title') or ''} at {item.get('company') or ''}",
+                        f"{item.get('start_date') or ''} - {item.get('end_date') or 'Present'}",
+                        item.get("location"),
+                        item.get("description"),
+                    ],
+                )
+            )
+            for item in snapshot.get("experience") or []
+            if isinstance(item, dict)
+        ],
+        "Education:",
+        *[
+            "\n".join(
+                filter(
+                    None,
+                    [
+                        f"{item.get('degree') or ''} {item.get('field') or ''} | {item.get('school') or ''}",
+                        f"{item.get('start_date') or ''} - {item.get('end_date') or ''}",
+                        item.get("description"),
+                    ],
+                )
+            )
+            for item in snapshot.get("education") or []
+            if isinstance(item, dict)
+        ],
+        "Certifications: " + ", ".join(snapshot.get("certifications") or []),
+    ]
+    return "\n\n".join(str(section).strip() for section in sections if str(section or "").strip())
 
 
 def compare_candidate_to_linkedin(candidate_record: dict[str, Any], linkedin_snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -359,8 +692,9 @@ def _link_candidate_profile(
     document_id: str,
     external_profile_id: str,
     requested_by_user_id: str | None,
-    run_id: str,
+    run_id: str | None,
     comparison: dict[str, Any],
+    source: str = "manual_verify",
 ) -> None:
     with db() as conn:
         conn.execute(
@@ -369,8 +703,9 @@ def _link_candidate_profile(
               tenant_id, document_id, external_profile_id, provider, source,
               status, verification_status, match_confidence, latest_run_id, linked_by_user_id, updated_at
             )
-            values (%s, %s, %s, %s, 'manual_verify', 'linked', %s, %s, %s, %s, now())
+            values (%s, %s, %s, %s, %s, 'linked', %s, %s, %s, %s, now())
             on conflict (tenant_id, document_id, external_profile_id) do update set
+              source=excluded.source,
               verification_status=excluded.verification_status,
               match_confidence=excluded.match_confidence,
               latest_run_id=excluded.latest_run_id,
@@ -381,6 +716,7 @@ def _link_candidate_profile(
                 document_id,
                 external_profile_id,
                 PROVIDER,
+                source,
                 comparison["status"],
                 comparison["match_confidence"],
                 run_id,
@@ -498,6 +834,7 @@ def _overlap(left: list[str], right: list[str]) -> dict[str, Any]:
 def _location_score(record: dict[str, Any], snapshot: dict[str, Any]) -> float:
     left_values = [
         (record.get("contact") or {}).get("location"),
+        ((record.get("derived") or {}).get("location_intelligence") or {}).get("current_location"),
         ((record.get("derived") or {}).get("location_intelligence") or {}).get("current_job_location"),
     ]
     right_values = [snapshot.get("location"), snapshot.get("city"), snapshot.get("state"), snapshot.get("country")]
@@ -547,6 +884,92 @@ def _dedupe(values: list[str]) -> list[str]:
     return result
 
 
+def _linkedin_document_id(tenant_id: str, linkedin_url: str) -> str:
+    digest = hashlib.sha256(f"{tenant_id}:{canonical_linkedin_url(linkedin_url) or linkedin_url}".encode("utf-8")).hexdigest()[:20]
+    return f"linkedin-{digest}"
+
+
+def _profile_description_lines(value: Any) -> list[str]:
+    text = _clean(value)
+    if not text:
+        return []
+    return [line.strip(" •\t-") for line in re.split(r"[\n\r]+|(?<=\.)\s+(?=[A-Z])", text) if line.strip(" •\t-")][:12]
+
+
+def _linkedin_skills(raw_profile: dict[str, Any]) -> list[str]:
+    values: list[str] = []
+    for key in ("skills", "topSkills"):
+        raw = raw_profile.get(key)
+        if isinstance(raw, list):
+            for item in raw:
+                if isinstance(item, str):
+                    values.append(item)
+                elif isinstance(item, dict):
+                    values.append(str(item.get("name") or item.get("title") or ""))
+        elif isinstance(raw, str):
+            values.extend(re.split(r"[,;|]+", raw))
+    headline = _clean(raw_profile.get("headline"))
+    if headline:
+        for token in re.split(r"[|,;]+", headline):
+            if len(token.strip()) >= 3:
+                values.append(token.strip())
+    return _dedupe([item for item in values if _clean(item)])[:60]
+
+
+def _linkedin_publications(raw_profile: dict[str, Any]) -> list[str]:
+    publications = raw_profile.get("publications") or []
+    result = []
+    for item in publications:
+        if isinstance(item, str):
+            result.append(item)
+        elif isinstance(item, dict):
+            result.append(str(item.get("title") or item.get("name") or ""))
+    return _dedupe([item for item in result if _clean(item)])[:20]
+
+
+def _linkedin_languages(raw_profile: dict[str, Any]) -> list[str]:
+    languages = raw_profile.get("languages") or []
+    result = []
+    for item in languages:
+        if isinstance(item, str):
+            result.append(item)
+        elif isinstance(item, dict):
+            result.append(str(item.get("name") or item.get("language") or ""))
+    return _dedupe([item for item in result if _clean(item)])[:20]
+
+
+def _linkedin_seniority(title: Any) -> str | None:
+    text = str(title or "").lower()
+    if not text:
+        return None
+    if any(term in text for term in ("founder", "head", "director", "vp ", "vice president", "principal", "staff")):
+        return "leadership"
+    if any(term in text for term in ("lead", "senior", "sr.", "manager")):
+        return "senior"
+    if any(term in text for term in ("intern", "trainee", "assistant")):
+        return "entry"
+    return "mid"
+
+
+def _attach_linkedin_import_to_campaign(*, tenant_id: str, campaign_id: str, document_id: str, linkedin_url: str) -> None:
+    with db() as conn:
+        conn.execute(
+            """
+            insert into campaign_candidates (tenant_id, campaign_id, candidate_id, source, status, score, evidence)
+            values (%s, %s, %s, 'linkedin_import', 'uploaded', 0, %s)
+            on conflict (campaign_id, candidate_id) do update set
+              source=case
+                when campaign_candidates.source in ('uploaded', 'matched', 'linkedin_import') then campaign_candidates.source
+                else excluded.source
+              end,
+              evidence=coalesce(campaign_candidates.evidence, '{}'::jsonb) || excluded.evidence,
+              updated_at=now()
+            """,
+            (tenant_id, campaign_id, document_id, Jsonb({"source": "linkedin_import", "linkedin_url": linkedin_url})),
+        )
+        conn.commit()
+
+
 def _diff_summary(updates: list[dict[str, Any]], new_roles: list[dict[str, Any]], new_education: list[dict[str, Any]], certifications: list[str]) -> list[str]:
     summary = []
     if updates:
@@ -558,6 +981,28 @@ def _diff_summary(updates: list[dict[str, Any]], new_roles: list[dict[str, Any]]
     if certifications:
         summary.append(f"{len(certifications)} LinkedIn certification(s) available for recruiter review.")
     return summary or ["LinkedIn did not add obvious new profile data beyond the current candidate record."]
+
+
+def _import_job_row(row: dict[str, Any] | None) -> dict[str, Any]:
+    if not row:
+        return {}
+    return {
+        "id": str(row["id"]),
+        "tenant_id": str(row["tenant_id"]),
+        "campaign_id": str(row["campaign_id"]) if row.get("campaign_id") else None,
+        "linkedin_url": row.get("canonical_url") or row.get("linkedin_url"),
+        "status": row["status"],
+        "stage": row.get("stage"),
+        "provider": row.get("provider"),
+        "actor_id": row.get("actor_id"),
+        "document_id": row.get("document_id"),
+        "profile_snapshot": row.get("profile_snapshot") or {},
+        "error_message": row.get("error_message"),
+        "credits_used": int(row.get("credits_used") or 0),
+        "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
+        "started_at": row["started_at"].isoformat() if row.get("started_at") else None,
+        "completed_at": row["completed_at"].isoformat() if row.get("completed_at") else None,
+    }
 
 
 def _run_row(row: dict[str, Any] | None) -> dict[str, Any]:

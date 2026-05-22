@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from resume_intel.linkedin_verification import compare_candidate_to_linkedin, normalize_linkedin_profile
+from resume_intel.linkedin_verification import compare_candidate_to_linkedin, linkedin_snapshot_to_candidate_record, normalize_linkedin_profile
 
 
 class LinkedInVerificationTests(unittest.TestCase):
@@ -60,6 +60,35 @@ class LinkedInVerificationTests(unittest.TestCase):
 
         self.assertIn(comparison["status"], {"needs_review", "mismatch"})
         self.assertLess(comparison["match_confidence"], 0.72)
+
+    def test_linkedin_snapshot_can_become_candidate_record(self) -> None:
+        raw = {
+            "id": "linkedin-1",
+            "firstName": "Zulqarnain",
+            "lastName": "Musawar",
+            "linkedinUrl": "https://www.linkedin.com/in/zulqarnainmusawar",
+            "headline": "Reliability Engineer II",
+            "location": {"parsed": {"text": "Chicago, IL, United States", "countryFull": "United States"}},
+            "experience": [
+                {
+                    "position": "Reliability Engineer II",
+                    "companyName": "Roquette",
+                    "location": "Iowa, United States",
+                    "startDate": {"text": "Jan 2025"},
+                    "description": "Support plant reliability and asset integrity programs.",
+                }
+            ],
+            "education": [{"schoolName": "Texas Tech University", "degree": "Masters Mechanical Engineering"}],
+        }
+
+        snapshot = normalize_linkedin_profile(raw, "https://www.linkedin.com/in/zulqarnainmusawar")
+        record = linkedin_snapshot_to_candidate_record(snapshot, raw, "00000000-0000-0000-0000-000000000001")
+
+        self.assertTrue(record["document_id"].startswith("linkedin-"))
+        self.assertEqual(record["name"], "Zulqarnain Musawar")
+        self.assertEqual(record["contact"]["location"], "Chicago, IL, United States")
+        self.assertEqual(record["experience"][0]["company"], "Roquette")
+        self.assertEqual(record["derived"]["profile_verification"]["linkedin"]["status"], "verified")
 
 
 if __name__ == "__main__":

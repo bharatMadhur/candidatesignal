@@ -1033,7 +1033,7 @@ def _candidate_llm_packet(match: dict[str, Any], profile: dict[str, Any]) -> dic
             "name_redacted": "[candidate]",
             "current_title": hr_profile.get("current_title") or summary_card.get("current_or_target_title"),
             "current_company": hr_profile.get("current_company"),
-            "current_location": location_intelligence.get("current_job_location") or (candidate.get("contact") or {}).get("location"),
+            "current_location": location_intelligence.get("current_location") or (candidate.get("contact") or {}).get("location"),
             "total_years_experience": hr_profile.get("total_years_experience"),
             "seniority": hr_profile.get("seniority_level") or summary_card.get("seniority_read"),
             "summary": _redact_short(candidate.get("summary") or summary_card.get("headline"), names=[candidate_name]),

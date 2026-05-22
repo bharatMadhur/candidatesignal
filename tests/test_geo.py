@@ -32,7 +32,7 @@ class LocationIntelligenceTests(unittest.TestCase):
         self.assertEqual(intelligence["current_location"], "Columbus, OH")
         self.assertEqual(intelligence["current_job_location"], "Columbus, OH")
         self.assertEqual(intelligence["resume_header_location"], "Columbus, OH")
-        self.assertEqual(intelligence["current_location_confidence"], "latest_role")
+        self.assertEqual(intelligence["current_location_confidence"], "resume_header")
         countries = {item["country"] for item in intelligence["countries_associated"]}
         self.assertIn("United States", countries)
         self.assertIn("India", countries)
@@ -47,10 +47,10 @@ class LocationIntelligenceTests(unittest.TestCase):
 
         intelligence = build_location_intelligence(record, "")
 
-        self.assertIsNone(intelligence["current_location"])
+        self.assertEqual(intelligence["current_location"], "Worcester MA")
         self.assertIsNone(intelligence["current_job_location"])
         self.assertEqual(intelligence["resume_header_location"], "Worcester MA")
-        self.assertEqual(intelligence["current_location_confidence"], "not_stated")
+        self.assertEqual(intelligence["current_location_confidence"], "resume_header")
         countries = {item["country"] for item in intelligence["countries_associated"]}
         self.assertIn("United States", countries)
 
@@ -66,7 +66,7 @@ class LocationIntelligenceTests(unittest.TestCase):
 
         intelligence = build_location_intelligence(record, "")
 
-        self.assertIsNone(intelligence["current_location"])
+        self.assertEqual(intelligence["current_location"], "Columbus, OH")
         self.assertEqual(intelligence["resume_header_location"], "Columbus, OH")
         self.assertTrue(any(item["value"] == "New York, NY" and item["context"] == "work_history" for item in intelligence["location_signals"]))
 
