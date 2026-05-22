@@ -2555,7 +2555,7 @@ function RecruiterCopilot({
 }
 
 function DatabaseView({ candidates, query, setQuery, open }: { candidates: CandidateSummary[]; query: string; setQuery: (value: string) => void; open: (id: string) => void }) {
-  const [filters, setFilters] = useState<string[]>(["coverage"]);
+  const [filters, setFilters] = useState<string[]>([]);
   const readyCount = candidates.filter((candidate) => (candidate.coverage ?? 0) >= 0.8 && Number(candidate.duplicate_risk_score ?? 0) < 0.75).length;
   const needsReviewCount = candidates.filter((candidate) => (candidate.coverage ?? 0) < 0.8 || Number(candidate.duplicate_risk_score ?? 0) >= 0.75).length;
   const missingLocationCount = candidates.filter((candidate) => !candidate.location && !(candidate.countries ?? []).length).length;

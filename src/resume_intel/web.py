@@ -121,7 +121,7 @@ from .tenancy import (
     validate_tenant_creation_request,
 )
 from .storage import document_storage
-from .vector_search import semantic_candidate_scores, semantic_candidate_search
+from .vector_search import candidate_search as hybrid_candidate_search, semantic_candidate_scores, semantic_candidate_search
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -402,7 +402,7 @@ def semantic_search(request: SemanticSearchRequest, user: dict = Depends(current
 def candidate_search(request: SemanticSearchRequest, user: dict = Depends(current_user)) -> dict:
     if not request.query.strip():
         raise HTTPException(status_code=400, detail="query is required")
-    results = semantic_candidate_search(request.query, request.limit, tenant_id=_tenant_id(user))
+    results = hybrid_candidate_search(request.query, request.limit, tenant_id=_tenant_id(user))
     if not _can_view_pii(user):
         results = [_redact_summary_pii(item) for item in results]
     else:

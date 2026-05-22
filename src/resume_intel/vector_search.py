@@ -17,6 +17,13 @@ RAW_CHUNK_SIZE = 3000
 RAW_CHUNK_OVERLAP = 250
 
 
+def candidate_search(query_text: str, limit: int = 25, tenant_id: str | None = None) -> list[dict[str, Any]]:
+    exact_results = exact_candidate_search(query_text, limit, tenant_id)
+    if exact_results:
+        return exact_results[:limit]
+    return semantic_candidate_search(query_text, limit, tenant_id)
+
+
 def embed_text(text: str) -> list[float]:
     vector = [0.0] * DIMENSIONS
     tokens = re.findall(r"[a-z0-9+#.]+", text.lower())
@@ -362,32 +369,129 @@ def semantic_candidate_search(query_text: str, limit: int = 25, tenant_id: str |
         row = by_id.get(document_id)
         if not row:
             continue
-        record = row["record_json"]
-        final_profile = (record.get("candidate_intelligence") or {}).get("final_candidate_profile") or {}
-        summary_card = final_profile.get("summary_card") or {}
-        hr_profile = record.get("derived", {}).get("hr_profile", {})
-        location_intelligence = record.get("derived", {}).get("location_intelligence") or {}
-        experience_by_domain = record.get("derived", {}).get("experience_by_domain") or {}
-        top_domains = sorted(experience_by_domain, key=lambda key: _domain_year_value(experience_by_domain.get(key)), reverse=True)[:5]
-        result = {
-            "document_id": document_id,
-            "name": row["name"],
-            "email": row["email"],
-            "phone": row["phone"],
-            "current_title": summary_card.get("current_or_target_title") or hr_profile.get("current_title"),
-            "current_company": hr_profile.get("current_company"),
-            "total_years_experience": hr_profile.get("total_years_experience"),
-            "seniority": hr_profile.get("seniority_level"),
-            "top_domains": top_domains,
-            "location": location_intelligence.get("current_job_location") or current_job_location(record),
-            "countries": countries_for_search(record),
-            "coverage": record.get("primary_key_coverage", {}).get("score"),
-            "source_file": record.get("original_filename") or Path(row["source_file"] or "Uploaded CV").name,
-            "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
-            **scores[document_id],
-        }
-        results.append(result)
+        results.append(_candidate_summary(row, scores[document_id]))
     return results
+
+
+def exact_candidate_search(query_text: str, limit: int = 25, tenant_id: str | None = None) -> list[dict[str, Any]]:
+    normalized = " ".join(query_text.strip().split())
+    if len(normalized) < 2:
+        return []
+    pattern = f"%{normalized}%"
+    digits = re.sub(r"\D+", "", normalized)
+    conditions = [
+        "name ilike %s",
+        "email ilike %s",
+        "source_file ilike %s",
+        "record_json->>'original_filename' ilike %s",
+    ]
+    params: list[Any] = [pattern, pattern, pattern, pattern]
+    if len(digits) >= 4:
+        conditions.append("regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g') like %s")
+        params.append(f"%{digits}%")
+    with db() as conn:
+        rows = conn.execute(
+            f"""
+            select document_id, name, email, phone, source_file, record_json, updated_at
+            from candidates
+            where (%s::uuid is null or tenant_id=%s)
+              and deleted_at is null
+              and ({" or ".join(conditions)})
+            order by updated_at desc nulls last
+            limit %s
+            """,
+            [tenant_id, tenant_id, *params, max(limit * 4, 50)],
+        ).fetchall()
+    ranked = sorted(rows, key=lambda row: _exact_match_rank(row, normalized), reverse=True)
+    results: list[dict[str, Any]] = []
+    for row in ranked[:limit]:
+        match_rank, match_field = _exact_match_rank(row, normalized)
+        results.append(
+            _candidate_summary(
+                row,
+                {
+                    "semantic_score": 1.0,
+                    "top_chunks": [match_field],
+                    "evidence": [
+                        {
+                            "chunk_type": match_field,
+                            "source_label": "Exact candidate identity match",
+                            "page_number": None,
+                            "snippet": _exact_match_snippet(row, match_field),
+                            "embedding_model": "exact",
+                        }
+                    ],
+                    "search_match_type": "exact",
+                    "search_match_field": match_field,
+                    "search_match_score": match_rank,
+                },
+            )
+        )
+    return results
+
+
+def _candidate_summary(row: Any, scores: dict[str, Any]) -> dict[str, Any]:
+    record = row["record_json"] or {}
+    final_profile = (record.get("candidate_intelligence") or {}).get("final_candidate_profile") or {}
+    summary_card = final_profile.get("summary_card") or {}
+    hr_profile = record.get("derived", {}).get("hr_profile", {})
+    location_intelligence = record.get("derived", {}).get("location_intelligence") or {}
+    experience_by_domain = record.get("derived", {}).get("experience_by_domain") or {}
+    top_domains = sorted(experience_by_domain, key=lambda key: _domain_year_value(experience_by_domain.get(key)), reverse=True)[:5]
+    return {
+        "document_id": row["document_id"],
+        "name": row["name"],
+        "email": row["email"],
+        "phone": row["phone"],
+        "current_title": summary_card.get("current_or_target_title") or hr_profile.get("current_title"),
+        "current_company": hr_profile.get("current_company"),
+        "total_years_experience": hr_profile.get("total_years_experience"),
+        "seniority": hr_profile.get("seniority_level"),
+        "top_domains": top_domains,
+        "location": location_intelligence.get("current_job_location") or current_job_location(record),
+        "countries": countries_for_search(record),
+        "coverage": record.get("primary_key_coverage", {}).get("score"),
+        "source_file": record.get("original_filename") or Path(row["source_file"] or "Uploaded CV").name,
+        "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
+        **scores,
+    }
+
+
+def _exact_match_rank(row: Any, query_text: str) -> tuple[int, str]:
+    query = query_text.lower()
+    name = str(row["name"] or "").lower()
+    email = str(row["email"] or "").lower()
+    source_file = str(row["source_file"] or "").lower()
+    record = row["record_json"] or {}
+    original_filename = str(record.get("original_filename") or "").lower()
+    phone_digits = re.sub(r"\D+", "", str(row["phone"] or ""))
+    query_digits = re.sub(r"\D+", "", query)
+    if email and query == email:
+        return (100, "email")
+    if name and query == name:
+        return (95, "name")
+    if name and query in name:
+        return (90, "name")
+    if email and query in email:
+        return (85, "email")
+    if len(query_digits) >= 4 and query_digits in phone_digits:
+        return (80, "phone")
+    if original_filename and query in original_filename:
+        return (70, "source_file")
+    if source_file and query in source_file:
+        return (65, "source_file")
+    return (0, "identity")
+
+
+def _exact_match_snippet(row: Any, match_field: str) -> str:
+    if match_field == "email":
+        return str(row["email"] or "")
+    if match_field == "phone":
+        return str(row["phone"] or "")
+    if match_field == "source_file":
+        record = row["record_json"] or {}
+        return str(record.get("original_filename") or row["source_file"] or "")
+    return str(row["name"] or "")
 
 
 def _domain_year_value(value: Any) -> float:
