@@ -88,6 +88,15 @@ else
   echo "No operational alert webhook configured. Alerts will remain in-app until the secret is added."
 fi
 
+if [[ -n "${APIFY_API_TOKEN:-}" ]]; then
+  upsert_secret "apify-api-token" "${APIFY_API_TOKEN}"
+  echo "Loaded Apify API token from environment."
+elif secret_exists "apify-api-token"; then
+  echo "Keeping existing apify-api-token secret."
+else
+  echo "No Apify API token configured. LinkedIn verification will stay unavailable until the secret is added."
+fi
+
 for account in "${VM_SERVICE_ACCOUNT}" "${OCR_SERVICE_ACCOUNT}"; do
   email="$(service_account_email "${account}")"
   gcloud secrets add-iam-policy-binding "ocr-internal-token" \
@@ -108,6 +117,9 @@ gcloud secrets add-iam-policy-binding "litellm-api-key" \
   --member="serviceAccount:$(service_account_email "${VM_SERVICE_ACCOUNT}")" \
   --role="roles/secretmanager.secretAccessor" >/dev/null 2>&1 || true
 gcloud secrets add-iam-policy-binding "operational-alert-webhook-url" \
+  --member="serviceAccount:$(service_account_email "${VM_SERVICE_ACCOUNT}")" \
+  --role="roles/secretmanager.secretAccessor" >/dev/null 2>&1 || true
+gcloud secrets add-iam-policy-binding "apify-api-token" \
   --member="serviceAccount:$(service_account_email "${VM_SERVICE_ACCOUNT}")" \
   --role="roles/secretmanager.secretAccessor" >/dev/null 2>&1 || true
 

@@ -4516,6 +4516,104 @@ button:disabled {
   text-align: right;
 }
 
+.linkedinVerifyCard,
+.noteSignalCard {
+  gap: 12px;
+}
+
+.linkedinVerifyCard p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.linkedinVerifyCard input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.linkedinVerifyCard button {
+  width: 100%;
+  justify-content: center;
+}
+
+.linkedinStatus {
+  border: 1px solid var(--line);
+  background: var(--surface-low);
+  color: var(--muted);
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.linkedinStatus.verified,
+.linkedinStatus.succeeded {
+  border-color: rgba(49, 124, 82, 0.24);
+  background: rgba(49, 124, 82, 0.08);
+  color: #317c52;
+}
+
+.linkedinStatus.needs-review,
+.linkedinStatus.running,
+.linkedinStatus.queued {
+  border-color: rgba(151, 116, 48, 0.24);
+  background: rgba(151, 116, 48, 0.08);
+  color: #7b5d22;
+}
+
+.linkedinStatus.mismatch,
+.linkedinStatus.failed {
+  border-color: rgba(165, 50, 50, 0.24);
+  background: rgba(165, 50, 50, 0.06);
+  color: #8a2f2f;
+}
+
+.linkedinVerifySummary {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--soft-line);
+  padding-top: 10px;
+}
+
+.linkedinVerifySummary ul {
+  display: grid;
+  gap: 5px;
+  margin: 0 0 0 16px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.noteSignalList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.noteSignalList span {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  border: 1px solid var(--soft-line);
+  border-radius: 999px;
+  background: var(--surface-low);
+  color: var(--muted);
+  padding: 6px 9px;
+  font-size: 11px;
+}
+
+.noteSignalList b {
+  color: var(--ink);
+  font-weight: 900;
+}
+
 .candidateBadUploadBanner ul {
   display: grid;
   gap: 4px;

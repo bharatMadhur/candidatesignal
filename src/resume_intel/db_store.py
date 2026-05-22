@@ -13,6 +13,7 @@ from .db import db
 from .derive import normalize_domain_years
 from .fact_verification import enrich_fact_verification
 from .geo import current_job_location, enrich_record_locations
+from .note_signals import candidate_note_signal_summary, delete_note_signals, replace_note_signals
 from .pii import enrich_record_pii
 from .profile_verification import enrich_profile_verification
 from .timeline import build_timeline_profile
@@ -342,6 +343,15 @@ def add_note_db(
     # search chunks.
     record["primary_key_coverage"] = primary_key_coverage(record)
     with db() as conn:
+        replace_note_signals(
+            conn,
+            tenant_id=tenant_id,
+            document_id=document_id,
+            note_id=note["id"],
+            note_name=note_name,
+            note_content=note_content,
+        )
+        _attach_note_signal_summary(conn, record, tenant_id, document_id)
         conn.execute(
             "update candidates set record_json=%s, updated_at=now() where document_id=%s and tenant_id=%s",
             (Jsonb(record), document_id, tenant_id),
@@ -386,6 +396,15 @@ def update_note_db(
             (name.strip() or "HR Note", content.strip(), note_id, document_id, tenant_id),
         ).fetchone()
         raw_row = conn.execute("select raw_text from candidates where document_id=%s and tenant_id=%s", (document_id, tenant_id)).fetchone()
+        if row:
+            replace_note_signals(
+                conn,
+                tenant_id=tenant_id,
+                document_id=document_id,
+                note_id=note_id,
+                note_name=name.strip() or "HR Note",
+                note_content=content.strip(),
+            )
         conn.commit()
     if not row:
         raise FileNotFoundError(note_id)
@@ -394,6 +413,7 @@ def update_note_db(
     # Keep note edits on the fast path. Profile facts are not re-derived here.
     record["primary_key_coverage"] = primary_key_coverage(record)
     with db() as conn:
+        _attach_note_signal_summary(conn, record, tenant_id, document_id)
         conn.execute("update candidates set record_json=%s, updated_at=now() where document_id=%s and tenant_id=%s", (Jsonb(record), document_id, tenant_id))
         _upsert_training_data_example(conn, record, raw_text, tenant_id, "recruiter_note")
         _record_activity_event(
@@ -433,6 +453,8 @@ def delete_note_db(
             (note_id, document_id, tenant_id),
         ).fetchone()
         raw_row = conn.execute("select raw_text from candidates where document_id=%s and tenant_id=%s", (document_id, tenant_id)).fetchone()
+        if row:
+            delete_note_signals(conn, tenant_id=tenant_id, document_id=document_id, note_id=note_id)
         conn.commit()
     if not row:
         raise FileNotFoundError(note_id)
@@ -441,6 +463,7 @@ def delete_note_db(
     # Keep note deletes on the fast path. Search reindexing runs after response.
     record["primary_key_coverage"] = primary_key_coverage(record)
     with db() as conn:
+        _attach_note_signal_summary(conn, record, tenant_id, document_id)
         conn.execute("update candidates set record_json=%s, updated_at=now() where document_id=%s and tenant_id=%s", (Jsonb(record), document_id, tenant_id))
         _upsert_training_data_example(conn, record, raw_text, tenant_id, "recruiter_note")
         _record_activity_event(
@@ -457,6 +480,14 @@ def delete_note_db(
     if reindex_search:
         upsert_candidate_search_chunks(record, raw_text, tenant_id)
     return record
+
+
+def _attach_note_signal_summary(conn: Any, record: dict[str, Any], tenant_id: str, document_id: str) -> None:
+    record.setdefault("derived", {})["recruiter_note_signals"] = candidate_note_signal_summary(
+        conn,
+        tenant_id=tenant_id,
+        document_id=document_id,
+    )
 
 
 def reindex_candidate_search_db(document_id: str, tenant_id: str) -> None:

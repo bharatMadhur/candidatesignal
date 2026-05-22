@@ -57,6 +57,7 @@ from .db_store import (
 from .candidate_versions import candidate_version_requirements, decide_match, find_matches_for_record, list_clusters, list_matches_for_candidate, persist_matches
 from .governance import get_tenant_governance_policy, list_pii_access_events, role_can_view_contact_pii, update_tenant_governance_policy
 from .llm_provider import Message, NormalizedProvider
+from .linkedin_verification import enqueue_linkedin_verification, latest_linkedin_verification, run_linkedin_verification
 from .logging_config import configure_logging
 from .matching import (
     apply_copilot_direct_evidence_policy as _apply_copilot_direct_evidence_policy,
@@ -326,6 +327,11 @@ class CandidateReparseRequest(BaseModel):
     auto_start: bool = True
 
 
+class LinkedInVerificationRequest(BaseModel):
+    linkedin_url: str | None = None
+    auto_start: bool = True
+
+
 @app.on_event("startup")
 def startup() -> None:
     migrate()
@@ -591,6 +597,40 @@ def mark_candidate_review_signal(
         raise HTTPException(status_code=404, detail="candidate not found") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/candidates/{document_id}/linkedin/verification")
+def candidate_linkedin_verification(document_id: str, user: dict = Depends(current_user)) -> dict:
+    if not _can_view_pii(user):
+        raise HTTPException(status_code=403, detail="LinkedIn verification contains profile PII and requires recruiter permission")
+    tenant_id = _tenant_id(user)
+    try:
+        load_candidate_db(document_id, tenant_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="candidate not found") from exc
+    return {"run": latest_linkedin_verification(document_id, tenant_id), "user": user}
+
+
+@app.post("/candidates/{document_id}/linkedin/verify", status_code=202)
+def verify_candidate_linkedin(
+    document_id: str,
+    request: LinkedInVerificationRequest,
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(current_user),
+) -> dict:
+    require_tenant_write(user)
+    if not _can_view_pii(user):
+        raise HTTPException(status_code=403, detail="LinkedIn verification requires recruiter PII permission")
+    tenant_id = _tenant_id(user)
+    try:
+        run = enqueue_linkedin_verification(document_id, tenant_id, user["id"], request.linkedin_url)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="candidate not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if request.auto_start:
+        background_tasks.add_task(run_linkedin_verification, run["id"], tenant_id)
+    return {"run": run, "user": user}
 
 
 @app.get("/candidates/{document_id}/source")

@@ -28,6 +28,8 @@ RESUME_INTEL_GCS_BUCKET=${DOCUMENT_BUCKET}
 RESUME_INTEL_LITELLM_BASE_URL=${RESUME_INTEL_LITELLM_BASE_URL}
 RESUME_INTEL_LITELLM_MODEL=${RESUME_INTEL_LITELLM_MODEL}
 RESUME_INTEL_EMBEDDING_MODEL=${RESUME_INTEL_EMBEDDING_MODEL}
+LINKEDIN_APIFY_ACTOR_ID=${LINKEDIN_APIFY_ACTOR_ID:-LpVuK3Zozwuipa5bp}
+LINKEDIN_APIFY_SCRAPER_MODE=${LINKEDIN_APIFY_SCRAPER_MODE:-Profile details no email (\$4 per 1k)}
 OCR_REMOTE_URL=${OCR_URL}
 OCR_REMOTE_AUDIENCE=${OCR_URL}
 OCR_REMOTE_TIMEOUT_SECONDS=1800
@@ -56,6 +58,7 @@ render_secrets() {
   printf "%s" "$(secret_value better-auth-secret)" > "${secrets_dir}/better-auth-secret"
   printf "%s" "$(secret_value resume-intel-bootstrap-token)" > "${secrets_dir}/bootstrap-token"
   printf "%s" "$(secret_value litellm-api-key)" > "${secrets_dir}/litellm-api-key"
+  printf "%s" "${APIFY_API_TOKEN:-$(secret_value apify-api-token)}" > "${secrets_dir}/apify-api-token"
   printf "%s" "$(secret_value ocr-internal-token)" > "${secrets_dir}/ocr-internal-token"
   printf "%s" "${RESUME_INTEL_ALERT_WEBHOOK_URL:-$(secret_value operational-alert-webhook-url)}" > "${secrets_dir}/alert-webhook-url"
   chmod 600 "${secrets_dir}"/*

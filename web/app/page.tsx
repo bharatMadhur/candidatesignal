@@ -27,6 +27,7 @@ import {
   CampaignScorecard,
   CandidateMaintenanceJob,
   CandidateSummary,
+  LinkedInVerificationRun,
   AuditEvent,
   CopilotMessage,
   CopilotThread,
@@ -72,6 +73,7 @@ import {
   getTeam,
   getCampaign,
   getCandidateDocumentHtml,
+  getLinkedInVerification,
   getCopilotThread,
   getTenantAdminDetail,
   getCandidateRawText,
@@ -121,6 +123,7 @@ import {
   updateCampaignScorecard,
   updateGovernancePolicy,
   uploadCampaignRequirement,
+  verifyLinkedInProfile,
   deleteNote,
   disableTenant,
   disableMember,
@@ -1722,6 +1725,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               match={() => setView("requirement")}
               activeTab={candidateDetailTab}
               setActiveTab={setCandidateDetailTab}
+              refreshCandidate={() => handleOpenCandidate(candidate.document_id, candidateDetailTab)}
               openCandidateVersions={handleOpenCandidateVersions}
               markReviewSignal={(signal) => handleMarkCandidateReviewSignal(candidate.document_id, signal)}
             />
@@ -3211,6 +3215,7 @@ function CandidateDetail({
   match,
   activeTab,
   setActiveTab,
+  refreshCandidate,
   openCandidateVersions,
   markReviewSignal,
 }: {
@@ -3235,6 +3240,7 @@ function CandidateDetail({
   match: () => void;
   activeTab: CandidateDetailTab;
   setActiveTab: (tab: CandidateDetailTab) => void;
+  refreshCandidate: () => Promise<void> | void;
   openCandidateVersions: () => void;
   markReviewSignal: (signalKey: CandidateReviewSignal) => void;
 }) {
@@ -3249,6 +3255,10 @@ function CandidateDetail({
   const [editingNoteContent, setEditingNoteContent] = useState("");
   const [showRawCvText, setShowRawCvText] = useState(false);
   const [showCorrectionPanel, setShowCorrectionPanel] = useState(false);
+  const [linkedinUrlDraft, setLinkedinUrlDraft] = useState("");
+  const [linkedinRun, setLinkedinRun] = useState<LinkedInVerificationRun | null>(null);
+  const [linkedinVerifyState, setLinkedinVerifyState] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [linkedinVerifyError, setLinkedinVerifyError] = useState("");
   const [correctionForm, setCorrectionForm] = useState<CandidateCorrectionForm>(() => candidateCorrectionForm(candidate));
   const intelligence = candidate.candidate_intelligence;
   const finalProfile = intelligence?.final_candidate_profile;
@@ -3260,6 +3270,8 @@ function CandidateDetail({
   const otherLinkedinUrls = toTextList(piiIntel.other_linkedin_urls ?? []);
   const portfolioUrls = toTextList(piiIntel.portfolio_websites ?? []);
   const profileVerification = candidate.derived?.profile_verification ?? {};
+  const linkedinExternal = profileVerification.linkedin_external ?? {};
+  const recruiterNoteSignals = candidate.derived?.recruiter_note_signals ?? {};
   const factVerification = candidate.derived?.fact_verification ?? {};
   const reviewedSignals = candidate.reviewed_signals ?? [];
   const roleFactNeedsReview = Boolean(factVerification.current_role_status && factVerification.current_role_status !== "verified" && !reviewedSignals.includes("role_fact_review"));
@@ -3346,7 +3358,24 @@ function CandidateDetail({
   useEffect(() => {
     setCorrectionForm(candidateCorrectionForm(candidate));
     setShowCorrectionPanel(false);
+    setLinkedinUrlDraft(primaryLinkedIn || "");
+    setLinkedinVerifyState("idle");
+    setLinkedinVerifyError("");
   }, [candidate.document_id]);
+
+  useEffect(() => {
+    let active = true;
+    getLinkedInVerification(token, candidate.document_id)
+      .then((result) => {
+        if (active) setLinkedinRun(result.run);
+      })
+      .catch(() => {
+        if (active) setLinkedinRun(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [candidate.document_id, token]);
 
   useEffect(() => {
     let active = true;
@@ -3432,6 +3461,44 @@ function CandidateDetail({
   function saveCandidateCorrections() {
     updateProfile(candidateCorrectionPayload(correctionForm));
     setShowCorrectionPanel(false);
+  }
+
+  async function verifyLinkedIn() {
+    const targetUrl = linkedinUrlDraft.trim() || primaryLinkedIn || "";
+    setLinkedinVerifyState("running");
+    setLinkedinVerifyError("");
+    try {
+      const result = await verifyLinkedInProfile(token, candidate.document_id, targetUrl);
+      setLinkedinRun(result.run);
+      await pollLinkedInVerification(result.run.id);
+    } catch (error) {
+      setLinkedinVerifyState("error");
+      setLinkedinVerifyError(readableError(error));
+    }
+  }
+
+  async function pollLinkedInVerification(runId: string) {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await delay(1200);
+      const result = await getLinkedInVerification(token, candidate.document_id);
+      if (result.run) setLinkedinRun(result.run);
+      if (result.run && ["succeeded", "failed"].includes(result.run.status)) {
+        if (result.run.status === "succeeded") {
+          setLinkedinVerifyState("done");
+          await refreshCandidate();
+        } else {
+          setLinkedinVerifyState("error");
+          setLinkedinVerifyError(result.run.error_message || "LinkedIn verification failed");
+        }
+        return;
+      }
+      if (result.run?.id !== runId && result.run?.status === "succeeded") {
+        setLinkedinVerifyState("done");
+        await refreshCandidate();
+        return;
+      }
+    }
+    setLinkedinVerifyState("idle");
   }
 
   return (
@@ -3883,6 +3950,48 @@ function CandidateDetail({
               </div>
             </article>
 
+            <article className="briefCard linkedinVerifyCard">
+              <div className="railCardHeader">
+                <div>
+                  <span className="reportLabel">External profile</span>
+                  <h3>LinkedIn Verification</h3>
+                </div>
+                <span className={`linkedinStatus ${linkedinVerificationStatus(linkedinRun, linkedinExternal)}`}>
+                  {linkedinVerificationLabel(linkedinRun, linkedinExternal)}
+                </span>
+              </div>
+              <p>
+                Verify that the LinkedIn profile belongs to this candidate and surface updated roles, location, education, and certifications for recruiter review.
+              </p>
+              <input
+                value={linkedinUrlDraft}
+                onChange={(event) => setLinkedinUrlDraft(event.target.value)}
+                placeholder="https://www.linkedin.com/in/..."
+              />
+              <button className="secondary" type="button" onClick={() => void verifyLinkedIn()} disabled={linkedinVerifyState === "running" || (!linkedinUrlDraft.trim() && !primaryLinkedIn)}>
+                {linkedinVerifyState === "running" ? "Verifying..." : "Verify LinkedIn"}
+              </button>
+              {linkedinVerifyError ? <p className="noteSaveFeedback error">{linkedinVerifyError}</p> : null}
+              <LinkedInVerificationSummary run={linkedinRun} external={linkedinExternal} />
+            </article>
+
+            {noteSignalCount(recruiterNoteSignals) ? (
+              <article className="briefCard noteSignalCard">
+                <div className="railCardHeader">
+                  <h3>Structured Note Signals</h3>
+                  <span>{noteSignalCount(recruiterNoteSignals)} found</span>
+                </div>
+                <div className="noteSignalList">
+                  {noteSignalItems(recruiterNoteSignals).slice(0, 8).map((item, index) => (
+                    <span key={`${item.category}-${item.label}-${item.value ?? index}`}>
+                      <b>{domainLabel(item.category)}</b>
+                      {domainLabel(item.value || item.label)}
+                    </span>
+                  ))}
+                </div>
+              </article>
+            ) : null}
+
             {versionLinks.length ? (
               <article className="briefCard candidateRailVersions">
                 <div className="railCardHeader">
@@ -3899,6 +4008,62 @@ function CandidateDetail({
       </main>
     </section>
   );
+}
+
+function LinkedInVerificationSummary({ run, external }: { run: LinkedInVerificationRun | null; external: any }) {
+  const comparison = run?.comparison && Object.keys(run.comparison).length ? run.comparison : external?.comparison ?? {};
+  const diff = run?.profile_diff && Object.keys(run.profile_diff).length ? run.profile_diff : external?.diff ?? {};
+  const reasons = toTextList(comparison.reasons ?? []);
+  const gaps = toTextList(comparison.gaps ?? []);
+  const summary = toTextList(diff.summary ?? []);
+  if (!run && !external?.profile) {
+    return <p className="muted">Not checked yet. Verification runs securely on the server.</p>;
+  }
+  if (run?.status === "queued" || run?.status === "running") {
+    return (
+      <div className="linkedinVerifySummary">
+        <ProgressBar value={run.status === "running" ? 65 : 20} />
+        <span>{domainLabel(run.stage ?? run.status)}</span>
+      </div>
+    );
+  }
+  if (run?.status === "failed") {
+    return <p className="muted">Verification failed: {run.error_message || "provider error"}</p>;
+  }
+  return (
+    <div className="linkedinVerifySummary">
+      <div className="compactMetaList">
+        <div><span>Match confidence</span><strong>{typeof comparison.match_confidence === "number" ? `${Math.round(comparison.match_confidence * 100)}%` : "Unknown"}</strong></div>
+        <div><span>Last checked</span><strong>{formatDateTime(run?.completed_at)}</strong></div>
+      </div>
+      {reasons.length ? <ul>{reasons.slice(0, 3).map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul> : null}
+      {!reasons.length && summary.length ? <ul>{summary.slice(0, 3).map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul> : null}
+      {gaps.length ? <p className="muted">{gaps[0]}</p> : null}
+    </div>
+  );
+}
+
+function linkedinVerificationStatus(run: LinkedInVerificationRun | null, external: any) {
+  const status = run?.status === "succeeded" ? run.result_status : run?.status;
+  return String(status || external?.comparison?.status || "not_checked").replaceAll("_", "-");
+}
+
+function linkedinVerificationLabel(run: LinkedInVerificationRun | null, external: any) {
+  const status = run?.status === "succeeded" ? run.result_status : run?.status;
+  return domainLabel(status || external?.comparison?.status || "not checked");
+}
+
+function noteSignalItems(signals: any): Array<{ category: string; label: string; value?: string | null }> {
+  if (Array.isArray(signals?.signals)) return signals.signals;
+  const grouped = signals?.by_category ?? {};
+  return Object.entries(grouped).flatMap(([category, items]) => (
+    Array.isArray(items) ? items.map((item: any) => ({ category, label: String(item.label ?? ""), value: item.value })) : []
+  ));
+}
+
+function noteSignalCount(signals: any) {
+  if (typeof signals?.count === "number") return signals.count;
+  return noteSignalItems(signals).length;
 }
 
 function CandidateWorkEducationTimeline({
@@ -7093,6 +7258,10 @@ function ProgressBar({ value }: { value: number }) {
       <span>{percent}%</span>
     </div>
   );
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 function candidateEducationRows(education: Candidate["education"]) {

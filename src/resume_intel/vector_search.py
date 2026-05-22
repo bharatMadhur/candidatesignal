@@ -62,6 +62,9 @@ def embed_text_real(text: str) -> tuple[list[float], str]:
 def candidate_chunks(record: dict[str, Any], raw_text: str | None = None) -> list[tuple[str, str, str | None, int | None]]:
     location_intelligence = record.get("derived", {}).get("location_intelligence") or {}
     pii_intelligence = record.get("derived", {}).get("pii_contact_intelligence") or {}
+    profile_verification = record.get("derived", {}).get("profile_verification") or {}
+    note_signals = record.get("derived", {}).get("recruiter_note_signals") or {}
+    linkedin_external = profile_verification.get("linkedin_external") or {}
     chunks = [
         ("summary", " ".join(filter(None, [record.get("name"), record.get("summary")])), "Parsed summary", None),
         ("skills", " ".join(record.get("skills") or []), "Parsed skills", None),
@@ -85,6 +88,24 @@ def candidate_chunks(record: dict[str, Any], raw_text: str | None = None) -> lis
         ),
         ("derived", " ".join(record.get("derived", {}).get("recruiter_highlights") or []), "Deterministic HR highlights", None),
         ("notes", " ".join(note.get("content", "") for note in record.get("notes") or []), "Recruiter notes", None),
+        (
+            "recruiter_note_signals",
+            _flatten_text(note_signals),
+            "Structured recruiter note signals",
+            None,
+        ),
+        (
+            "linkedin_profile",
+            _flatten_text(
+                {
+                    "profile": linkedin_external.get("profile"),
+                    "comparison": linkedin_external.get("comparison"),
+                    "diff": linkedin_external.get("diff"),
+                }
+            ),
+            "Verified LinkedIn profile data",
+            None,
+        ),
         (
             "ai_intelligence",
             _flatten_text(record.get("candidate_intelligence") or record.get("llm_hr_intelligence") or {}),

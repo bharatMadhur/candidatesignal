@@ -29,6 +29,11 @@ class Settings:
     ocr_remote_audience: str | None
     ocr_remote_timeout_seconds: int
     pdf_render_dpi: int
+    apify_api_token: str = ""
+    apify_api_token_file: str | None = None
+    linkedin_actor_id: str = "LpVuK3Zozwuipa5bp"
+    linkedin_actor_mode: str = "Profile details no email ($4 per 1k)"
+    linkedin_timeout_seconds: int = 180
 
 
 def _env_first(*names: str, default: str | None = None) -> str | None:
@@ -155,4 +160,18 @@ def load_settings() -> Settings:
         ocr_remote_audience=_env_first("OCR_REMOTE_AUDIENCE", "RESUME_INTEL_OCR_REMOTE_AUDIENCE"),
         ocr_remote_timeout_seconds=int(os.getenv("OCR_REMOTE_TIMEOUT_SECONDS", "1800")),
         pdf_render_dpi=int(os.getenv("PDF_RENDER_DPI", "200")),
+        apify_api_token=_usable_secret(
+            _env_first("APIFY_API_TOKEN", "RESUME_INTEL_APIFY_API_TOKEN")
+            or _secret_file_first("APIFY_API_TOKEN_FILE", "RESUME_INTEL_APIFY_API_TOKEN_FILE")
+        ),
+        apify_api_token_file=_env_first("APIFY_API_TOKEN_FILE", "RESUME_INTEL_APIFY_API_TOKEN_FILE"),
+        linkedin_actor_id=_env_first("LINKEDIN_APIFY_ACTOR_ID", "RESUME_INTEL_LINKEDIN_APIFY_ACTOR_ID", default="LpVuK3Zozwuipa5bp")
+        or "LpVuK3Zozwuipa5bp",
+        linkedin_actor_mode=_env_first(
+            "LINKEDIN_APIFY_SCRAPER_MODE",
+            "RESUME_INTEL_LINKEDIN_APIFY_SCRAPER_MODE",
+            default="Profile details no email ($4 per 1k)",
+        )
+        or "Profile details no email ($4 per 1k)",
+        linkedin_timeout_seconds=int(os.getenv("LINKEDIN_VERIFICATION_TIMEOUT_SECONDS", "180")),
     )

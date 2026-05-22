@@ -164,6 +164,24 @@ export type Candidate = {
   _metadata?: any;
 };
 
+export type LinkedInVerificationRun = {
+  id: string;
+  document_id: string;
+  linkedin_url?: string | null;
+  status: "queued" | "running" | "succeeded" | "failed" | "retrying" | string;
+  stage?: string | null;
+  provider?: string | null;
+  result_status?: "verified" | "needs_review" | "mismatch" | string | null;
+  match_confidence?: number | null;
+  comparison?: Record<string, any>;
+  profile_diff?: Record<string, any>;
+  error_message?: string | null;
+  credits_used?: number;
+  created_at?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+};
+
 export type CandidateProfileUpdate = {
   name?: string | null;
   email?: string | null;
@@ -770,6 +788,18 @@ export async function getCandidateDocumentHtml(token: string, id: string): Promi
 
 export async function getCandidatePages(token: string, id: string): Promise<{ pages: DocumentPage[] }> {
   return request(`/candidates/${id}/pages`, { token });
+}
+
+export async function getLinkedInVerification(token: string, id: string): Promise<{ run: LinkedInVerificationRun | null }> {
+  return request(`/candidates/${id}/linkedin/verification`, { token });
+}
+
+export async function verifyLinkedInProfile(token: string, id: string, linkedinUrl?: string, autoStart = true): Promise<{ run: LinkedInVerificationRun }> {
+  return request(`/candidates/${id}/linkedin/verify`, {
+    method: "POST",
+    token,
+    body: JSON.stringify({ linkedin_url: linkedinUrl || null, auto_start: autoStart }),
+  });
 }
 
 export async function uploadResume(file: File, noteName: string, note: string, token: string): Promise<{ batch: ParseBatch; job: ParseJob; message: string }> {
