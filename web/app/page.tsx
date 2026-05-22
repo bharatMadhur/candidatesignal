@@ -126,6 +126,7 @@ import {
 } from "../lib/api";
 import { authClient, signInWithBetterAuth } from "../lib/auth-client";
 import { BrandMark } from "./components/brand";
+import { RECRUITER_COPY, WORKSPACE_NAV_LABELS } from "./components/recruiter-language";
 import { DOCUMENT_FILE_ACCEPT, DOCUMENT_FORMAT_LABEL, resolveLoginIdentifier } from "./lib/login";
 import { copyCurrentUrl, parseWorkspaceRoute, routeHasDeepLink, type CampaignDetailTab, type CandidateDetailTab, type View, type WorkspaceRoute } from "./lib/workspace-route";
 
@@ -949,7 +950,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
 
   async function handleRunRequirementMatch() {
     if (!requirement) return;
-    const ranked = await run("Ranking candidates", () => matchRequirement(token, requirement.id));
+    const ranked = await run("Finding matching candidates", () => matchRequirement(token, requirement.id));
     if (!ranked) return;
     setMatches(ranked.matches);
     const [runs, comparison] = await Promise.all([
@@ -1017,7 +1018,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
 
   async function handleMatchCampaign(id = campaign?.id) {
     if (!id || !token) return;
-    const result = await run("Ranking campaign candidates", () => matchCampaign(token, id));
+    const result = await run("Finding campaign matches", () => matchCampaign(token, id));
     if (!result) return;
     setCampaign(result);
     setCampaigns((items) => items.map((item) => item.id === result.id ? result : item));
@@ -1663,7 +1664,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                 busy={busy}
               />
             ) : (
-              <AccessDeniedPanel title="Upload queue is restricted" body="Ask a company admin to review parse jobs, worker failures, and operational alerts." />
+              <AccessDeniedPanel title="Processing review is restricted" body="Ask a company admin to review failed files, processing health, and retry actions." />
             )
           ) : null}
 
@@ -1824,19 +1825,19 @@ function WorkspaceTopNav({
         <strong>candidateSignal.ai</strong>
       </div>
       <nav>
-        <NavButton icon={<Database size={18} />} label="Home" active={view === "dashboard"} onClick={() => setView("dashboard")} />
-        <NavButton icon={<Users size={18} />} label="Candidates" active={view === "database" || view === "candidate"} onClick={() => setView("database")} />
-        <NavButton icon={<Rocket size={18} />} label="Campaigns" active={view === "campaigns"} onClick={() => setView("campaigns")} />
-        <NavButton icon={<Search size={18} />} label="Copilot" active={view === "copilot" || view === "requirement" || view === "matches"} onClick={() => setView("copilot")} />
+        <NavButton icon={<Database size={18} />} label={WORKSPACE_NAV_LABELS.home} active={view === "dashboard"} onClick={() => setView("dashboard")} />
+        <NavButton icon={<Users size={18} />} label={WORKSPACE_NAV_LABELS.candidates} active={view === "database" || view === "candidate"} onClick={() => setView("database")} />
+        <NavButton icon={<Rocket size={18} />} label={WORKSPACE_NAV_LABELS.campaigns} active={view === "campaigns"} onClick={() => setView("campaigns")} />
+        <NavButton icon={<Search size={18} />} label={WORKSPACE_NAV_LABELS.copilot} active={view === "copilot" || view === "requirement" || view === "matches"} onClick={() => setView("copilot")} />
       </nav>
       <div className="topNavActions">
         {isTenantAdmin(user) ? (
           <button className={view === "operations" ? "shellUploadButton active queueTopButton" : "shellUploadButton queueTopButton"} type="button" onClick={() => setView("operations")}>
-            <AlertTriangle size={18} /> Queue
+            <AlertTriangle size={18} /> {WORKSPACE_NAV_LABELS.review}
           </button>
         ) : null}
         <button className={view === "upload" ? "shellUploadButton active" : "shellUploadButton"} type="button" onClick={() => setView("upload")}>
-          <UploadCloud size={18} /> Upload
+          <UploadCloud size={18} /> {WORKSPACE_NAV_LABELS.upload}
         </button>
         <AccountSettingsMenu user={user} status={status} busy={busy} logout={logout} setView={setView} active={view === "team" || view === "operations" || view === "versions"} />
       </div>
@@ -1893,7 +1894,7 @@ function AccountSettingsMenu({
         {setView ? (
           <div className="accountMenuActions">
             {canManageWorkspaceSettings ? <button type="button" onClick={() => setView("team")}><ShieldCheck size={16} /> Team Settings</button> : null}
-            {canManageWorkspaceSettings ? <button type="button" onClick={() => setView("operations")}><AlertTriangle size={16} /> Upload Queue</button> : null}
+            {canManageWorkspaceSettings ? <button type="button" onClick={() => setView("operations")}><AlertTriangle size={16} /> Review Queue</button> : null}
             <button type="button" onClick={() => setView("versions")}><GitBranch size={16} /> Candidate Versions</button>
           </div>
         ) : null}
@@ -1953,16 +1954,16 @@ function Dashboard({
   const actionItems = [
     ...(deadLetterCount ? [{
       title: "Resume files need review",
-      body: `${deadLetterCount} resume file${deadLetterCount === 1 ? "" : "s"} exhausted retries. Open the queue to inspect the exact file, error, attempts, and retry it.`,
-      action: "Open file review queue",
+      body: `${deadLetterCount} resume file${deadLetterCount === 1 ? "" : "s"} could not be parsed after retries. Open review to inspect the file, understand the issue, and retry it.`,
+      action: "Open review",
       label: "File review",
       run: () => setView("operations"),
     }] : []),
     ...(operationalAlertCount ? [{
-      title: "Processing alerts need review",
-      body: `${operationalAlertCount} processing alert${operationalAlertCount === 1 ? "" : "s"} are open for worker, OCR, queue, or indexing health. Open the queue to acknowledge or inspect them.`,
-      action: "Open upload queue",
-      label: "Processing alert",
+      title: "Resume processing needs attention",
+      body: `${operationalAlertCount} processing alert${operationalAlertCount === 1 ? "" : "s"} need an admin review. Recruiters can keep working while these are handled.`,
+      action: "Open review",
+      label: "Processing review",
       run: () => setView("operations"),
     }] : []),
     ...candidates
@@ -1979,7 +1980,7 @@ function Dashboard({
       .slice(0, 2)
       .map((item) => ({
         title: `${item.name ?? "Candidate"} has unusable profile coverage`,
-        body: `Coverage is ${Math.round((item.coverage ?? 0) * 100)}%. Edit extracted fields, reparse, or remove the upload if it was not a resume.`,
+        body: `Profile completeness is ${Math.round((item.coverage ?? 0) * 100)}%. Edit extracted fields, reparse, or remove the upload if it was not a resume.`,
         action: "Fix profile",
         label: "Profile fix",
         run: () => openCandidate(item.document_id),
@@ -2000,8 +2001,8 @@ function Dashboard({
     <section className="snapshotPage">
       <main className="snapshotMain">
         <header className="stitchHeader">
-          <h2>Today&apos;s Recruiting Work</h2>
-          <p>Start from candidates, campaigns, and reviews that need action. Technical system details stay out of the recruiter workspace.</p>
+          <h2>{RECRUITER_COPY.dashboardTitle}</h2>
+          <p>{RECRUITER_COPY.dashboardSubtitle}</p>
         </header>
         <section className="homeActionBar">
           <button className="primary" onClick={() => setView("upload")}><UploadCloud size={18} /> Upload resumes</button>
@@ -2062,7 +2063,7 @@ function Dashboard({
       </main>
       <aside className="snapshotAside">
         <div className="actionHeader">
-          <h3><AlertTriangle size={22} /> Review Queue</h3>
+          <h3><AlertTriangle size={22} /> {RECRUITER_COPY.reviewQueueTitle}</h3>
           <span>{reviewCount || 0} Tasks</span>
         </div>
         <div className="stitchActionList">
@@ -2078,7 +2079,7 @@ function Dashboard({
               <p>{item.body}</p>
               <button onClick={item.run}>{item.action}</button>
             </article>
-          )) : <EmptyPanel title="No resolvable tasks" body="Non-blocking uncertainty stays inside candidate reports. This queue only shows items with a concrete next action." />}
+          )) : <EmptyPanel title="No decisions needed" body={RECRUITER_COPY.reviewQueueEmpty} />}
         </div>
       </aside>
     </section>
@@ -2210,7 +2211,7 @@ function RecruiterCopilot({
       <div className="copilotModeBar">
         <div className="copilotTabs">
           <button className={activeTab === "search" ? "active" : ""} onClick={() => setActiveTab("search")}><MessageSquare size={16} /> Search Copilot</button>
-          <button className={activeTab === "requirement" ? "active" : ""} onClick={() => setActiveTab("requirement")}><FileSearch size={16} /> Requirement HITL</button>
+          <button className={activeTab === "requirement" ? "active" : ""} onClick={() => setActiveTab("requirement")}><FileSearch size={16} /> {RECRUITER_COPY.requirementAssistant}</button>
         </div>
         <div className="copilotModeActions">
           <label className="copilotCampaignSelector">
@@ -2248,8 +2249,8 @@ function RecruiterCopilot({
             <section className="copilotSearchingBanner" aria-live="polite">
               <Loader2 size={18} />
               <div>
-                <strong>Searching candidate database</strong>
-                <span>Checking structured fields, raw CV text, recruiter notes, and semantic evidence.</span>
+                <strong>Finding candidates</strong>
+                <span>Checking profiles, raw CV text, recruiter notes, and source-backed evidence.</span>
               </div>
               <i />
             </section>
@@ -2257,7 +2258,7 @@ function RecruiterCopilot({
           <section className="stitchSignals">
             <div className="stitchSignalsHead">
               <div>
-                <h3>Candidate Results</h3>
+                <h3>Recommended Candidates</h3>
                 <span>{latestFilteredCandidates.length || latestResultCount} Matches</span>
               </div>
               <div className="copilotControlGroup">
@@ -2384,7 +2385,7 @@ function RecruiterCopilot({
         </section> : (
           <section className="panel copilotThread">
             <div className="panelHead">
-              <h3>Requirement HITL Intake</h3>
+              <h3>Requirement Builder</h3>
               <span>{requirement?.status ?? "No requirement loaded"}</span>
             </div>
             <div className="requirementHITLGrid">
@@ -2402,7 +2403,7 @@ function RecruiterCopilot({
               </section>
             </div>
             <button className="primary" disabled={busy || (!requirementFile && !requirementText.trim())} onClick={createRequirement}>
-              Extract Requirement And Ask HITL Questions
+              Build Requirement Profile
             </button>
             {requirement ? (
               <section className="hitlPanel">
@@ -2421,16 +2422,16 @@ function RecruiterCopilot({
                 {requirement.final_requirement_profile ? (
                   <div className="requirementProfilePreview">
                     <strong>Final profile ready</strong>
-                    <span>Use the locked recruiter-facing controls to rank candidates. Raw extraction JSON is hidden from this workflow.</span>
+                    <span>Use the confirmed scorecard to find candidates. Raw extraction JSON stays hidden from the recruiter workflow.</span>
                   </div>
                 ) : null}
                 <div className="actions">
-                  <button className="secondary" onClick={finalize} disabled={busy}>Lock Final Requirement</button>
-                  <button className="primary" onClick={match} disabled={busy || requirement.status !== "finalized"}>Rank Tenant Candidates</button>
+                  <button className="secondary" onClick={finalize} disabled={busy}>Confirm Requirement</button>
+                  <button className="primary" onClick={match} disabled={busy || requirement.status !== "finalized"}>{RECRUITER_COPY.matchingButton}</button>
                 </div>
               </section>
             ) : null}
-            {matches.length ? <p className="muted">{matches.length} matches created. Use Search or the match results view to review evidence, gaps, shortlist, and reject.</p> : null}
+            {matches.length ? <p className="muted">{matches.length} candidates ranked. Review evidence, gaps, shortlist decisions, and rejects from the campaign or match results.</p> : null}
           </section>
         )}
         <aside className="panel copilotGuide">
@@ -2526,7 +2527,7 @@ function DatabaseView({ candidates, query, setQuery, open }: { candidates: Candi
     ...countryFilters.map((country) => ({ id: `country:${country}`, label: country })),
     { id: "seniority", label: "Lead/Senior" },
     { id: "duplicate", label: "Version Signal" },
-    { id: "coverage", label: "Coverage > 80%" },
+    { id: "coverage", label: "Complete Profiles" },
     { id: "missing_location", label: "Missing Location" },
   ];
   function toggleFilter(id: string) {
@@ -2555,12 +2556,12 @@ function DatabaseView({ candidates, query, setQuery, open }: { candidates: Candi
         <article>
           <span>Ready</span>
           <strong>{readyCount}</strong>
-          <em>Good profile coverage</em>
+          <em>Enough data for matching</em>
         </article>
         <article className={needsReviewCount ? "attention" : ""}>
           <span>Needs Review</span>
           <strong>{needsReviewCount}</strong>
-          <em>Missing fields or version signal</em>
+          <em>Needs a recruiter decision</em>
         </article>
         <article className={missingLocationCount ? "attention" : ""}>
           <span>Missing Location</span>
@@ -2649,8 +2650,8 @@ function UploadResumeView(props: {
   return (
     <section className="uploadPage stitchUploadPage">
       <header className="stitchHeader compact">
-        <h2>Upload Center</h2>
-        <p>Add resumes to the database, or add a requirement directly inside a campaign. Both flows stay attached to the recruiter workflow.</p>
+        <h2>{RECRUITER_COPY.uploadTitle}</h2>
+        <p>{RECRUITER_COPY.uploadSubtitle}</p>
       </header>
       <section className="uploadLandingGrid">
         <article className="uploadTypePanel resumeUploadPanel">
@@ -2673,7 +2674,7 @@ function UploadResumeView(props: {
           </label>
           <section className="stitchProgressCard refinedUploadCard">
             <div>
-              <strong>Batch Parsing Progress</strong>
+              <strong>Resume Processing</strong>
               <span>{Math.round(activeProgress)}%</span>
             </div>
             <ProgressBar value={activeProgress} />
@@ -2701,7 +2702,7 @@ function UploadResumeView(props: {
             <p>
               {activeBatch
                 ? `Processing ${activeBatch.completed_count + activeBatch.failed_count} of ${activeBatch.total_files} files. Profiles update automatically when parsing completes.`
-                : "Select resumes to create a parsing batch."}
+                : "Select resumes and queue them. Profiles update automatically after processing."}
             </p>
           </section>
         </article>
@@ -2734,7 +2735,7 @@ function UploadResumeView(props: {
       </section>
       <section className="stitchQueueTable">
         <div className="stitchQueueHead">
-          <h3>Parsing Queue</h3>
+          <h3>Resume Processing</h3>
           {activeBatch ? <button className="plain danger" onClick={() => props.cancelBatch(activeBatch.id)}>Cancel batch</button> : null}
         </div>
         <div className="jobTable">
@@ -2755,7 +2756,7 @@ function UploadResumeView(props: {
             </div>
           ))}
           {!activeBatch?.jobs?.length ? (
-            <div className="emptyTableState">No files queued yet. Select resumes and click Queue resumes.</div>
+            <div className="emptyTableState">No files are being processed yet. Select resumes and click Queue resumes.</div>
           ) : null}
         </div>
       </section>
@@ -2839,8 +2840,8 @@ function OperationsView(props: {
     <section className="operationsPage">
       <div className="pageTitle">
         <div>
-          <h2>Upload Queue</h2>
-          <p>Review failed resumes first, then active parsing and recent upload batches. Technical diagnostics are collapsed below.</p>
+          <h2>Resume Processing Review</h2>
+          <p>Review failed resumes first, then active and recent upload batches. Advanced diagnostics stay collapsed below.</p>
         </div>
         <span className={openIssueCount ? "statusPill dangerPill" : "statusPill"}>
           {openIssueCount} open issue{openIssueCount === 1 ? "" : "s"}
@@ -2880,7 +2881,7 @@ function OperationsView(props: {
         <div className="panelHead">
           <div>
             <h3>Active Uploads</h3>
-            <span>Currently queued, running, retrying, or processing batches.</span>
+            <span>Resume batches currently waiting, processing, or retrying.</span>
           </div>
           <span className="statusPill">{activeBatches.length} active</span>
         </div>
@@ -2951,7 +2952,7 @@ function OperationsView(props: {
           </div>
           {props.selectedBatch.events?.length ? (
             <details className="queueEventLog">
-              <summary>Show queue event log</summary>
+              <summary>Show processing event log</summary>
               <div>
                 {props.selectedBatch.events.slice(0, 20).map((event) => (
                   <article key={event.id}>
@@ -2970,7 +2971,7 @@ function OperationsView(props: {
         <summary>
           <div>
             <strong>Processing Health</strong>
-            <span>{props.workerStatus?.online ? "Worker online" : "Worker offline"} | {props.workerStatus?.queued_count ?? 0} queued | {props.workerStatus?.running_count ?? 0} running</span>
+            <span>{props.workerStatus?.online ? "Processing online" : "Processing offline"} | {props.workerStatus?.queued_count ?? 0} waiting | {props.workerStatus?.running_count ?? 0} running</span>
           </div>
           <span className={props.alerts.length ? "statusPill dangerPill" : "statusPill"}>{props.alerts.length} system alert{props.alerts.length === 1 ? "" : "s"}</span>
         </summary>
@@ -2980,7 +2981,7 @@ function OperationsView(props: {
             <p>{props.workerStatus?.online ? "Resume processing is online." : "Processing is offline. Queued resumes will wait."}</p>
           </div>
           <div className="workerStats">
-            <Metric label="Queued" value={`${props.workerStatus?.queued_count ?? 0}`} />
+            <Metric label="Waiting" value={`${props.workerStatus?.queued_count ?? 0}`} />
             <Metric label="Running" value={`${props.workerStatus?.running_count ?? 0}`} />
             <Metric label="Failed" value={`${props.workerStatus?.failed_count ?? 0}`} />
             <Metric label="Needs Review" value={`${props.workerStatus?.dead_letter_count ?? 0}`} />
@@ -3109,12 +3110,12 @@ function CandidateTable({ candidates, open }: { candidates: CandidateSummary[]; 
     <div className="table candidateTable">
       <div className="tableRow header">
         <button onClick={() => changeSort("name")}>Name {sortArrow(sort, "name")}</button>
-        <button onClick={() => changeSort("title")}>Current Title {sortArrow(sort, "title")}</button>
+        <button onClick={() => changeSort("title")}>Current Role {sortArrow(sort, "title")}</button>
         <button onClick={() => changeSort("company")}>Company {sortArrow(sort, "company")}</button>
         <button onClick={() => changeSort("years")}>Experience {sortArrow(sort, "years")}</button>
         <span>Domains</span>
         <span>Location / Country</span>
-        <button onClick={() => changeSort("coverage")}>Coverage {sortArrow(sort, "coverage")}</button>
+        <button onClick={() => changeSort("coverage")}>Completeness {sortArrow(sort, "coverage")}</button>
         <button onClick={() => changeSort("risk")}>Version Signal {sortArrow(sort, "risk")}</button>
         <button onClick={() => changeSort("updated")}>Updated {sortArrow(sort, "updated")}</button>
       </div>
@@ -3425,7 +3426,7 @@ function CandidateDetail({
         <article className="candidateBadUploadBanner">
           <AlertTriangle size={18} />
           <div>
-            <strong>Low candidate coverage detected ({Math.round(coverageScore * 100)}%)</strong>
+            <strong>Profile needs review ({Math.round(coverageScore * 100)}% complete)</strong>
             <span>{coverageScore < 0.65 ? "This is below the usable profile threshold. It may be a wrong upload, weak scan, or missing core resume sections." : "This is usable but needs recruiter review before matching confidence is high."}</span>
             {coverageReasons.length ? (
               <ul>
@@ -3450,7 +3451,7 @@ function CandidateDetail({
         <header className="candidateBriefHeader">
           <div>
             <h2>{activeTab === "overview" ? "Overview" : candidateTabs.find((tab) => tab.id === activeTab)?.label}</h2>
-            <p>Clean recruiter view with facts, AI interpretation, source evidence, and notes kept separate.</p>
+            <p>{RECRUITER_COPY.candidateReportSubtitle}</p>
           </div>
           <div>
               <button className="plain" type="button" onClick={() => setActiveTab("evidence")}>Source Evidence</button>
@@ -3475,6 +3476,35 @@ function CandidateDetail({
               <article className="candidateReportHeroCard">
                 <span className="reportLabel">Recruiter Summary</span>
                 <p>{dashboardBullets[0] || finalProfile?.summary_card?.headline || candidate.summary || "No recruiter summary is available yet. Review the resume and add notes."}</p>
+              </article>
+
+              <article className="briefCard candidateIdentityLocationCard">
+                <div className="candidateSectionHeader">
+                  <div>
+                    <h3>Identity & Location</h3>
+                    <p>Current location is only highlighted when it appears in the latest role or resume header. Missing data stays marked as unknown.</p>
+                  </div>
+                  <span>{currentLocation ? "Current location found" : "Current location unknown"}</span>
+                </div>
+                <div className="identityLocationGrid">
+                  <div className="currentLocationCallout">
+                    <span>Latest role location</span>
+                    <strong>{currentLocation || "Not stated in latest role"}</strong>
+                    {resumeHeaderLocation && resumeHeaderLocation !== currentLocation ? <em>Resume header: {resumeHeaderLocation}</em> : null}
+                  </div>
+                  <div className="locationChipList">
+                    {locationChips.length ? locationChips.map((item, index) => (
+                      <span className={item.current ? "currentLocationChip" : ""} key={`${item.label}-${index}`}>{item.label}</span>
+                    )) : <span>No country or location signals found</span>}
+                  </div>
+                </div>
+                <div className="piiList clean identityPiiList">
+                  <PiiGroup label="Email" values={piiIntel.emails ?? (candidate.contact?.email ? [candidate.contact.email] : [])} />
+                  <PiiGroup label="Phone" values={piiIntel.phones ?? (candidate.contact?.phone ? [candidate.contact.phone] : [])} />
+                  <PiiGroup label="LinkedIn profile" values={linkedinProfileUrls} />
+                  {otherLinkedinUrls.length ? <PiiGroup label="Other LinkedIn links" values={otherLinkedinUrls} compact /> : null}
+                  <PiiGroup label="Portfolio" values={portfolioUrls} />
+                </div>
               </article>
 
               <section className="candidateReportTwoCol">
@@ -3788,43 +3818,22 @@ function CandidateDetail({
               </div>
             </article>
 
-            <article className="briefCard">
-              <h3>Contact & Location</h3>
-              <div className="currentLocationCallout">
-                <span>Latest role location</span>
-                <strong>{currentLocation || "Not stated in latest role"}</strong>
-                {resumeHeaderLocation && resumeHeaderLocation !== currentLocation ? <em>Resume header: {resumeHeaderLocation}</em> : null}
-              </div>
-              <div className="locationChipList">
-                {locationChips.length ? locationChips.map((item, index) => (
-                  <span className={item.current ? "currentLocationChip" : ""} key={`${item.label}-${index}`}>{item.label}</span>
-                )) : <span>No country or location signals found</span>}
-              </div>
-              <div className="piiList clean">
-                <PiiGroup label="Email" values={piiIntel.emails ?? (candidate.contact?.email ? [candidate.contact.email] : [])} />
-                <PiiGroup label="Phone" values={piiIntel.phones ?? (candidate.contact?.phone ? [candidate.contact.phone] : [])} />
-                <PiiGroup label="LinkedIn profile" values={linkedinProfileUrls} />
-                {otherLinkedinUrls.length ? <PiiGroup label="Other LinkedIn links" values={otherLinkedinUrls} compact /> : null}
-                <PiiGroup label="Portfolio" values={portfolioUrls} />
-              </div>
-              <div className="profileVerificationList">
-                <div className="profileVerificationHead">
-                  <strong>Application Profile Verification</strong>
-                  <span>{domainLabel(profileVerification.external_verification_status ?? "not_configured")}</span>
-                </div>
-                <VerificationRow label="LinkedIn" item={profileVerification.linkedin} />
-                <VerificationRow label="Portfolio" item={profileVerification.portfolio} />
-                <VerificationRow label="GitHub" item={profileVerification.github} />
-              </div>
-            </article>
-
-            <article className="briefCard">
-              <h3>Quick Facts</h3>
+            <article className="briefCard candidateRailSnapshot">
+              <h3>Profile Snapshot</h3>
               <div className="compactMetaList">
                 <div><span>Coverage</span><strong>{coverage ? `${Math.round(coverage.score * 100)}%` : "Unknown"}</strong></div>
                 <div><span>Experience</span><strong>{formatYears(accounting?.total_years_unique ?? hr?.total_years_experience)}</strong></div>
                 <div><span>Top domain</span><strong>{domainRows[0] ? domainLabel(domainRows[0].domain) : "Not found"}</strong></div>
+                <div><span>Location</span><strong>{currentLocation || resumeHeaderLocation || "Unknown"}</strong></div>
                 <div><span>Versions</span><strong>{versionSummary.quickFact}</strong></div>
+              </div>
+              <div className="profileVerificationList compact">
+                <div className="profileVerificationHead">
+                  <strong>Profile checks</strong>
+                  <span>{domainLabel(profileVerification.external_verification_status ?? "not_configured")}</span>
+                </div>
+                <VerificationRow label="LinkedIn" item={profileVerification.linkedin} />
+                <VerificationRow label="Portfolio" item={profileVerification.portfolio} />
               </div>
             </article>
 
@@ -4331,15 +4340,15 @@ function RequirementIntake(props: {
     <section className="requirementPage">
       <div className="pageTitle centered">
         <div>
-          <h2>Intake New Requirement</h2>
-          <p>Extract the job profile, answer clarifying questions, lock the final requirement, then rank candidates.</p>
+          <h2>Build Requirement Profile</h2>
+          <p>Extract the job profile, answer clarifying questions, confirm the scorecard, then find matching candidates.</p>
         </div>
       </div>
       <div className="intakeMethods">
         <label className={inputMode === "file" ? "intakeMethod active" : "intakeMethod"}>
           <FileUp size={28} />
-          <strong>Upload PDF Requirement</strong>
-          <p>Upload a standard job description document. The system extracts entities automatically.</p>
+          <strong>Upload Requirement</strong>
+          <p>Upload a job description document. The system extracts the role, skills, location preferences, and dealbreakers.</p>
           <span>{props.requirementFile ? props.requirementFile.name : "Browse files ->"}</span>
           <input type="file" accept={DOCUMENT_FILE_ACCEPT} onChange={(event) => props.setRequirementFile(event.target.files?.[0] ?? null)} />
         </label>
@@ -4351,9 +4360,9 @@ function RequirementIntake(props: {
         </article>
       </div>
       <section className="panel requirementTextPanel">
-        <label>Raw Requirement Text</label>
+        <label>Requirement Text</label>
         <textarea value={props.requirementText} onChange={(event) => props.setRequirementText(event.target.value)} placeholder="Paste job description here..." />
-        <button className="plain" disabled={!props.requirementText.trim() && !props.requirementFile} onClick={props.createRequirement}>Extract Entities</button>
+        <button className="plain" disabled={!props.requirementText.trim() && !props.requirementFile} onClick={props.createRequirement}>Build Profile</button>
       </section>
       <section className="panel requirementHistory">
         <div className="panelHead"><h3>Requirement History</h3><span>{props.requirements.length}</span></div>
@@ -4366,14 +4375,14 @@ function RequirementIntake(props: {
         {!props.requirements.length ? <p className="muted">No saved requirements yet.</p> : null}
       </section>
       <section className="clarificationPanel">
-        <h3><ShieldCheck size={20} /> System Clarification Questions</h3>
-        <p>Based on the provided requirement, clarify ambiguous parameters before ranking candidates.</p>
+        <h3><ShieldCheck size={20} /> Clarifying Questions</h3>
+        <p>Clarify ambiguous parameters before matching so weak assumptions do not become hard filters.</p>
         {props.requirement ? (
           <>
             <div className="requirementLifecycle">
               <span className={props.requirement.status === "draft" ? "active" : ""}>1. Extracted</span>
-              <span className={props.requirement.status === "finalized" ? "active" : ""}>2. Finalized</span>
-              <span className={props.requirement.status === "matched" ? "active" : ""}>3. Ranked</span>
+              <span className={props.requirement.status === "finalized" ? "active" : ""}>2. Confirmed</span>
+              <span className={props.requirement.status === "matched" ? "active" : ""}>3. Matched</span>
             </div>
             <section className="requirementSummary">
               <Metric label="Title" value={props.requirement.title ?? "Untitled"} />
@@ -4382,7 +4391,7 @@ function RequirementIntake(props: {
               <Metric label="Locations" value={`${(activeProfile?.required_locations ?? []).length + (activeProfile?.required_countries ?? []).length}`} />
             </section>
             <section className="structuredClarification">
-              <div className="cardTitle"><h3>Structured Match Controls</h3><span>These fields directly affect ranking</span></div>
+              <div className="cardTitle"><h3>Editable Scorecard</h3><span>These fields directly affect matching</span></div>
               {requirementStructuredFields.map((field) => (
                 <label key={field.key} className={field.multiline ? "structuredField wide" : "structuredField"}>
                   <span>{field.label}</span>
@@ -4407,7 +4416,7 @@ function RequirementIntake(props: {
             </section>
             {(props.requirement.clarification_questions ?? []).length ? (
               <section className="openQuestions">
-                <div className="cardTitle"><h3>System Open Questions</h3><span>Additional recruiter context</span></div>
+                <div className="cardTitle"><h3>Open Questions</h3><span>Additional recruiter context</span></div>
                 {(props.requirement.clarification_questions ?? []).map((question) => (
                   <label className="question" key={question}>
                     <span>{question}</span>
@@ -4417,8 +4426,8 @@ function RequirementIntake(props: {
               </section>
             ) : null}
             <div className="actions">
-              <button className="secondary" disabled={locked} onClick={props.finalize}>Lock finalized profile</button>
-              <button className="primary" disabled={!locked} onClick={props.match}>Rank candidates</button>
+              <button className="secondary" disabled={locked} onClick={props.finalize}>Confirm requirement</button>
+              <button className="primary" disabled={!locked} onClick={props.match}>{RECRUITER_COPY.matchingButton}</button>
             </div>
           </>
         ) : <p className="muted">Create a requirement to generate clarification questions.</p>}
@@ -4435,7 +4444,7 @@ const requirementStructuredFields = [
     profileKey: "must_have_skills",
     label: "Must-have skills",
     placeholder: "Azure OpenAI, LangChain, RAG",
-    help: "Non-negotiable capabilities. Missing hits become hard-filter failures.",
+    help: "Non-negotiable capabilities only if the recruiter truly means hard requirement.",
     multiline: true,
   },
   {
@@ -4451,7 +4460,7 @@ const requirementStructuredFields = [
     profileKey: "min_years_experience",
     label: "Minimum years",
     placeholder: "5",
-    help: "Used as a hard requirement and years-fit score.",
+    help: "Used for years-fit scoring. Treat as hard only when the requirement explicitly says so.",
     multiline: false,
   },
   {
@@ -4543,15 +4552,15 @@ function MatchResults({
     <section className="matchesPage">
       <div className="pageTitle">
         <div>
-          <h2>Ranked Matches</h2>
-          <p>{requirement ? `Requirement: ${requirement.title ?? "Untitled requirement"}` : "Select or create a finalized requirement to rank candidates."}</p>
+          <h2>Candidate Recommendations</h2>
+          <p>{requirement ? `Requirement: ${requirement.title ?? "Untitled requirement"}` : "Select or create a confirmed requirement to find matching candidates."}</p>
         </div>
         <span>{filteredMatches.length}/{matches.length} candidates shown above {Math.round(minimumScore * 100)}%</span>
       </div>
       {!matches.length ? (
         <section className="panel emptyState">
-          <h3>No match run loaded</h3>
-          <p>Create a requirement, answer clarification questions, lock the final profile, then run matching to rank candidates.</p>
+          <h3>No recommendations loaded</h3>
+          <p>Create a requirement, answer clarification questions, confirm the profile, then find matching candidates.</p>
           <button className="primary" onClick={() => setView("requirement")}>Go to Requirements</button>
         </section>
       ) : null}
@@ -4572,7 +4581,7 @@ function MatchResults({
           <div className="matchRunGrid">
             {matchRuns.slice(0, 4).map((run) => (
               <article key={run.id}>
-                <strong>Run #{run.run_number}</strong>
+                <strong>Search #{run.run_number}</strong>
                 <span>{formatDateTime(run.created_at)}</span>
                 <div>
                   <Metric label="Candidates" value={String(run.candidate_count)} />
@@ -4602,7 +4611,7 @@ function MatchResults({
           <div>
             <span className="eyebrow">Match distribution</span>
             <h3>Only review candidates above the working threshold</h3>
-            <p>Candidates below 30% are hidden from the recruiter list. Raise the threshold when the database gets large.</p>
+            <p>Candidates below 30% stay hidden from the recruiter list. Raise the threshold when the database gets large.</p>
           </div>
           <div className="matchGaugeBuckets">
             {scoreBuckets.map((bucket) => (
@@ -4642,10 +4651,10 @@ function MatchResults({
             </div>
             {(item.evidence?.hard_filter_failures ?? []).length ? (
               <div className="hardFilterBox">
-                <strong>Hard filter failures</strong>
+                <strong>Must-check failures</strong>
                 {(item.evidence.hard_filter_failures ?? []).map((failure: string, failureIndex: number) => <span key={`${failure}-${failureIndex}`}>{failure}</span>)}
               </div>
-            ) : <div className="hardFilterPass">Hard filters passed</div>}
+            ) : <div className="hardFilterPass">Must-check items passed</div>}
             <div className="scoreGrid">
               <Metric label="Must-have" value={`${Math.round(item.must_have_score * 100)}%`} />
               <Metric label="Nice-have" value={`${Math.round(item.nice_to_have_score * 100)}%`} />
@@ -4946,7 +4955,7 @@ function CampaignsView({
                 <button className="plain" type="button" onClick={() => copyCurrentUrl()}>Copy Link</button>
                 <button className="plain" onClick={() => setEditingCampaign((value) => !value)}>{editingCampaign ? "Close edit" : "Edit Campaign"}</button>
                 <button className="secondary" onClick={() => setActiveTab("uploads")}>Upload Resumes</button>
-                <button className="primary" onClick={() => matchCampaign(activeCampaign.id)} disabled={busy || !activeCampaign.requirement_id}>Find Matches</button>
+                <button className="primary" onClick={() => matchCampaign(activeCampaign.id)} disabled={busy || !activeCampaign.requirement_id}>{RECRUITER_COPY.matchingButton}</button>
               </div>
             </header>
 
@@ -5006,9 +5015,9 @@ function CampaignsView({
             <section className="campaignTabPane campaignMatchesList">
               <div className="campaignPanelHeader">
                 <div>
-                  <span className="eyebrow">Ranked candidates</span>
+                  <span className="eyebrow">Recommended candidates</span>
                   <h3>{visibleRankedCandidates.length} candidates above {Math.round(campaignMatchThreshold * 100)}%</h3>
-                  <p>{visibleRankedCandidates.length > matchResultLimit ? `Showing top ${matchResultLimit}. Raise the threshold or load more to review the rest.` : "Showing the actionable ranked set for this threshold."}</p>
+                  <p>{visibleRankedCandidates.length > matchResultLimit ? `Showing top ${matchResultLimit}. Raise the threshold or load more only when needed.` : "Showing the recruiter-actionable set for this threshold."}</p>
                 </div>
                 <button className="secondary" onClick={() => matchCampaign(activeCampaign.id)} disabled={busy || !activeCampaign.requirement_id}>Refresh matches</button>
               </div>
@@ -5016,7 +5025,7 @@ function CampaignsView({
                 <section className="matchDistributionPanel compact">
                   <div>
                     <span className="eyebrow">Review threshold</span>
-                    <p>Use buckets instead of scrolling through weak matches. Candidates under 30% are hidden by default.</p>
+                    <p>Use buckets instead of scrolling through weak matches. Below-threshold profiles stay hidden unless you lower the bar.</p>
                   </div>
                   <div className="matchGaugeBuckets">
                     {campaignMatchBuckets.map((bucket) => (
@@ -5047,7 +5056,7 @@ function CampaignsView({
                     <button className="plain small danger" onClick={() => updateCandidateStatus(item.candidate_id, "rejected")}>Reject</button>
                   </div>
                 </article>
-              )) : <EmptyPanel title={rankedCandidates.length ? "No candidates above this threshold" : "No matches yet"} body={rankedCandidates.length ? "Lower the threshold bucket or adjust the scorecard." : "Run matching to rank existing candidates, or upload resumes into this campaign."} />}
+              )) : <EmptyPanel title={rankedCandidates.length ? "No candidates above this threshold" : "No recommendations yet"} body={rankedCandidates.length ? "Lower the threshold bucket or adjust the scorecard." : "Find matches from the existing database, or upload resumes directly into this campaign."} />}
               {visibleRankedCandidates.length > visibleRankedCandidatePage.length ? (
                 <button className="plain loadMoreMatches" type="button" onClick={() => setMatchResultLimit((value) => value + 50)}>
                   Load 50 more candidates
@@ -5134,7 +5143,7 @@ function CampaignsView({
                 <section className="campaignWeightEditor">
                   <div>
                     <h4>Matching brain</h4>
-                    <p>Adjust weightage before ranking. Missing evidence is shown as unclear, not automatic rejection.</p>
+                    <p>Adjust weights before matching. Missing evidence is shown as unclear, not automatic rejection.</p>
                   </div>
                   <div className="campaignStrictToggles">
                     <label><input type="checkbox" checked={scorecardForm.strict_must_haves} onChange={(event) => setScorecardForm((value) => ({ ...value, strict_must_haves: event.target.checked }))} /> Must-haves are hard blockers</label>
@@ -5216,9 +5225,9 @@ function CampaignsView({
             <div className="campaignPipelineFocus">
               <section className="campaignPipelineGuardrail">
                 <div>
-                  <span className="eyebrow">Pipeline guardrail</span>
+                  <span className="eyebrow">Pipeline focus</span>
                   <strong>{pipelineCandidates.length} actionable candidates across {nonEmptyStageCount || 0} active stage{nonEmptyStageCount === 1 ? "" : "s"}</strong>
-                  <p>{hiddenPipelineCandidates > 0 ? `${hiddenPipelineCandidates} weak or below-threshold candidates are hidden from the working pipeline. Use Matches to lower the threshold or review the long tail.` : "The pipeline only shows candidates worth recruiter action at the current threshold."}</p>
+                  <p>{hiddenPipelineCandidates > 0 ? `${hiddenPipelineCandidates} weak or below-threshold candidates are hidden from the working pipeline. Use Matches to lower the threshold only if you need more recall.` : "The pipeline only shows candidates worth recruiter action at the current threshold."}</p>
                 </div>
                 <div className="pipelineThresholdButtons">
                   {campaignMatchBuckets.map((bucket) => (
@@ -5302,10 +5311,10 @@ function CampaignsView({
                       </div>
                       {campaignHardFilterFailures(selectedCampaignCandidate).length ? (
                         <div className="campaignHardFilters">
-                          <strong>Hard filters need review</strong>
+                          <strong>Must-check items need review</strong>
                           {campaignHardFilterFailures(selectedCampaignCandidate).slice(0, 3).map((failure, failureIndex) => <span key={`${failure}-${failureIndex}`}>{failure}</span>)}
                         </div>
-                      ) : <div className="campaignHardFilterPass">Hard filters passed</div>}
+                      ) : <div className="campaignHardFilterPass">Must-check items passed</div>}
                       <strong className="campaignPanelSubhead">Why this candidate</strong>
                       <div className="campaignEvidence">
                         {campaignReasonItems(selectedCampaignCandidate).slice(0, 4).map((reason, reasonIndex) => <span key={`${selectedCampaignCandidate.candidate_id}-side-${reasonIndex}`}>{reason}</span>)}
@@ -5316,7 +5325,7 @@ function CampaignsView({
                         </div>
                       ) : null}
                       <div className="draftBox">
-                        <strong>Draft reachout angle</strong>
+                        <strong>Suggested recruiter angle</strong>
                         <span>{selectedCampaignCandidate.evidence?.recommendation ?? "Open the candidate report to tailor outreach from resume evidence and recruiter notes."}</span>
                       </div>
                       <div className="campaignCandidateWorkflow">
@@ -5369,7 +5378,7 @@ function CampaignsView({
               </div>
             </div>
           ) : null}
-          {activeTab === "pipeline" && !selectedCandidates.length ? <EmptyPanel title="No campaign candidates yet" body="Run matching to rank the existing database, or upload resumes directly into this campaign." /> : null}
+          {activeTab === "pipeline" && !selectedCandidates.length ? <EmptyPanel title="No campaign candidates yet" body="Find matches from the existing database, or upload resumes directly into this campaign." /> : null}
           </main>
         </div>
       )}

@@ -8,6 +8,307 @@
   background: var(--surface);
 }
 
+/* Product-finesse pass: keep the current functionality, but make recruiter
+   screens feel calmer, sharper, and less like operational tooling. */
+.topNavShell,
+.canvas,
+.snapshotPage,
+.databasePage,
+.copilotPage,
+.uploadPage,
+.campaignCleanPage,
+.candidateReport.candidateCleanReport {
+  background: #ffffff;
+}
+
+.workspaceTopNav {
+  border-bottom: 1px solid #e7edf1;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
+}
+
+.workspaceTopNav .topNavLink,
+.shellUploadButton,
+.settingsSummary {
+  border-color: transparent;
+  background: transparent;
+}
+
+.workspaceTopNav .topNavLink.active,
+.shellUploadButton.active,
+.settingsSummary.active {
+  border-color: #d8e2ea;
+  background: #f4f7f8;
+  color: #24384a;
+}
+
+.snapshotAside,
+.copilotGuide,
+.campaignCleanRail,
+.candidateContextRail {
+  scrollbar-width: thin;
+}
+
+.snapshotAside,
+.snapshotMain,
+.stitchCopilotMain,
+.campaignCleanMain,
+.candidateCleanMainShell {
+  background: #ffffff;
+}
+
+.stitchMetricCard,
+.stitchCampaignTable article,
+.profileSearchPanel,
+.profilesMetricStrip article,
+.uploadTypePanel,
+.stitchQueueTable,
+.campaignCleanHeader,
+.campaignEditPanel,
+.campaignProgressMini,
+.campaignWorkflowTabs.cleanTabs,
+.campaignStageListPanel,
+.campaignPipelineCandidatePanel,
+.briefCard,
+.candidateReportHeroCard {
+  border-color: #e2e8ee;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.035);
+}
+
+.stitchMetricCard:hover,
+.campaignRailList button:hover,
+.campaignStageCandidate:hover,
+.copilotCompactCard:hover,
+.candidateReportTabs button:hover {
+  border-color: #cad7e1;
+  background: #fbfcfd;
+}
+
+.stitchHeader h2,
+.profilesHeader h2,
+.campaignCleanHeader h2,
+.candidateCleanIdentity h2 {
+  color: #182230;
+  letter-spacing: -0.045em;
+}
+
+.stitchHeader p,
+.profilesHeader p,
+.campaignCleanHeader p,
+.candidateBriefHeader p,
+.candidateSectionHeader p {
+  color: #5f6f7e;
+}
+
+.copilotModeBar {
+  min-height: 58px;
+  padding: 9px 24px;
+}
+
+.copilotGuideHeader {
+  margin: -22px -16px 14px;
+  padding: 18px 18px;
+}
+
+.copilotGuideHeader h3 {
+  color: #24384a;
+  font-size: 19px;
+  line-height: 26px;
+}
+
+.editableQueryAnalysis {
+  border: 1px solid #dfe7ed;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff, #f8fafb);
+  padding: 12px;
+}
+
+.editableQueryAnalysis label input {
+  min-height: 36px;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.threadList article {
+  border-radius: 9px;
+}
+
+.candidateCleanHeader {
+  position: sticky;
+  top: 62px;
+  z-index: 4;
+  padding: 16px 28px;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(14px);
+}
+
+.candidateCleanIdentity h2 {
+  font-size: clamp(24px, 2vw, 32px);
+  line-height: 1.1;
+}
+
+.candidateCleanMainShell {
+  padding-top: 18px;
+}
+
+.candidateReviewWorkspace {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 315px);
+  gap: 16px;
+}
+
+.candidateContextRail {
+  top: 136px;
+  gap: 12px;
+}
+
+.candidateContextRail .briefCard {
+  padding: 13px;
+}
+
+.candidateContextRail .briefCard h3 {
+  font-size: 15px;
+  line-height: 20px;
+}
+
+.recruiterQuickNotes textarea {
+  min-height: 76px;
+  max-height: 112px;
+}
+
+.recentNotesCompact article:nth-child(n + 3) {
+  display: none;
+}
+
+.candidateRailSnapshot .compactMetaList {
+  grid-template-columns: 1fr;
+}
+
+.profileVerificationList.compact {
+  margin-top: 8px;
+}
+
+.profileVerificationList.compact .verificationRow p {
+  display: none;
+}
+
+.candidateIdentityLocationCard {
+  gap: 14px;
+}
+
+.identityLocationGrid {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.85fr) minmax(0, 1.15fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.identityPiiList {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.currentLocationCallout {
+  border-radius: 10px;
+}
+
+.timelineBoard {
+  position: relative;
+}
+
+.timelineYearAxis {
+  position: sticky;
+  top: 128px;
+  z-index: 2;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(12px);
+}
+
+.campaignCleanWorkspace {
+  background: #ffffff;
+  padding: 18px 22px;
+}
+
+.campaignCleanRail {
+  top: 80px;
+}
+
+.campaignCleanHeader h2 {
+  font-size: clamp(26px, 2.4vw, 38px);
+}
+
+.campaignProgressMini article {
+  padding: 10px 12px;
+}
+
+.campaignStageStrip {
+  grid-template-columns: repeat(5, minmax(100px, 1fr));
+}
+
+.campaignPipelineWorkspace {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.campaignPipelineCandidatePanel {
+  top: 82px;
+  max-height: calc(100vh - 104px);
+  border-left: 0;
+}
+
+.campaignStageCandidate {
+  grid-template-columns: 70px minmax(0, 1fr);
+}
+
+.campaignStageMeta {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+}
+
+.campaignStageProgress {
+  grid-template-columns: repeat(5, minmax(72px, 1fr));
+  row-gap: 10px;
+}
+
+.campaignStageMoveControls,
+.campaignStageQuickActions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.uploadLandingGrid {
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.78fr);
+}
+
+.refinedUploadDrop {
+  min-height: 200px;
+  background: #fbfcfd;
+}
+
+.uploadTypePanel,
+.campaignRequirementUploadTab {
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+@media (max-width: 1180px) {
+  .candidateCleanHeader {
+    position: static;
+  }
+
+  .candidateReviewWorkspace,
+  .identityLocationGrid,
+  .identityPiiList,
+  .campaignPipelineWorkspace,
+  .uploadLandingGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .candidateContextRail,
+  .campaignPipelineCandidatePanel,
+  .campaignCleanRail,
+  .timelineYearAxis {
+    position: static;
+    max-height: none;
+  }
+}
+
 .autoBatchName span,
 .editableQueryAnalysis label span {
   color: var(--muted);
@@ -10962,5 +11263,165 @@ h3 {
 
   .candidateCorrectionGrid .wide {
     grid-column: auto;
+  }
+}
+
+/* Final recruiter polish overrides. This block intentionally sits last so older
+   generated styles do not overpower the simplified product direction. */
+.topNavShell,
+.canvas,
+.snapshotPage,
+.databasePage,
+.copilotPage,
+.uploadPage,
+.campaignCleanPage,
+.candidateReport.candidateCleanReport {
+  background: #ffffff;
+}
+
+.workspaceTopNav {
+  min-height: 62px;
+  border-bottom: 1px solid #e7edf1;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
+}
+
+.workspaceTopNav .topNavLink,
+.shellUploadButton,
+.settingsSummary {
+  border-color: transparent;
+  background: transparent;
+}
+
+.workspaceTopNav .topNavLink.active,
+.shellUploadButton.active,
+.settingsSummary.active {
+  border-color: #d8e2ea;
+  background: #f4f7f8;
+  color: #24384a;
+}
+
+.stitchMetricCard,
+.stitchCampaignTable article,
+.profileSearchPanel,
+.profilesMetricStrip article,
+.uploadTypePanel,
+.stitchQueueTable,
+.campaignCleanHeader,
+.campaignEditPanel,
+.campaignProgressMini,
+.campaignWorkflowTabs.cleanTabs,
+.campaignStageListPanel,
+.campaignPipelineCandidatePanel,
+.briefCard,
+.candidateReportHeroCard {
+  border-color: #e2e8ee;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.035);
+}
+
+.candidateCleanHeader {
+  position: sticky;
+  top: 62px;
+  z-index: 4;
+  padding: 16px 28px;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(14px);
+}
+
+.candidateReviewWorkspace {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 315px);
+  gap: 16px;
+}
+
+.candidateContextRail {
+  top: 136px;
+  gap: 12px;
+}
+
+.candidateContextRail .briefCard {
+  padding: 13px;
+}
+
+.candidateContextRail .briefCard h3 {
+  font-size: 15px;
+  line-height: 20px;
+}
+
+.recruiterQuickNotes textarea {
+  min-height: 76px;
+  max-height: 112px;
+}
+
+.recentNotesCompact article:nth-child(n + 3) {
+  display: none;
+}
+
+.identityLocationGrid {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.85fr) minmax(0, 1.15fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.identityPiiList {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.timelineYearAxis {
+  position: sticky;
+  top: 128px;
+  z-index: 2;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(12px);
+}
+
+.campaignCleanWorkspace {
+  background: #ffffff;
+  padding: 18px 22px;
+}
+
+.campaignStageStrip {
+  grid-template-columns: repeat(5, minmax(100px, 1fr));
+}
+
+.campaignPipelineWorkspace {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.campaignPipelineCandidatePanel {
+  top: 82px;
+  max-height: calc(100vh - 104px);
+  border-left: 0;
+}
+
+.campaignStageCandidate {
+  grid-template-columns: 70px minmax(0, 1fr);
+}
+
+.campaignStageMeta {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+}
+
+.uploadLandingGrid {
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.78fr);
+}
+
+@media (max-width: 1180px) {
+  .candidateCleanHeader,
+  .candidateContextRail,
+  .campaignPipelineCandidatePanel,
+  .campaignCleanRail,
+  .timelineYearAxis {
+    position: static;
+    max-height: none;
+  }
+
+  .candidateReviewWorkspace,
+  .identityLocationGrid,
+  .identityPiiList,
+  .campaignPipelineWorkspace,
+  .uploadLandingGrid {
+    grid-template-columns: 1fr;
   }
 }
