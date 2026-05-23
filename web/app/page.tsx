@@ -2697,27 +2697,33 @@ function DatabaseView({ candidates, query, setQuery, open }: { candidates: Candi
 
       <div className="profilesMetricStrip">
         <article>
-          <span>Total Profiles</span>
+          <div className="profileMetricCardHead"><span>Total Profiles</span></div>
           <strong>{candidates.length}</strong>
           <em>Company database</em>
         </article>
         <article>
-          <span>Ready</span>
+          <div className="profileMetricCardHead"><span>Ready</span></div>
           <strong>{readyCount}</strong>
           <em>Enough data for matching</em>
         </article>
         <article className={needsReviewCount ? "attention" : ""}>
-          <span>Needs Review</span>
+          <div className="profileMetricCardHead">
+            <span>Needs Review</span>
+            {needsReviewCount ? <i className="profileMetricHazard" aria-label="Needs attention"><AlertTriangle size={14} /></i> : null}
+          </div>
           <strong>{needsReviewCount}</strong>
           <em>Needs a recruiter decision</em>
         </article>
         <article className={missingLocationCount ? "attention" : ""}>
-          <span>Missing Location</span>
+          <div className="profileMetricCardHead">
+            <span>Missing Location</span>
+            {missingLocationCount ? <i className="profileMetricHazard" aria-label="Needs attention"><AlertTriangle size={14} /></i> : null}
+          </div>
           <strong>{missingLocationCount}</strong>
           <em>Country/location not captured</em>
         </article>
         <article>
-          <span>Version Signals</span>
+          <div className="profileMetricCardHead"><span>Version Signals</span></div>
           <strong>{versionSignalCount}</strong>
           <em>Possible repeated candidate uploads</em>
         </article>
@@ -3350,17 +3356,13 @@ function CandidateTable({ candidates, open }: { candidates: CandidateSummary[]; 
       {sortedCandidates.map((item) => {
         const hazardItems = candidateListHazards(item);
         return (
-          <button className={hazardItems.length ? "tableRow candidateRowNeedsReview" : "tableRow"} key={item.document_id} onClick={() => open(item.document_id)}>
+          <button className="tableRow" key={item.document_id} onClick={() => open(item.document_id)}>
             <span className="truncateCell candidateListNameCell" title={item.name ?? "Unknown"}>
-              <span className="candidateNameLine">
-                <span className="candidateListNameText">{item.name ?? "Unknown"}</span>
-                {hazardItems.length ? (
-                  <span className="candidateListHazardBadge" title={hazardItems.join("\n")} aria-label={`Review needed: ${hazardItems.join(", ")}`}>
-                    <AlertTriangle size={14} />
-                  </span>
-                ) : null}
+              <span>
+                {hazardItems.length ? <AlertTriangle className="candidateListHazardIcon" size={15} aria-label={hazardItems.join(", ")} /> : null}
+                {item.name ?? "Unknown"}
               </span>
-              <small className={hazardItems.length ? "candidateListHazardCopy" : undefined}>{hazardItems[0] ?? item.email ?? item.phone ?? "No contact ID"}</small>
+              <small>{hazardItems[0] ?? item.email ?? item.phone ?? "No contact ID"}</small>
             </span>
             <span className="truncateCell" title={item.current_title ?? "Missing"}>
               {item.current_title ?? "Missing"}

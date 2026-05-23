@@ -3787,8 +3787,28 @@ a:focus {
 }
 
 .profilesMetricStrip article.attention {
-  border-left: 5px solid var(--warn);
-  background: #fffbfa;
+  border-color: #dce4ec;
+  background: var(--surface);
+}
+
+.profileMetricCardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.profileMetricHazard {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid #d9e1ea;
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--warn);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
 }
 
 .profilesMetricStrip span {
@@ -3947,46 +3967,17 @@ a:focus {
   white-space: nowrap;
 }
 
-.candidateListNameCell {
-  display: grid;
-  gap: 3px;
-}
-
-.candidateNameLine {
+.candidateListNameCell > span {
   display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 7px;
   min-width: 0;
   max-width: 100%;
 }
 
-.candidateListNameText {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.candidateListHazardBadge {
+.candidateListHazardIcon {
   flex: 0 0 auto;
-  display: inline-grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border: 1px solid #d7dde8;
-  border-radius: 999px;
-  background: var(--surface);
   color: var(--warn);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.07);
-}
-
-.candidateListHazardCopy {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--muted);
-  font-weight: 850;
 }
 
 .tableEmpty {
