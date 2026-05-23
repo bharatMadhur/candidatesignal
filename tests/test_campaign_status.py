@@ -4,11 +4,14 @@ import sys
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
+
+from fastapi import HTTPException
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from resume_intel import campaigns
+from resume_intel import campaigns, web
 from resume_intel.campaigns import _campaign_match_evidence_payload
 
 
@@ -282,6 +285,24 @@ class CampaignCandidateStatusTests(unittest.TestCase):
 
         self.assertTrue(result["deleted"])
         self.assertTrue(result["already_deleted"])
+
+    def test_campaign_archive_route_accepts_archive_confirmation(self) -> None:
+        user = {"id": "user-1", "tenant_id": "tenant-1", "tenant_role": "tenant_admin"}
+
+        with patch.object(web, "soft_delete_campaign", return_value={"id": "campaign-1", "deleted": True}) as soft_delete:
+            result = web.delete_job_campaign("campaign-1", web.CampaignDeleteRequest(confirmation="archive"), user)
+
+        self.assertTrue(result["deleted"])
+        soft_delete.assert_called_once_with("campaign-1", "tenant-1", "user-1", reason="removed_by_recruiter")
+
+    def test_campaign_archive_route_rejects_wrong_confirmation(self) -> None:
+        user = {"id": "user-1", "tenant_id": "tenant-1", "tenant_role": "tenant_admin"}
+
+        with self.assertRaises(HTTPException) as error:
+            web.delete_job_campaign("campaign-1", web.CampaignDeleteRequest(confirmation="wrong"), user)
+
+        self.assertEqual(error.exception.status_code, 400)
+        self.assertIn("archive", str(error.exception.detail))
 
 
 if __name__ == "__main__":

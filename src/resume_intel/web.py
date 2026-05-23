@@ -1195,8 +1195,8 @@ def job_campaign(campaign_id: str, user: dict = Depends(current_user)) -> dict:
 @app.delete("/campaigns/{campaign_id}")
 def delete_job_campaign(campaign_id: str, request: CampaignDeleteRequest, user: dict = Depends(current_user)) -> dict:
     require_tenant_write(user)
-    if request.confirmation != "delete":
-        raise HTTPException(status_code=400, detail="type delete to confirm campaign deletion")
+    if request.confirmation not in {"archive", "delete"}:
+        raise HTTPException(status_code=400, detail="type archive to confirm campaign archive")
     try:
         return soft_delete_campaign(
             campaign_id,

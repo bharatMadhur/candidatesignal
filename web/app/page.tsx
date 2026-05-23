@@ -1112,11 +1112,11 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
 
   async function handleDeleteCampaign(id: string, confirmation: string) {
     if (!id || !token) return;
-    if (confirmation !== "delete") {
-      setStatus("Campaign delete cancelled. Type delete exactly to confirm.");
+    if (confirmation !== "archive") {
+      setStatus("Campaign archive cancelled. Type archive exactly to confirm.");
       return;
     }
-    const result = await run("Deleting campaign", () => deleteCampaign(token, id, confirmation));
+    const result = await run("Archiving campaign", () => deleteCampaign(token, id, confirmation));
     if (!result?.deleted) return;
     const remaining = campaigns.filter((item) => item.id !== id);
     setCampaigns(remaining);
@@ -1127,7 +1127,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
         await handleOpenCampaign(remaining[0].id);
       }
     }
-    setStatus("Campaign deleted. It has been removed from the workspace list.");
+    setStatus("Campaign archived. It has been removed from the active workspace list.");
     await refresh();
   }
 
@@ -5539,7 +5539,7 @@ function CampaignsView({
   }
 
   async function confirmCampaignDelete() {
-    if (!activeCampaign || deleteConfirmText !== "delete") return;
+    if (!activeCampaign || deleteConfirmText !== "archive") return;
     await deleteCampaign(activeCampaign.id, deleteConfirmText);
     setDeleteConfirmOpen(false);
     setDeleteConfirmText("");
@@ -5643,7 +5643,7 @@ function CampaignsView({
                   onClick={() => setDeleteConfirmOpen(true)}
                   disabled={busy}
                 >
-                  <AlertTriangle size={14} /> Delete
+                  <AlertTriangle size={14} /> Archive
                 </button>
                 <button className="secondary" onClick={() => setActiveTab("uploads")} disabled={campaignClosed}>Upload Resumes</button>
                 <button className="primary" onClick={() => matchCampaign(activeCampaign.id)} disabled={busy || campaignClosed || !activeCampaign.requirement_id}>{RECRUITER_COPY.matchingButton}</button>
@@ -5651,27 +5651,27 @@ function CampaignsView({
             </header>
 
             {deleteConfirmOpen ? (
-              <section className="campaignDeleteConfirmPanel" aria-label="Confirm campaign deletion">
+              <section className="campaignDeleteConfirmPanel" aria-label="Confirm campaign archive">
                 <div>
                   <AlertTriangle size={18} />
                   <div>
-                    <strong>Delete this campaign?</strong>
+                    <strong>Archive this campaign?</strong>
                     <span>{activeCampaign.name} will leave the workspace list. Candidate profiles, uploads, notes, matches, and history stay available.</span>
                   </div>
                 </div>
                 <label>
-                  <span>Type delete to confirm</span>
+                  <span>Type archive to confirm</span>
                   <input
                     value={deleteConfirmText}
                     onChange={(event) => setDeleteConfirmText(event.target.value)}
-                    placeholder="delete"
+                    placeholder="archive"
                     autoFocus
                   />
                 </label>
                 <div>
                   <button className="plain" type="button" onClick={() => { setDeleteConfirmOpen(false); setDeleteConfirmText(""); }}>Cancel</button>
-                  <button className="plain campaignDeleteAction" type="button" disabled={busy || deleteConfirmText !== "delete"} onClick={confirmCampaignDelete}>
-                    <AlertTriangle size={14} /> Delete campaign
+                  <button className="plain campaignDeleteAction" type="button" disabled={busy || deleteConfirmText !== "archive"} onClick={confirmCampaignDelete}>
+                    <AlertTriangle size={14} /> Archive campaign
                   </button>
                 </div>
               </section>
