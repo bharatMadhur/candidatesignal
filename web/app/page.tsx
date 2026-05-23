@@ -136,6 +136,7 @@ import { authClient, signInWithBetterAuth } from "../lib/auth-client";
 import { BrandMark } from "./components/brand";
 import { EmptyPanel, Metric, ProgressBar } from "./components/primitives";
 import { RECRUITER_COPY, WORKSPACE_NAV_LABELS } from "./components/recruiter-language";
+import { domainLabel, formatBytes, formatDateTime, shortHash, splitCommaList, textValue, toTextList, uniqueTextList } from "./lib/format";
 import { DOCUMENT_FILE_ACCEPT, DOCUMENT_FORMAT_LABEL, resolveLoginIdentifier } from "./lib/login";
 import { copyCurrentUrl, parseWorkspaceRoute, routeHasDeepLink, type CampaignDetailTab, type CandidateDetailTab, type View, type WorkspaceRoute } from "./lib/workspace-route";
 
@@ -7350,10 +7351,6 @@ function buildCopilotQueryInsights(query: string, candidates: CandidateSummary[]
   };
 }
 
-function splitCommaList(value: string) {
-  return value.split(",").map((item) => item.trim()).filter(Boolean);
-}
-
 function autoBatchNameForFiles(files: File[], campaignName?: string | null) {
   const count = files.length;
   const date = new Date().toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -7625,29 +7622,6 @@ function candidateReviewSignalDone(candidate: CandidateSummary | Candidate, sign
   return Boolean(candidate.reviewed_signals?.includes(signalKey));
 }
 
-function domainLabel(value: string) {
-  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function formatDateTime(value?: string | null) {
-  if (!value) return "Not recorded";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Not recorded";
-  return date.toLocaleString();
-}
-
-function formatBytes(value?: number | null) {
-  if (!value) return "Not recorded";
-  if (value < 1024) return `${value} B`;
-  if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
-  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function shortHash(value?: string | null) {
-  if (!value) return "missing";
-  return value.length > 18 ? `${value.slice(0, 10)}...${value.slice(-6)}` : value;
-}
-
 function versionStatusLabel(value?: string | null) {
   if (!value) return "possible version";
   const status = normalizeCandidateVersionStatus(value);
@@ -7801,10 +7775,6 @@ function normalizeComparableText(value: unknown) {
   return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function textValue(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
 function batchProgress(batch: ParseBatch) {
   if (!batch.total_files) return 0;
   return ((batch.completed_count + batch.failed_count) / batch.total_files) * 100;
@@ -7895,29 +7865,4 @@ function isPlatformAdmin(user: CurrentUser | null) {
 
 function isTenantAdmin(user: CurrentUser | null) {
   return ["tenant_owner", "tenant_admin"].includes(user?.tenant_role ?? "");
-}
-
-function toTextList(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => {
-      if (typeof item === "string") return item;
-      if (!item || typeof item !== "object") return String(item ?? "");
-      const objectItem = item as Record<string, unknown>;
-      const preferred = objectItem.role ?? objectItem.note ?? objectItem.title ?? objectItem.summary ?? objectItem.name ?? objectItem.label;
-      if (typeof preferred === "string") return preferred;
-      return JSON.stringify(objectItem);
-    })
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function uniqueTextList(values: string[]): string[] {
-  const seen = new Set<string>();
-  return values.filter((value) => {
-    const normalized = value.trim().toLowerCase();
-    if (!normalized || seen.has(normalized)) return false;
-    seen.add(normalized);
-    return true;
-  });
 }
