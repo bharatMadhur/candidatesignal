@@ -37,7 +37,7 @@ test.describe("authenticated recruiter workflows", () => {
     await expect(page.getByText(/campaign/i).first()).toBeVisible();
 
     await openSettings(page);
-    await page.getByRole("button", { name: /upload queue/i }).click();
+    await page.getByRole("button", { name: /upload review/i }).click();
     await expect(page.getByText(/queue|worker|failed/i).first()).toBeVisible();
 
     await openSettings(page);
