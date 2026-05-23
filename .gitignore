@@ -28,6 +28,9 @@ web/yarn-error.log*
 .cache/
 models/
 
+# Downloaded design references from Stitch pulls; keep product code separate.
+stitch_pulls/
+
 # Local runtime data. These can contain resumes, PII, parsed candidate data,
 # Postgres files, OCR pages, and debug artifacts.
 data/*
