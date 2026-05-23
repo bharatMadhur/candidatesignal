@@ -301,6 +301,7 @@ Providers:
 ```text
 local: data/documents/{tenant_id}/{namespace}/{sha256-prefix}.{ext}
 database: document_blobs bytea storage with a local processing/preview cache
+gcs: Google Cloud Storage object storage with a local processing/preview cache
 ```
 
 The database stores canonical metadata:
@@ -323,9 +324,12 @@ Configure storage:
 ```env
 RESUME_INTEL_STORAGE_BACKEND=local
 RESUME_INTEL_LOCAL_STORAGE_ROOT=
+RESUME_INTEL_GCS_BUCKET=
 ```
 
 Use `RESUME_INTEL_STORAGE_BACKEND=database` when document bytes should live in Postgres instead of local disk. The parser still receives a temporary local processing path through the storage adapter.
+
+Use `RESUME_INTEL_STORAGE_BACKEND=gcs` when uploaded documents should live in Google Cloud Storage. The service account running the API/worker needs bucket object read/write/delete permissions, and `google-cloud-storage` must be installed in the runtime image.
 
 ## OCR
 
