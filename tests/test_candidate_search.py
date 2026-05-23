@@ -44,3 +44,27 @@ def test_exact_match_rank_prefers_name_over_source_file():
 
     assert vector_search._exact_match_rank(row, "shubh")[1] == "name"
 
+
+def test_semantic_scores_collapse_confirmed_resume_versions(monkeypatch):
+    monkeypatch.setattr(vector_search, "canonical_candidate_map", lambda tenant_id: {"old-doc": "new-doc"})
+
+    result = vector_search._collapse_scores_to_canonical_versions(
+        {
+            "old-doc": {
+                "semantic_score": 0.91,
+                "top_chunks": ["raw_text_0"],
+                "evidence": [{"snippet": "older resume mentions Spark"}],
+            },
+            "new-doc": {
+                "semantic_score": 0.84,
+                "top_chunks": ["summary"],
+                "evidence": [{"snippet": "new resume summary"}],
+            },
+        },
+        "tenant-1",
+        10,
+    )
+
+    assert list(result) == ["new-doc"]
+    assert result["new-doc"]["semantic_score"] == 0.91
+    assert result["new-doc"]["version_source_document_id"] == "old-doc"

@@ -110,6 +110,83 @@ def list_matches_for_candidate(document_id: str, tenant_id: str | None = None) -
         return [_cluster_match_from_row(conn, row, tenant_id) for row in rows]
 
 
+def canonical_candidate_map(tenant_id: str | None = None, *, include_self: bool = False) -> dict[str, str]:
+    """Map confirmed resume-version uploads to the latest visible candidate id.
+
+    Versioning is non-destructive: every upload remains accessible by URL and in
+    the version panel. Normal recruiter views should not show confirmed copies as
+    separate people, so this map collapses a versioned component to its latest
+    updated candidate record.
+    """
+    with db() as conn:
+        candidate_rows = conn.execute(
+            """
+            select document_id, created_at, updated_at
+            from candidates
+            where (%s::uuid is null or tenant_id=%s) and deleted_at is null
+            """,
+            (tenant_id, tenant_id),
+        ).fetchall()
+        match_rows = conn.execute(
+            """
+            select left_document_id, right_document_id
+            from candidate_version_matches
+            where (%s::uuid is null or tenant_id=%s)
+              and status in ('versioned', 'same_person')
+            """,
+            (tenant_id, tenant_id),
+        ).fetchall()
+    timestamps = {
+        str(row["document_id"]): (row["updated_at"], row["created_at"])
+        for row in candidate_rows
+    }
+    parent = {document_id: document_id for document_id in timestamps}
+
+    def find(document_id: str) -> str:
+        while parent[document_id] != document_id:
+            parent[document_id] = parent[parent[document_id]]
+            document_id = parent[document_id]
+        return document_id
+
+    def union(left: str, right: str) -> None:
+        if left not in parent or right not in parent:
+            return
+        left_root = find(left)
+        right_root = find(right)
+        if left_root != right_root:
+            parent[right_root] = left_root
+
+    for row in match_rows:
+        union(str(row["left_document_id"]), str(row["right_document_id"]))
+
+    groups: dict[str, list[str]] = {}
+    for document_id in parent:
+        groups.setdefault(find(document_id), []).append(document_id)
+
+    canonical: dict[str, str] = {}
+    for members in groups.values():
+        if len(members) <= 1:
+            if include_self:
+                canonical[members[0]] = members[0]
+            continue
+        visible = max(
+            members,
+            key=lambda document_id: (
+                timestamps[document_id][0] or timestamps[document_id][1],
+                document_id,
+            ),
+        )
+        for document_id in members:
+            if include_self or document_id != visible:
+                canonical[document_id] = visible
+    return canonical
+
+
+def hidden_version_document_ids(tenant_id: str | None = None) -> set[str]:
+    mapping = canonical_candidate_map(tenant_id)
+    return {document_id for document_id, canonical_id in mapping.items() if document_id != canonical_id}
+
+
 def _cluster_match_from_row(conn: Any, row: dict[str, Any], tenant_id: str | None = None) -> dict[str, Any]:
     match_id = str(row["id"])
     left_profile = _cluster_profile(row["left_record_json"])

@@ -8,6 +8,7 @@ from typing import Any
 from psycopg.types.json import Jsonb
 
 from .candidate_facts import factual_current_company, factual_current_title
+from .candidate_versions import hidden_version_document_ids
 from .coverage import primary_key_coverage
 from .db import db
 from .derive import normalize_domain_years
@@ -172,6 +173,7 @@ def _redact_record_pii(record: dict[str, Any]) -> None:
 
 def list_candidates_db(tenant_id: str | None = None) -> list[dict[str, Any]]:
     tenant_id = tenant_id or _default_tenant_id()
+    hidden_version_ids = hidden_version_document_ids(tenant_id)
     with db() as conn:
         rows = conn.execute(
             """
@@ -225,6 +227,8 @@ def list_candidates_db(tenant_id: str | None = None) -> list[dict[str, Any]]:
     reviewed_signals = {row["document_id"]: list(row["reviewed_signals"] or []) for row in review_rows}
     candidates = []
     for row in rows:
+        if str(row["document_id"]) in hidden_version_ids:
+            continue
         record = row["record_json"]
         normalize_domain_years(record)
         hr_profile = record.get("derived", {}).get("hr_profile", {})

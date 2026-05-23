@@ -6,6 +6,7 @@ from typing import Any
 
 from psycopg.types.json import Jsonb
 
+from .candidate_versions import canonical_candidate_map, hidden_version_document_ids
 from .db import db
 from .extractors import extract_document
 from .geo import candidate_current_location, countries_for_search
@@ -338,6 +339,13 @@ def match_requirement(
         recall_ids = _broad_recall_candidate_ids(profile, requirement_text, semantic_scores, tenant_id, extra_candidate_ids)
     if candidate_ids_only and not recall_ids:
         return []
+    if tenant_id:
+        version_map = canonical_candidate_map(tenant_id)
+        if recall_ids:
+            recall_ids = _dedupe_ids([version_map.get(str(candidate_id), str(candidate_id)) for candidate_id in recall_ids])[:RECALL_LIMIT]
+        hidden_version_ids = hidden_version_document_ids(tenant_id)
+    else:
+        hidden_version_ids = set()
     with db() as conn:
         if recall_ids:
             candidates = conn.execute(
@@ -349,16 +357,30 @@ def match_requirement(
                 (tenant_id, recall_ids),
             ).fetchall()
         else:
-            candidates = conn.execute(
-                """
-                select document_id, record_json, raw_text
-                from candidates
-                where tenant_id=%s and deleted_at is null
-                order by updated_at desc
-                limit %s
-                """,
-                (tenant_id, RECALL_LIMIT),
-            ).fetchall()
+            if hidden_version_ids:
+                candidates = conn.execute(
+                    """
+                    select document_id, record_json, raw_text
+                    from candidates
+                    where tenant_id=%s
+                      and deleted_at is null
+                      and not (document_id = any(%s::text[]))
+                    order by updated_at desc
+                    limit %s
+                    """,
+                    (tenant_id, list(hidden_version_ids), RECALL_LIMIT),
+                ).fetchall()
+            else:
+                candidates = conn.execute(
+                    """
+                    select document_id, record_json, raw_text
+                    from candidates
+                    where tenant_id=%s and deleted_at is null
+                    order by updated_at desc
+                    limit %s
+                    """,
+                    (tenant_id, RECALL_LIMIT),
+                ).fetchall()
     matches = []
     for row in candidates:
         candidate = row["record_json"]

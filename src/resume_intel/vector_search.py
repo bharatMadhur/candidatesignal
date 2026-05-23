@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .candidate_versions import canonical_candidate_map, hidden_version_document_ids
 from .db import db
 from .geo import candidate_current_location, countries_for_search
 from .settings import load_settings
@@ -277,14 +278,14 @@ def semantic_candidate_scores(query_text: str, limit: int = 100, tenant_id: str 
                 """,
                 (query_vector, query_vector, query_vector, model, limit),
             ).fetchall()
-    return {
+    return _collapse_scores_to_canonical_versions({
         row["document_id"]: {
             "semantic_score": max(0.0, min(1.0, float(row["score"] or 0))),
             "top_chunks": list(row["top_chunks"] or []),
             "evidence": list(row["evidence"] or []),
         }
         for row in rows
-    }
+    }, tenant_id, limit)
 
 
 def semantic_candidate_scores_for_ids(query_text: str, candidate_ids: list[str], tenant_id: str | None = None) -> dict[str, dict[str, Any]]:
@@ -341,14 +342,14 @@ def semantic_candidate_scores_for_ids(query_text: str, candidate_ids: list[str],
                 """,
                 (query_vector, query_vector, query_vector, ids, model),
             ).fetchall()
-    return {
+    return _collapse_scores_to_canonical_versions({
         row["document_id"]: {
             "semantic_score": max(0.0, min(1.0, float(row["score"] or 0))),
             "top_chunks": list(row["top_chunks"] or []),
             "evidence": list(row["evidence"] or []),
         }
         for row in rows
-    }
+    }, tenant_id, len(ids))
 
 
 def semantic_candidate_search(query_text: str, limit: int = 25, tenant_id: str | None = None) -> list[dict[str, Any]]:
@@ -404,7 +405,8 @@ def exact_candidate_search(query_text: str, limit: int = 25, tenant_id: str | No
             """,
             [tenant_id, tenant_id, *params, max(limit * 4, 50)],
         ).fetchall()
-    ranked = sorted(rows, key=lambda row: _exact_match_rank(row, normalized), reverse=True)
+    hidden_version_ids = hidden_version_document_ids(tenant_id) if tenant_id else set()
+    ranked = sorted((row for row in rows if str(row["document_id"]) not in hidden_version_ids), key=lambda row: _exact_match_rank(row, normalized), reverse=True)
     results: list[dict[str, Any]] = []
     for row in ranked[:limit]:
         match_rank, match_field = _exact_match_rank(row, normalized)
@@ -430,6 +432,23 @@ def exact_candidate_search(query_text: str, limit: int = 25, tenant_id: str | No
             )
         )
     return results
+
+
+def _collapse_scores_to_canonical_versions(scores: dict[str, dict[str, Any]], tenant_id: str | None, limit: int) -> dict[str, dict[str, Any]]:
+    if not scores or not tenant_id:
+        return dict(list(scores.items())[:limit])
+    canonical_map = canonical_candidate_map(tenant_id)
+    collapsed: dict[str, dict[str, Any]] = {}
+    for document_id, score in scores.items():
+        canonical_id = canonical_map.get(str(document_id), str(document_id))
+        existing = collapsed.get(canonical_id)
+        if not existing or float(score.get("semantic_score") or 0) > float(existing.get("semantic_score") or 0):
+            collapsed[canonical_id] = {**score, "version_source_document_id": str(document_id)}
+            continue
+        existing["top_chunks"] = list(dict.fromkeys([*(existing.get("top_chunks") or []), *(score.get("top_chunks") or [])]))[:5]
+        existing["evidence"] = [*(existing.get("evidence") or []), *(score.get("evidence") or [])][:5]
+    ordered = sorted(collapsed.items(), key=lambda item: float(item[1].get("semantic_score") or 0), reverse=True)
+    return dict(ordered[:limit])
 
 
 def _candidate_summary(row: Any, scores: dict[str, Any]) -> dict[str, Any]:
