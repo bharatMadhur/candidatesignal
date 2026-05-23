@@ -68,28 +68,131 @@ def create_tenant(name: str, seat_limit: int, created_by_user_id: str | None) ->
         raise HTTPException(status_code=400, detail="tenant name is required")
     if seat_limit < 1 or seat_limit > 500:
         raise HTTPException(status_code=400, detail="seat limit must be between 1 and 500")
-    base_slug = slugify(name)
-    slug = base_slug
     with db() as conn:
-        index = 2
-        while conn.execute("select 1 from tenants where slug=%s", (slug,)).fetchone():
-            slug = f"{base_slug}-{index}"
-            index += 1
-        row = conn.execute(
-            """
-            insert into tenants (name, slug, status, plan, seat_limit, created_by_user_id)
-            values (%s, %s, 'active', 'manual', %s, %s)
-            returning id, name, slug, status, plan, seat_limit, created_at, updated_at
-            """
-            ,
-            (name.strip(), slug, seat_limit, created_by_user_id),
-        ).fetchone()
-        conn.execute(
-            "insert into audit_logs (tenant_id, user_id, action, entity_type, entity_id) values (%s, %s, %s, %s, %s)",
-            (row["id"], created_by_user_id, "tenant.created", "tenant", str(row["id"])),
-        )
+        row = _insert_tenant(conn, name, seat_limit, created_by_user_id)
         conn.commit()
     return _tenant_row(row)
+
+
+def create_tenant_with_owner_invitation(
+    name: str,
+    seat_limit: int,
+    created_by_user_id: str | None,
+    owner_email: str | None,
+    owner_role: str = "tenant_owner",
+) -> dict[str, Any]:
+    if owner_role not in TENANT_OWNER_INVITE_ROLES:
+        raise HTTPException(status_code=400, detail="owner role must be tenant_owner or tenant_admin")
+    normalized_owner_email = normalize_email(owner_email) if owner_email and owner_email.strip() else None
+    with db() as conn:
+        if normalized_owner_email:
+            _assert_invitee_available(conn, normalized_owner_email)
+        row = _insert_tenant(conn, name, seat_limit, created_by_user_id)
+        invitation_row = None
+        invitation_token = None
+        if normalized_owner_email:
+            invitation_row, invitation_token = _insert_invitation(
+                conn,
+                str(row["id"]),
+                normalized_owner_email,
+                owner_role,
+                created_by_user_id,
+            )
+        conn.commit()
+    owner_invitation = None
+    if invitation_row:
+        owner_invitation = _invitation_row(invitation_row)
+        owner_invitation["invite_token"] = invitation_token
+    return {"tenant": _tenant_row(row), "owner_invitation": owner_invitation}
+
+
+def _insert_tenant(conn: Any, name: str, seat_limit: int, created_by_user_id: str | None) -> Any:
+    base_slug = slugify(name)
+    slug = base_slug
+    index = 2
+    while conn.execute("select 1 from tenants where slug=%s", (slug,)).fetchone():
+        slug = f"{base_slug}-{index}"
+        index += 1
+    row = conn.execute(
+        """
+        insert into tenants (name, slug, status, plan, seat_limit, created_by_user_id)
+        values (%s, %s, 'active', 'manual', %s, %s)
+        returning id, name, slug, status, plan, seat_limit, created_at, updated_at
+        """,
+        (name.strip(), slug, seat_limit, created_by_user_id),
+    ).fetchone()
+    conn.execute(
+        "insert into audit_logs (tenant_id, user_id, action, entity_type, entity_id) values (%s, %s, %s, %s, %s)",
+        (row["id"], created_by_user_id, "tenant.created", "tenant", str(row["id"])),
+    )
+    return row
+
+
+def _assert_invitee_available(conn: Any, normalized_email: str) -> None:
+    existing_member = conn.execute(
+        """
+        select users.role, tenants.name as tenant_name
+        from users
+        left join tenant_memberships on tenant_memberships.user_id = users.id
+          and tenant_memberships.status='active'
+        left join tenants on tenants.id = tenant_memberships.tenant_id
+        where lower(users.email)=lower(%s)
+        limit 1
+        """,
+        (normalized_email,),
+    ).fetchone()
+    if existing_member and _is_platform_role(existing_member["role"]):
+        raise HTTPException(
+            status_code=409,
+            detail="platform admin accounts cannot be invited into company workspaces",
+        )
+    if existing_member and existing_member["tenant_name"]:
+        raise HTTPException(
+            status_code=409,
+            detail=f"user already belongs to company {existing_member['tenant_name']}",
+        )
+    existing_invitation = conn.execute(
+        """
+        select tenant_invitations.tenant_id, tenants.name as tenant_name
+        from tenant_invitations
+        join tenants on tenants.id = tenant_invitations.tenant_id
+        where lower(tenant_invitations.email)=lower(%s)
+          and tenant_invitations.status='pending'
+          and tenant_invitations.expires_at > now()
+        limit 1
+        """,
+        (normalized_email,),
+    ).fetchone()
+    if existing_invitation:
+        raise HTTPException(
+            status_code=409,
+            detail=f"pending invitation already exists for company {existing_invitation['tenant_name']}",
+        )
+
+
+def _insert_invitation(
+    conn: Any,
+    tenant_id: str,
+    normalized_email: str,
+    role: str,
+    invited_by_user_id: str | None,
+) -> tuple[Any, str]:
+    token = secrets.token_urlsafe(32)
+    token_hash = _hash_token(token)
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    row = conn.execute(
+        """
+        insert into tenant_invitations (tenant_id, email, role, token_hash, expires_at, invited_by_user_id)
+        values (%s, %s, %s, %s, %s, %s)
+        returning id, tenant_id, email, role, status, expires_at, accepted_at, created_at
+        """,
+        (tenant_id, normalized_email, role, token_hash, expires_at, invited_by_user_id),
+    ).fetchone()
+    conn.execute(
+        "insert into audit_logs (tenant_id, user_id, action, entity_type, entity_id, metadata) values (%s, %s, %s, %s, %s, %s)",
+        (tenant_id, invited_by_user_id, "member.invited", "tenant_invitation", str(row["id"]), Jsonb({"email": normalized_email, "role": role})),
+    )
+    return row, token
 
 
 def list_tenants() -> list[dict[str, Any]]:
@@ -305,63 +408,10 @@ def create_invitation(tenant_id: str, email: str, role: str, invited_by_user_id:
     if role not in TENANT_ROLES:
         raise HTTPException(status_code=400, detail="invalid tenant role")
     normalized_email = normalize_email(email)
-    token = secrets.token_urlsafe(32)
-    token_hash = _hash_token(token)
-    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
     with db() as conn:
-        existing_member = conn.execute(
-            """
-            select users.role, tenants.name as tenant_name
-            from users
-            left join tenant_memberships on tenant_memberships.user_id = users.id
-              and tenant_memberships.status='active'
-            left join tenants on tenants.id = tenant_memberships.tenant_id
-            where lower(users.email)=lower(%s)
-            limit 1
-            """,
-            (normalized_email,),
-        ).fetchone()
-        if existing_member and _is_platform_role(existing_member["role"]):
-            raise HTTPException(
-                status_code=409,
-                detail="platform admin accounts cannot be invited into company workspaces",
-            )
-        if existing_member and existing_member["tenant_name"]:
-            raise HTTPException(
-                status_code=409,
-                detail=f"user already belongs to company {existing_member['tenant_name']}",
-            )
-        existing_invitation = conn.execute(
-            """
-            select tenant_invitations.tenant_id, tenants.name as tenant_name
-            from tenant_invitations
-            join tenants on tenants.id = tenant_invitations.tenant_id
-            where lower(tenant_invitations.email)=lower(%s)
-              and tenant_invitations.status='pending'
-              and tenant_invitations.expires_at > now()
-            limit 1
-            """,
-            (normalized_email,),
-        ).fetchone()
-        if existing_invitation:
-            raise HTTPException(
-                status_code=409,
-                detail=f"pending invitation already exists for company {existing_invitation['tenant_name']}",
-            )
+        _assert_invitee_available(conn, normalized_email)
         _assert_seat_available(conn, tenant_id)
-        row = conn.execute(
-            """
-            insert into tenant_invitations (tenant_id, email, role, token_hash, expires_at, invited_by_user_id)
-            values (%s, %s, %s, %s, %s, %s)
-            returning id, tenant_id, email, role, status, expires_at, accepted_at, created_at
-            """
-            ,
-            (tenant_id, normalized_email, role, token_hash, expires_at, invited_by_user_id),
-        ).fetchone()
-        conn.execute(
-            "insert into audit_logs (tenant_id, user_id, action, entity_type, entity_id, metadata) values (%s, %s, %s, %s, %s, %s)",
-            (tenant_id, invited_by_user_id, "member.invited", "tenant_invitation", str(row["id"]), Jsonb({"email": normalized_email, "role": role})),
-        )
+        row, token = _insert_invitation(conn, tenant_id, normalized_email, role, invited_by_user_id)
         conn.commit()
     result = _invitation_row(row)
     result["invite_token"] = token
@@ -437,7 +487,10 @@ def accept_invitation(token: str, name: str, password: str) -> dict[str, Any]:
             detail="platform admin accounts cannot accept company invitations",
         )
     with db() as conn:
-        _assert_seat_available(conn, str(invitation["tenant_id"]))
+        # The pending invitation already reserved a seat when it was created.
+        # During acceptance, only active members should count against capacity;
+        # otherwise the final available seat can never be accepted.
+        _assert_active_seat_available(conn, str(invitation["tenant_id"]))
         existing = conn.execute(
             """
             select tenant_id from tenant_memberships
@@ -627,6 +680,24 @@ def _assert_seat_available(conn: Any, tenant_id: str) -> None:
         raise HTTPException(status_code=404, detail="tenant not found")
     reserved_seats = int(row["active_members"] or 0) + int(row["pending_invites"] or 0)
     if reserved_seats >= int(row["seat_limit"]):
+        raise HTTPException(status_code=409, detail="tenant seat limit reached")
+
+
+def _assert_active_seat_available(conn: Any, tenant_id: str) -> None:
+    row = conn.execute(
+        """
+        select tenants.seat_limit,
+               count(distinct tenant_memberships.id) filter (where tenant_memberships.status='active') as active_members
+        from tenants
+        left join tenant_memberships on tenant_memberships.tenant_id = tenants.id
+        where tenants.id=%s
+        group by tenants.id
+        """,
+        (tenant_id,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="tenant not found")
+    if int(row["active_members"] or 0) >= int(row["seat_limit"]):
         raise HTTPException(status_code=409, detail="tenant seat limit reached")
 
 

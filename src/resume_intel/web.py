@@ -83,6 +83,13 @@ from .linkedin_verification import (
     run_linkedin_verification,
 )
 from .logging_config import configure_logging
+from .mail_service import (
+    build_invitation_mail,
+    list_mail_messages,
+    queue_mail,
+    retry_mail_message,
+    send_mail_message_safe,
+)
 from .matching import (
     apply_copilot_direct_evidence_policy as _apply_copilot_direct_evidence_policy,
     build_copilot_answer as _build_copilot_answer,
@@ -130,6 +137,7 @@ from .tenancy import (
     cancel_invitation,
     create_invitation,
     create_tenant,
+    create_tenant_with_owner_invitation,
     deactivate_member,
     list_invitations,
     list_audit_logs,
@@ -932,7 +940,6 @@ def create_note(
             visibility=request.visibility,
             note_type=request.note_type,
             campaign_id=request.campaign_id,
-            can_manage_any_note=_can_manage_recruiter_notes(user),
             reindex_search=False,
         )
         _schedule_candidate_search_reindex(background_tasks, document_id, tenant_id)
@@ -966,6 +973,7 @@ def update_note(
             visibility=request.visibility,
             note_type=request.note_type,
             campaign_id=request.campaign_id,
+            can_manage_any_note=_can_manage_recruiter_notes(user),
             reindex_search=False,
         )
         _schedule_candidate_search_reindex(background_tasks, document_id, tenant_id)
@@ -1597,14 +1605,27 @@ def admin_tenants(user: dict = Depends(current_user)) -> dict:
 
 
 @app.post("/admin/tenants")
-def admin_create_tenant(request: TenantRequest, user: dict = Depends(current_user)) -> dict:
+def admin_create_tenant(request: TenantRequest, background_tasks: BackgroundTasks, user: dict = Depends(current_user)) -> dict:
     require_platform_admin(user)
     validate_tenant_creation_request(request.name, request.seat_limit, request.owner_email, request.owner_role)
-    tenant = create_tenant(request.name, request.seat_limit, user["id"])
-    owner_invitation = None
-    if request.owner_email and request.owner_email.strip():
-        owner_invitation = create_invitation(tenant["id"], request.owner_email, request.owner_role, user["id"])
-    return {"tenant": tenant, "owner_invitation": owner_invitation}
+    result = create_tenant_with_owner_invitation(
+        request.name,
+        request.seat_limit,
+        user["id"],
+        request.owner_email,
+        request.owner_role,
+    )
+    invitation = result.get("owner_invitation")
+    if invitation and invitation.get("invite_token"):
+        invitation["mail_delivery"] = _queue_invitation_mail(
+            invitation,
+            invitation["invite_token"],
+            tenant_name=result.get("tenant", {}).get("name") or request.name,
+            actor_name=user.get("name") or user.get("email"),
+            message_type="tenant_owner_invitation",
+            background_tasks=background_tasks,
+        )
+    return result
 
 
 @app.get("/admin/tenants/{tenant_id}")
@@ -1686,18 +1707,56 @@ def team_pii_access_events(
 
 
 @app.post("/team/invitations")
-def invite_member(request: InviteRequest, user: dict = Depends(current_user)) -> dict:
+def invite_member(request: InviteRequest, background_tasks: BackgroundTasks, user: dict = Depends(current_user)) -> dict:
     require_tenant_admin(user)
-    return create_invitation(_tenant_id(user), request.email, request.role, user["id"])
+    invitation = create_invitation(_tenant_id(user), request.email, request.role, user["id"])
+    invitation["mail_delivery"] = _queue_invitation_mail(
+        invitation,
+        invitation["invite_token"],
+        tenant_name=user.get("tenant_name") or "your company",
+        actor_name=user.get("name") or user.get("email"),
+        message_type="team_invitation",
+        background_tasks=background_tasks,
+    )
+    return invitation
 
 
 @app.post("/team/invitations/{invitation_id}/resend")
-def resend_member_invite(invitation_id: str, user: dict = Depends(current_user)) -> dict:
+def resend_member_invite(invitation_id: str, background_tasks: BackgroundTasks, user: dict = Depends(current_user)) -> dict:
     require_tenant_admin(user)
     try:
-        return resend_invitation(_tenant_id(user), invitation_id, user["id"])
+        invitation = resend_invitation(_tenant_id(user), invitation_id, user["id"])
+        invitation["mail_delivery"] = _queue_invitation_mail(
+            invitation,
+            invitation["invite_token"],
+            tenant_name=user.get("tenant_name") or "your company",
+            actor_name=user.get("name") or user.get("email"),
+            message_type="team_invitation_resend",
+            background_tasks=background_tasks,
+        )
+        return invitation
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="invitation not found") from exc
+
+
+@app.get("/mail/messages")
+def mail_messages(
+    limit: int = Query(100, ge=1, le=500),
+    user: dict = Depends(current_user),
+) -> dict:
+    require_tenant_admin(user)
+    return {"mail_messages": list_mail_messages(_tenant_id(user), limit=limit), "user": user}
+
+
+@app.post("/mail/messages/{message_id}/retry")
+def retry_mail_delivery(message_id: str, background_tasks: BackgroundTasks, user: dict = Depends(current_user)) -> dict:
+    require_tenant_admin(user)
+    try:
+        message = retry_mail_message(message_id, _tenant_id(user))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="mail message not found or not retryable") from exc
+    background_tasks.add_task(send_mail_message_safe, message["id"])
+    return {"mail_message": message, "user": user}
 
 
 @app.post("/team/invitations/{invitation_id}/cancel")
@@ -1896,6 +1955,28 @@ def _tenant_id(user: dict) -> str:
     if not tenant_id:
         raise HTTPException(status_code=403, detail="tenant membership required")
     return tenant_id
+
+
+def _queue_invitation_mail(
+    invitation: dict,
+    invite_token: str,
+    *,
+    tenant_name: str,
+    actor_name: str | None,
+    message_type: str,
+    background_tasks: BackgroundTasks,
+) -> dict:
+    draft = build_invitation_mail(
+        invitation=invitation,
+        invite_token=invite_token,
+        tenant_name=tenant_name,
+        actor_name=actor_name,
+        message_type=message_type,
+    )
+    message = queue_mail(draft)
+    if message["status"] == "queued":
+        background_tasks.add_task(send_mail_message_safe, message["id"])
+    return message
 
 
 def _auto_batch_name(files: list[UploadFile], *, prefix: str = "Resume upload") -> str:

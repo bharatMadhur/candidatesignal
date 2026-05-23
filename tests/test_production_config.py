@@ -95,6 +95,25 @@ class ProductionConfigTests(unittest.TestCase):
         env = BASE_ENV | {"OCR_MODE": "remote", "RESUME_INTEL_LITELLM_API_KEY": "sk-test"}
         self.assertEqual(self.run_checker(env), 1)
 
+    def test_rejects_enabled_mail_without_resend_key(self) -> None:
+        env = BASE_ENV | {
+            "RESUME_INTEL_LITELLM_API_KEY": "sk-test",
+            "RESUME_INTEL_MAIL_ENABLED": "1",
+            "RESUME_INTEL_MAIL_DRY_RUN": "0",
+            "RESUME_INTEL_MAIL_FROM_EMAIL": "no-reply@example.com",
+        }
+        self.assertEqual(self.run_checker(env), 1)
+
+    def test_accepts_enabled_mail_with_resend_key(self) -> None:
+        env = BASE_ENV | {
+            "RESUME_INTEL_LITELLM_API_KEY": "sk-test",
+            "RESUME_INTEL_MAIL_ENABLED": "1",
+            "RESUME_INTEL_MAIL_DRY_RUN": "0",
+            "RESUME_INTEL_MAIL_FROM_EMAIL": "no-reply@example.com",
+            "RESEND_API_KEY": "re_test",
+        }
+        self.assertEqual(self.run_checker(env), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

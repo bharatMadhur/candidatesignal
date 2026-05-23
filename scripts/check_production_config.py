@@ -63,6 +63,17 @@ def main() -> int:
     if not _secret_value("RESUME_INTEL_ALERT_WEBHOOK_URL", "RESUME_INTEL_ALERT_WEBHOOK_URL_FILE"):
         warnings.append("RESUME_INTEL_ALERT_WEBHOOK_URL is not set; operational alerts will stay in-app only")
 
+    mail_enabled = os.getenv("RESUME_INTEL_MAIL_ENABLED", "0").lower() in {"1", "true", "yes"}
+    if mail_enabled:
+        if os.getenv("RESUME_INTEL_MAIL_PROVIDER", "resend").lower() != "resend":
+            errors.append("RESUME_INTEL_MAIL_PROVIDER must be resend until another provider is implemented")
+        if not _secret_value("RESEND_API_KEY", "RESEND_API_KEY_FILE", "RESUME_INTEL_RESEND_API_KEY", "RESUME_INTEL_RESEND_API_KEY_FILE"):
+            errors.append("RESEND_API_KEY or RESEND_API_KEY_FILE is required when RESUME_INTEL_MAIL_ENABLED=1")
+        if not os.getenv("RESUME_INTEL_MAIL_FROM_EMAIL"):
+            errors.append("RESUME_INTEL_MAIL_FROM_EMAIL is required when RESUME_INTEL_MAIL_ENABLED=1")
+        if os.getenv("RESUME_INTEL_MAIL_DRY_RUN", "1").lower() in {"1", "true", "yes"}:
+            warnings.append("RESUME_INTEL_MAIL_DRY_RUN is enabled; product email will be persisted but not sent")
+
     for item in warnings:
         print(f"warning: {item}")
     for item in errors:

@@ -102,6 +102,18 @@ alerts stay visible in the in-app Operations view only. Set it only to a
 company-owned webhook endpoint because alert payloads include operational
 metadata.
 
+Optional product email through Resend:
+
+- `RESUME_INTEL_MAIL_ENABLED`
+- `RESUME_INTEL_MAIL_DRY_RUN`
+- `RESUME_INTEL_MAIL_FROM_EMAIL`
+- `RESUME_INTEL_APP_BASE_URL`
+- `RESEND_API_KEY`
+
+Keep `RESUME_INTEL_MAIL_DRY_RUN=1` until the sending domain is verified in
+Resend. Invitation emails are stored in Postgres as mail messages even when
+delivery is disabled or dry-run.
+
 Create/update secrets:
 
 ```bash

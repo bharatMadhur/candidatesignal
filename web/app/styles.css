@@ -876,6 +876,7 @@ h3 {
 
 .stitchPublicHero,
 .stitchSuiteSection,
+.stitchPricingSection,
 .stitchSignalPreview,
 .stitchRoleSection,
 .stitchFinalCta,
@@ -935,6 +936,7 @@ h3 {
 }
 
 .stitchSuiteSection,
+.stitchPricingSection,
 .stitchRoleSection {
   display: grid;
   gap: 28px;
@@ -1004,6 +1006,159 @@ h3 {
   color: var(--muted);
   font-size: 14px;
   line-height: 22px;
+}
+
+.stitchPricingSection {
+  padding: 58px 0 44px;
+}
+
+.pricingCompactShell {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.75fr) minmax(0, 1.25fr);
+  gap: 24px;
+  max-width: 1040px;
+  margin: 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #ffffff;
+  padding: 18px;
+  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.06);
+}
+
+.pricingCompactIntro {
+  display: grid;
+  align-content: center;
+  gap: 14px;
+  border-radius: 14px;
+  background: var(--surface-low);
+  padding: 28px;
+}
+
+.pricingCompactIntro h2 {
+  color: #0f172a;
+  font-family: Manrope, Inter, sans-serif;
+  font-size: clamp(28px, 3.2vw, 40px);
+  line-height: 1.08;
+  letter-spacing: -0.045em;
+}
+
+.pricingCompactIntro p {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.pricingCompactPlans {
+  display: grid;
+  gap: 12px;
+}
+
+.pricingCompactPlan {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto;
+  gap: 12px 22px;
+  align-items: start;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 22px;
+}
+
+.pricingCompactPlan.active {
+  border-color: rgba(0, 74, 198, 0.28);
+  background: linear-gradient(180deg, rgba(0, 74, 198, 0.035), #ffffff);
+}
+
+.pricingCompactPlan.soon {
+  background: #fbfcfd;
+}
+
+.pricingKicker {
+  display: inline-flex;
+  width: fit-content;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--primary);
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.pricingCompactPlan span {
+  display: inline-flex;
+  width: fit-content;
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pricingCompactPlan h3 {
+  margin-top: 6px;
+  color: #0f172a;
+  font-family: Manrope, Inter, sans-serif;
+  font-size: 21px;
+  letter-spacing: -0.035em;
+}
+
+.pricingCompactPlan p,
+.pricingCompactPlan li {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.pricingSubline {
+  margin: 0;
+  color: var(--ink);
+  font-weight: 800;
+  grid-column: 2;
+  justify-self: end;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.pricingCompactPlan strong {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+  color: #0f172a;
+  font-family: Manrope, Inter, sans-serif;
+  font-size: 31px;
+  white-space: nowrap;
+  letter-spacing: -0.055em;
+}
+
+.pricingCompactPlan small {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: normal;
+  text-transform: uppercase;
+}
+
+.pricingCompactPlan ul {
+  display: grid;
+  grid-column: 1;
+  gap: 7px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.pricingCompactPlan button {
+  grid-column: 2;
+  grid-row: 3;
+  justify-self: end;
+  align-self: end;
+  width: fit-content;
+  white-space: nowrap;
 }
 
 .stitchSignalPreview {
@@ -7319,6 +7474,10 @@ button:disabled {
   grid-template-columns: 1.2fr 0.8fr 0.7fr 1.5fr 1fr;
 }
 
+.settingsRow.mailRow {
+  grid-template-columns: 1.2fr 1fr 1.1fr 1fr 0.7fr;
+}
+
 .settingsRow.tenantRow {
   grid-template-columns: 1.2fr 0.8fr 1.4fr 0.9fr 1fr;
 }
@@ -7353,6 +7512,48 @@ button:disabled {
   font-weight: 800;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+}
+
+.panelIntro {
+  margin: -4px 12px 12px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.mailStatus {
+  display: inline-flex;
+  width: fit-content;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-mid);
+  color: var(--ink);
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mailStatus.sent,
+.mailStatus.dry_run {
+  border-color: rgba(22, 163, 74, 0.24);
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.mailStatus.failed {
+  border-color: rgba(153, 27, 27, 0.25);
+  background: #fff7f7;
+  color: #991b1b;
+}
+
+.mailStatus.sending,
+.mailStatus.queued,
+.mailStatus.retrying {
+  border-color: rgba(0, 74, 198, 0.22);
+  background: #eff6ff;
+  color: var(--primary);
 }
 
 .emptyTableState {
@@ -9477,6 +9678,18 @@ button:disabled {
   }
 }
 
+@keyframes pulseDot {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 /* Mellow density pass: keep the Stitch-derived structure, but reduce volume,
    saturation, and heavy spacing across the public and workspace surfaces. */
 :root {
@@ -10319,6 +10532,23 @@ h3 {
   border-color: #22364a;
   background: #eef3f5;
   box-shadow: inset 4px 0 0 #22364a;
+}
+
+.campaignRailList button.loading {
+  cursor: wait;
+  opacity: 0.82;
+}
+
+.campaignRailList button.loading span::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 8px;
+  border-radius: 999px;
+  background: #22364a;
+  animation: pulseDot 900ms ease-in-out infinite;
+  vertical-align: middle;
 }
 
 .campaignRailList button strong {
@@ -11741,6 +11971,8 @@ h3 {
   .stitchPublicNav,
   .stitchPublicHero,
   .stitchSignalGrid,
+  .pricingCompactShell,
+  .pricingCompactPlan,
   .stitchRoleGrid,
   .stitchPublicFooter {
     grid-template-columns: 1fr;
@@ -11761,6 +11993,7 @@ h3 {
 
   .stitchPublicHero,
   .stitchSuiteSection,
+  .stitchPricingSection,
   .stitchSignalPreview,
   .stitchRoleSection,
   .stitchFinalCta,
@@ -12073,6 +12306,11 @@ h3 {
   padding: 14px;
 }
 
+.handoffPanel {
+  border-color: #dfe7ef;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcfd 100%);
+}
+
 .collaborationPanel.compact {
   gap: 12px;
   padding: 12px;
@@ -12104,6 +12342,27 @@ h3 {
   line-height: 18px;
 }
 
+.handoffHeaderActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.handoffHeaderActions span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border: 1px solid #dfe7ef;
+  border-radius: 999px;
+  background: #fff;
+  color: #516173;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 9px;
+}
+
 .collaborationGrid,
 .collaborationLists {
   display: grid;
@@ -12122,8 +12381,12 @@ h3 {
   gap: 9px;
   border: 1px solid #e5ebf0;
   border-radius: 9px;
-  background: #fbfcfd;
+  background: #fff;
   padding: 11px;
+}
+
+.collaborationList {
+  background: #fbfcfd;
 }
 
 .collaborationComposer strong,
@@ -12146,7 +12409,7 @@ h3 {
 }
 
 .collaborationComposer textarea {
-  min-height: 82px;
+  min-height: 74px;
   resize: vertical;
 }
 
@@ -12163,7 +12426,7 @@ h3 {
   border: 1px solid #e5ebf0;
   border-radius: 8px;
   background: #fff;
-  padding: 10px;
+  padding: 9px 10px;
 }
 
 .collaborationItem > div {

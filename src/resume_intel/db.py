@@ -636,6 +636,39 @@ def migrate() -> None:
               created_at timestamptz not null default now()
             );
 
+            create table if not exists mail_messages (
+              id uuid primary key default gen_random_uuid(),
+              tenant_id uuid references tenants(id) on delete cascade,
+              user_id uuid references users(id) on delete set null,
+              provider text not null,
+              message_type text not null,
+              status text not null default 'queued',
+              to_email text not null,
+              from_email text not null,
+              from_name text,
+              subject text not null,
+              text_body text,
+              html_body text,
+              reply_to text,
+              provider_message_id text,
+              provider_response jsonb not null default '{}'::jsonb,
+              error_message text,
+              metadata jsonb not null default '{}'::jsonb,
+              sent_at timestamptz,
+              created_at timestamptz not null default now(),
+              updated_at timestamptz not null default now()
+            );
+
+            create table if not exists mail_events (
+              id uuid primary key default gen_random_uuid(),
+              mail_message_id uuid not null references mail_messages(id) on delete cascade,
+              tenant_id uuid references tenants(id) on delete cascade,
+              provider text not null,
+              event_type text not null,
+              payload jsonb not null default '{}'::jsonb,
+              created_at timestamptz not null default now()
+            );
+
             create table if not exists model_prices (
               model text primary key,
               input_per_million numeric not null default 0,
@@ -848,6 +881,10 @@ def migrate() -> None:
         conn.execute("create index if not exists pii_access_events_tenant_doc_idx on pii_access_events (tenant_id, document_id, created_at desc);")
         conn.execute("create index if not exists operational_alerts_tenant_status_idx on operational_alerts (tenant_id, status, severity, created_at desc);")
         conn.execute("create index if not exists operational_alert_deliveries_alert_idx on operational_alert_deliveries (tenant_id, alert_id, created_at desc);")
+        conn.execute("create index if not exists mail_messages_tenant_status_idx on mail_messages (tenant_id, status, created_at desc);")
+        conn.execute("create index if not exists mail_messages_provider_message_idx on mail_messages (provider, provider_message_id);")
+        conn.execute("create index if not exists mail_events_message_idx on mail_events (mail_message_id, created_at desc);")
+        conn.execute("create index if not exists mail_events_tenant_idx on mail_events (tenant_id, event_type, created_at desc);")
         conn.execute("create index if not exists candidate_version_events_tenant_idx on candidate_version_events (tenant_id, canonical_document_id, created_at desc);")
         conn.execute(
             """

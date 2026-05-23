@@ -34,6 +34,16 @@ class Settings:
     linkedin_actor_id: str = "LpVuK3Zozwuipa5bp"
     linkedin_actor_mode: str = "Profile details no email ($4 per 1k)"
     linkedin_timeout_seconds: int = 180
+    mail_enabled: bool = False
+    mail_dry_run: bool = True
+    mail_provider: str = "resend"
+    mail_from_email: str = "no-reply@candidatesignal.ai"
+    mail_from_name: str = "candidateSignal.ai"
+    mail_reply_to: str = ""
+    mail_app_base_url: str = "http://localhost:3001"
+    mail_timeout_seconds: int = 10
+    resend_api_key: str = ""
+    resend_api_key_file: str | None = None
 
 
 def _env_first(*names: str, default: str | None = None) -> str | None:
@@ -174,4 +184,22 @@ def load_settings() -> Settings:
         )
         or "Profile details no email ($4 per 1k)",
         linkedin_timeout_seconds=int(os.getenv("LINKEDIN_VERIFICATION_TIMEOUT_SECONDS", "180")),
+        mail_enabled=_env_bool("RESUME_INTEL_MAIL_ENABLED", False),
+        mail_dry_run=_env_bool("RESUME_INTEL_MAIL_DRY_RUN", True),
+        mail_provider=_env_first("RESUME_INTEL_MAIL_PROVIDER", "MAIL_PROVIDER", default="resend") or "resend",
+        mail_from_email=_env_first("RESUME_INTEL_MAIL_FROM_EMAIL", "MAIL_FROM_EMAIL", default="no-reply@candidatesignal.ai")
+        or "no-reply@candidatesignal.ai",
+        mail_from_name=_env_first("RESUME_INTEL_MAIL_FROM_NAME", "MAIL_FROM_NAME", default="candidateSignal.ai")
+        or "candidateSignal.ai",
+        mail_reply_to=_env_first("RESUME_INTEL_MAIL_REPLY_TO", "MAIL_REPLY_TO", default="") or "",
+        mail_app_base_url=(
+            _env_first("RESUME_INTEL_APP_BASE_URL", "APP_BASE_URL", "BETTER_AUTH_URL", default="http://localhost:3001")
+            or "http://localhost:3001"
+        ).rstrip("/"),
+        mail_timeout_seconds=int(os.getenv("RESUME_INTEL_MAIL_TIMEOUT_SECONDS", "10")),
+        resend_api_key=_usable_secret(
+            _env_first("RESEND_API_KEY", "RESUME_INTEL_RESEND_API_KEY")
+            or _secret_file_first("RESEND_API_KEY_FILE", "RESUME_INTEL_RESEND_API_KEY_FILE")
+        ),
+        resend_api_key_file=_env_first("RESEND_API_KEY_FILE", "RESUME_INTEL_RESEND_API_KEY_FILE"),
     )

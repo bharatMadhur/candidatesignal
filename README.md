@@ -539,6 +539,36 @@ The compose file mounts `BETTER_AUTH_SECRET` and `RESUME_INTEL_LITELLM_API_KEY` 
 
 Docker does not reuse the local `.venv` OCR command from `.env`. If OCR is installed inside the API image or mounted container, set `DOCKER_OCR_MODE=external` and `DOCKER_OCR_COMMAND="..."`.
 
+## Product Email
+
+The mail layer is provider-agnostic. V1 uses Resend for company/team invitations, while keeping delivery records in Postgres so failed sends can be inspected and retried.
+
+Local defaults are safe:
+
+```env
+RESUME_INTEL_MAIL_ENABLED=0
+RESUME_INTEL_MAIL_DRY_RUN=1
+RESUME_INTEL_MAIL_PROVIDER=resend
+RESUME_INTEL_MAIL_FROM_EMAIL=no-reply@candidatesignal.ai
+RESUME_INTEL_APP_BASE_URL=http://127.0.0.1:3001
+RESEND_API_KEY=
+```
+
+To send real email, verify the sending domain in Resend, then set:
+
+```env
+RESUME_INTEL_MAIL_ENABLED=1
+RESUME_INTEL_MAIL_DRY_RUN=0
+RESEND_API_KEY=re_...
+```
+
+Operational APIs:
+
+```text
+GET  /mail/messages
+POST /mail/messages/{message_id}/retry
+```
+
 Services:
 
 ```text

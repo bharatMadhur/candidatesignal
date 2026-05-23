@@ -97,6 +97,15 @@ else
   echo "No Apify API token configured. LinkedIn verification will stay unavailable until the secret is added."
 fi
 
+if [[ -n "${RESEND_API_KEY:-}" ]]; then
+  upsert_secret "resend-api-key" "${RESEND_API_KEY}"
+  echo "Loaded Resend API key from environment."
+elif secret_exists "resend-api-key"; then
+  echo "Keeping existing resend-api-key secret."
+else
+  echo "No Resend API key configured. Product email will remain disabled or dry-run until the secret is added."
+fi
+
 for account in "${VM_SERVICE_ACCOUNT}" "${OCR_SERVICE_ACCOUNT}"; do
   email="$(service_account_email "${account}")"
   gcloud secrets add-iam-policy-binding "ocr-internal-token" \
@@ -120,6 +129,9 @@ gcloud secrets add-iam-policy-binding "operational-alert-webhook-url" \
   --member="serviceAccount:$(service_account_email "${VM_SERVICE_ACCOUNT}")" \
   --role="roles/secretmanager.secretAccessor" >/dev/null 2>&1 || true
 gcloud secrets add-iam-policy-binding "apify-api-token" \
+  --member="serviceAccount:$(service_account_email "${VM_SERVICE_ACCOUNT}")" \
+  --role="roles/secretmanager.secretAccessor" >/dev/null 2>&1 || true
+gcloud secrets add-iam-policy-binding "resend-api-key" \
   --member="serviceAccount:$(service_account_email "${VM_SERVICE_ACCOUNT}")" \
   --role="roles/secretmanager.secretAccessor" >/dev/null 2>&1 || true
 

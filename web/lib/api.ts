@@ -387,9 +387,30 @@ export type TenantInvitation = {
   role: string;
   status: string;
   invite_token?: string;
+  mail_delivery?: MailMessage;
   expires_at?: string | null;
   accepted_at?: string | null;
   created_at?: string | null;
+};
+
+export type MailMessage = {
+  id: string;
+  tenant_id?: string | null;
+  user_id?: string | null;
+  provider: string;
+  message_type: string;
+  status: string;
+  to_email: string;
+  from_email: string;
+  from_name?: string | null;
+  subject: string;
+  reply_to?: string | null;
+  provider_message_id?: string | null;
+  error_message?: string | null;
+  metadata?: Record<string, unknown>;
+  created_at?: string | null;
+  sent_at?: string | null;
+  updated_at?: string | null;
 };
 
 export type GovernancePolicy = {
@@ -1325,6 +1346,14 @@ export async function resendInvitation(token: string, invitationId: string): Pro
 
 export async function cancelInvitation(token: string, invitationId: string): Promise<TenantInvitation> {
   return request(`/team/invitations/${invitationId}/cancel`, { method: "POST", token });
+}
+
+export async function listMailMessages(token: string, limit = 100): Promise<{ mail_messages: MailMessage[] }> {
+  return request(`/mail/messages?limit=${limit}`, { token });
+}
+
+export async function retryMailMessage(token: string, messageId: string): Promise<{ mail_message: MailMessage }> {
+  return request(`/mail/messages/${messageId}/retry`, { method: "POST", token });
 }
 
 export async function updateMemberRole(token: string, membershipId: string, role: string): Promise<TeamMember> {

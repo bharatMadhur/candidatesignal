@@ -195,6 +195,40 @@ class CollaborationTests(unittest.TestCase):
 
         self.assertEqual([note["id"] for note in public["notes"]], ["note-1", "note-3"])
 
+    def test_recruiter_note_create_does_not_send_update_only_kwargs(self) -> None:
+        user = {"id": "user-1", "tenant_id": "tenant-1", "tenant_role": "recruiter"}
+        captured: dict[str, Any] = {}
+
+        def fake_add_note_db(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            captured["args"] = args
+            captured["kwargs"] = kwargs
+            return {
+                "document_id": "doc-1",
+                "notes": [{"id": "note-1", "user_id": "user-1", "visibility": "team", "content": "OPT"}],
+            }
+
+        original_add_note_db = web.add_note_db
+        original_schedule = web._schedule_candidate_search_reindex
+        original_public = web._public_candidate_for_user
+        try:
+            web.add_note_db = fake_add_note_db
+            web._schedule_candidate_search_reindex = lambda *_args, **_kwargs: None
+            web._public_candidate_for_user = lambda payload, _user: payload
+            result = web.create_note(
+                "doc-1",
+                web.NoteRequest(name="Concern", content="OPT", visibility="team"),
+                object(),  # type: ignore[arg-type]
+                user,
+            )
+        finally:
+            web.add_note_db = original_add_note_db
+            web._schedule_candidate_search_reindex = original_schedule
+            web._public_candidate_for_user = original_public
+
+        self.assertEqual(result["notes"][0]["id"], "note-1")
+        self.assertNotIn("can_manage_any_note", captured["kwargs"])
+        self.assertFalse(captured["kwargs"]["reindex_search"])
+
 
 if __name__ == "__main__":
     unittest.main()

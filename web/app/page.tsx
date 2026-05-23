@@ -39,6 +39,7 @@ import {
   JobCampaignCandidate,
   OperationalAlert,
   OperationalAlertDelivery,
+  MailMessage,
   PiiAccessEvent,
   ParseDeadLetter,
   ParseBatch,
@@ -104,6 +105,7 @@ import {
   listPiiAccessEvents,
   listCandidateMaintenanceJobs,
   listCollaborationComments,
+  listMailMessages,
   listParseDeadLetters,
   listParseBatches,
   listRecruiterTasks,
@@ -118,6 +120,7 @@ import {
   resendInvitation,
   resolveParseDeadLetter,
   retryCandidateMaintenanceJob,
+  retryMailMessage,
   retryParseJob,
   reparseCandidate,
   searchCandidates,
@@ -222,6 +225,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   const [matchRunChanges, setMatchRunChanges] = useState<RequirementMatchRunChange[]>([]);
   const [campaigns, setCampaigns] = useState<JobCampaign[]>([]);
   const [campaign, setCampaign] = useState<JobCampaign | null>(null);
+  const [campaignLoadingId, setCampaignLoadingId] = useState("");
   const [campaignDetailTab, setCampaignDetailTab] = useState<CampaignDetailTab>("pipeline");
   const [campaignPipelineStage, setCampaignPipelineStage] = useState<CampaignPipelineStatus>("recommended");
   const [campaignSelectedCandidateId, setCampaignSelectedCandidateId] = useState("");
@@ -238,6 +242,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [teamInvites, setTeamInvites] = useState<TenantInvitation[]>([]);
+  const [mailMessages, setMailMessages] = useState<MailMessage[]>([]);
   const [governancePolicy, setGovernancePolicy] = useState<GovernancePolicy | null>(null);
   const [piiAccessEvents, setPiiAccessEvents] = useState<PiiAccessEvent[]>([]);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
@@ -278,6 +283,12 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   const routeApplyingRef = useRef(false);
   const lastRouteIdentityRef = useRef("");
   const lastRouteSearchRef = useRef("");
+  const campaignLoadSeqRef = useRef(0);
+  const selectedCampaignIdRef = useRef("");
+
+  useEffect(() => {
+    selectedCampaignIdRef.current = campaign?.id ?? "";
+  }, [campaign?.id]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -433,6 +444,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
       setRequirements([]);
       setCampaigns([]);
       setCampaign(null);
+      setCampaignLoadingId("");
       setClusters([]);
       setParseBatches([]);
       setParseDeadLetters([]);
@@ -474,24 +486,27 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     setPiiAccessEvents(teamResult.pii_access_events ?? []);
     setCopilotThreads(copilotThreadResult.threads);
     if (tenantAdmin) {
-      const [workerResult, deadLetterResult, alertResult, alertDeliveryResult, maintenanceResult] = await Promise.all([
+      const [workerResult, deadLetterResult, alertResult, alertDeliveryResult, maintenanceResult, mailResult] = await Promise.all([
         getWorkerStatus(activeToken),
         listParseDeadLetters(activeToken),
         listOperationalAlerts(activeToken),
         listOperationalAlertDeliveries(activeToken),
         listCandidateMaintenanceJobs(activeToken),
+        listMailMessages(activeToken, 50),
       ]);
       setWorkerStatus(workerResult);
       setParseDeadLetters(deadLetterResult.dead_letters);
       setOperationalAlerts(alertResult.alerts);
       setOperationalAlertDeliveries(alertDeliveryResult.deliveries);
       setMaintenanceJobs(maintenanceResult.jobs);
+      setMailMessages(mailResult.mail_messages);
     } else {
       setWorkerStatus(null);
       setParseDeadLetters([]);
       setOperationalAlerts([]);
       setOperationalAlertDeliveries([]);
       setMaintenanceJobs([]);
+      setMailMessages([]);
     }
   }
 
@@ -550,8 +565,11 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
           .catch(() => undefined);
       }
       if (campaign?.id) {
-        getCampaign(token, campaign.id)
-          .then((result) => setCampaign(result))
+        const pollingCampaignId = campaign.id;
+        getCampaign(token, pollingCampaignId)
+          .then((result) => {
+            if (selectedCampaignIdRef.current === pollingCampaignId) setCampaign(result);
+          })
           .catch(() => undefined);
       }
     }, 4000);
@@ -1098,12 +1116,33 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   }
 
   async function handleOpenCampaign(id: string, tab: CampaignDetailTab = "pipeline") {
-    const result = await run("Loading campaign", () => getCampaign(token, id));
-    if (!result) return;
-    setCampaign(result);
-    setCampaigns((items) => items.some((item) => item.id === result.id) ? items.map((item) => item.id === result.id ? result : item) : [result, ...items]);
+    if (!id || !token) return;
+    const requestSeq = campaignLoadSeqRef.current + 1;
+    campaignLoadSeqRef.current = requestSeq;
+    const summary = campaigns.find((item) => item.id === id);
+    setCampaignLoadingId(id);
+    setBusy(true);
+    setStatus("Loading campaign");
     setCampaignDetailTab(tab);
+    setCampaignSelectedCandidateId("");
     setView("campaigns");
+    if (summary && campaign?.id !== id) {
+      setCampaign(summary);
+    }
+    try {
+      const result = await getCampaign(token, id);
+      if (campaignLoadSeqRef.current !== requestSeq) return;
+      setCampaign(result);
+      setCampaigns((items) => items.some((item) => item.id === result.id) ? items.map((item) => item.id === result.id ? result : item) : [result, ...items]);
+      setStatus("Done");
+    } catch (error) {
+      if (campaignLoadSeqRef.current === requestSeq) setStatus(readableError(error));
+    } finally {
+      if (campaignLoadSeqRef.current === requestSeq) {
+        setCampaignLoadingId("");
+        setBusy(false);
+      }
+    }
   }
 
   async function handleUpdateCampaign(id: string, payload: { name?: string; description?: string; status?: string; requirement_id?: string | null; unlink_requirement?: boolean }) {
@@ -1342,6 +1381,17 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     if (result) setPiiAccessEvents(result.pii_access_events);
   }
 
+  async function handleRefreshMailMessages() {
+    const result = await run("Loading mail delivery log", () => listMailMessages(token, 50));
+    if (result) setMailMessages(result.mail_messages);
+  }
+
+  async function handleRetryMailMessage(messageId: string) {
+    const result = await run("Retrying mail delivery", () => retryMailMessage(token, messageId));
+    if (!result) return;
+    setMailMessages((items) => [result.mail_message, ...items.filter((item) => item.id !== messageId)]);
+  }
+
   const filteredCandidates = useMemo(() => {
     const needle = query.toLowerCase();
     if (!needle) return candidates;
@@ -1491,6 +1541,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
             </a>
             <nav aria-label="Homepage sections">
               <a href="#solutions">Solutions</a>
+              <a href="#pricing">Pricing</a>
               <a href="#privacy">Privacy</a>
               <a href="#security">Security</a>
             </nav>
@@ -1547,6 +1598,45 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                 <h3>Tenant Privacy</h3>
                 <p>Company data stays isolated. Platform admins manage companies and seats, not candidate databases.</p>
               </article>
+            </div>
+          </section>
+
+          <section className="stitchPricingSection" id="pricing">
+            <div className="pricingCompactShell">
+              <div className="pricingCompactIntro">
+                <span className="pricingKicker">Simple pricing</span>
+                <h2>Start free while we onboard early companies.</h2>
+                <p>Use the company workspace now for resume parsing, search, campaigns, notes, and evidence-backed matching. Paid access is coming soon.</p>
+              </div>
+              <div className="pricingCompactPlans">
+                <article className="pricingCompactPlan active">
+                  <div>
+                    <span>Available till June end</span>
+                    <h3>Free Workspace</h3>
+                    <p>Private company workspace for evaluating the product.</p>
+                  </div>
+                  <strong>$0 <small>/ month</small></strong>
+                  <ul>
+                    <li>Resume database, Copilot search, campaign matching.</li>
+                    <li>Member invites, recruiter notes, and privacy controls.</li>
+                  </ul>
+                  <button className="primary" type="button" onClick={() => setApplicantLoginSelected(false)}>Company Login</button>
+                </article>
+                <article className="pricingCompactPlan soon">
+                  <div>
+                    <span>Coming soon</span>
+                    <h3>After that</h3>
+                    <p>For continued company workspace access after the free period.</p>
+                  </div>
+                  <strong>$29.99 <small>initial</small></strong>
+                  <p className="pricingSubline">Then $9.99 per user / month.</p>
+                  <ul>
+                    <li>Higher limits, saved searches, and richer workflows.</li>
+                    <li>Email onboarding, collaboration, and reporting.</li>
+                  </ul>
+                  <button className="secondary" type="button" disabled>Coming Soon</button>
+                </article>
+              </div>
             </div>
           </section>
 
@@ -1628,6 +1718,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
             <p>Evidence-backed hiring intelligence for modern recruiting teams.</p>
             <div>
               <a href="#solutions">Product</a>
+              <a href="#pricing">Pricing</a>
               <a href="#privacy">Privacy</a>
               <a href="#security">Security</a>
               <a href="/admin">Admin</a>
@@ -1872,6 +1963,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               campaigns={campaigns}
               requirements={requirements}
               campaign={campaign}
+              campaignLoadingId={campaignLoadingId}
               campaignName={campaignName}
               setCampaignName={setCampaignName}
               campaignDescription={campaignDescription}
@@ -1906,15 +1998,18 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               <TeamSettings
                 members={teamMembers}
                 invitations={teamInvites}
+                mailMessages={mailMessages}
                 governancePolicy={governancePolicy}
                 piiAccessEvents={piiAccessEvents}
                 inviteMember={handleInviteMember}
                 resendInvite={handleResendInvite}
                 cancelInvite={handleCancelInvite}
+                retryMail={handleRetryMailMessage}
                 updateRole={handleUpdateMemberRole}
                 disableMember={handleDisableMember}
                 updateGovernancePolicy={handleUpdateGovernancePolicy}
                 refreshPiiAudit={handleRefreshPiiAudit}
+                refreshMailMessages={handleRefreshMailMessages}
               />
             ) : (
               <AccessDeniedPanel title="Team settings are restricted" body="Only company owners and tenant admins can invite users, change roles, or review contact-data access." />
@@ -4886,27 +4981,32 @@ function CollaborationPanel({
 
   const openTasks = tasks.filter((task) => !["done", "cancelled"].includes(task.status));
   const completedTasks = tasks.filter((task) => task.status === "done");
+  const entityLabel = entityType === "campaign_candidate" ? "candidate in this campaign" : entityType;
 
   return (
-    <section className={compact ? "collaborationPanel compact" : "collaborationPanel"}>
+    <section className={compact ? "collaborationPanel handoffPanel compact" : "collaborationPanel handoffPanel"}>
       <header className="collaborationHeader">
         <div>
-          <span className="reportLabel">Team Collaboration</span>
-          <h3>Comments & Tasks</h3>
-          <p>Use @email mentions, assign follow-ups, and keep recruiter handoffs tied to this {entityType.replace("_", " ")}.</p>
+          <span className="reportLabel">Team Handoff</span>
+          <h3>Shared context</h3>
+          <p>Leave internal notes, mention teammates, and assign follow-ups for this {entityLabel}.</p>
         </div>
-        <button className="plain small" type="button" onClick={() => void refresh()} disabled={loading || saving}>
-          {loading ? "Loading..." : "Refresh"}
-        </button>
+        <div className="handoffHeaderActions">
+          <span>{openTasks.length} open</span>
+          <span>{comments.length} comments</span>
+          <button className="plain small" type="button" onClick={() => void refresh()} disabled={loading || saving}>
+            {loading ? "Loading..." : "Refresh"}
+          </button>
+        </div>
       </header>
       {error ? <p className="noteSaveFeedback error">{error}</p> : null}
       <div className="collaborationGrid">
         <article className="collaborationComposer">
-          <strong>Add team comment</strong>
+          <strong>Team note</strong>
           <textarea
             value={commentBody}
             onChange={(event) => setCommentBody(event.target.value)}
-            placeholder="Example: @recruiter@company.com please verify visa status before client submission."
+            placeholder="Add context for the team. Use @email if someone needs to see it."
           />
           <div className="collaborationControls">
             <select value={commentVisibility} onChange={(event) => setCommentVisibility(event.target.value)}>
@@ -4918,9 +5018,9 @@ function CollaborationPanel({
           </div>
         </article>
         <article className="collaborationComposer">
-          <strong>Create follow-up task</strong>
+          <strong>Follow-up</strong>
           <input value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} placeholder="Task title" />
-          <textarea value={taskBody} onChange={(event) => setTaskBody(event.target.value)} placeholder="Context, ask, or next step" />
+          <textarea value={taskBody} onChange={(event) => setTaskBody(event.target.value)} placeholder="What should happen next?" />
           <div className="collaborationControls">
             <select value={taskAssignee} onChange={(event) => setTaskAssignee(event.target.value)}>
               <option value="">Unassigned</option>
@@ -4939,7 +5039,7 @@ function CollaborationPanel({
       <div className="collaborationLists">
         <section className="collaborationList">
           <div className="collaborationListHeader">
-            <strong>Open tasks</strong>
+            <strong>Follow-ups</strong>
             <span>{openTasks.length}</span>
           </div>
           {openTasks.length ? openTasks.slice(0, compact ? 4 : 8).map((task) => (
@@ -4947,7 +5047,7 @@ function CollaborationPanel({
               <div>
                 <strong>{task.title}</strong>
                 {task.body ? <p>{task.body}</p> : null}
-                <span>{task.assignee_email ? `Assigned to ${task.assignee_email}` : "Unassigned"} | {domainLabel(task.priority)} | {formatDateTime(task.created_at)}</span>
+                <span>{task.assignee_email ? `Assigned to ${task.assignee_email}` : "Unassigned"} · {domainLabel(task.priority)} · {formatDateTime(task.created_at)}</span>
               </div>
               <div className="collaborationItemActions">
                 {task.status === "open" ? <button className="plain small" type="button" onClick={() => void updateTaskStatus(task.id, "in_progress")}>Start</button> : null}
@@ -4960,7 +5060,7 @@ function CollaborationPanel({
         </section>
         <section className="collaborationList">
           <div className="collaborationListHeader">
-            <strong>Team comments</strong>
+            <strong>Shared notes</strong>
             <span>{comments.length}</span>
           </div>
           {comments.length ? comments.slice(0, compact ? 4 : 10).map((comment) => (
@@ -4968,7 +5068,7 @@ function CollaborationPanel({
               <div>
                 <strong>{comment.user_name || comment.user_email || "Team member"}</strong>
                 <p>{comment.body}</p>
-                <span>{domainLabel(comment.visibility)} | {formatDateTime(comment.created_at)}</span>
+                <span>{domainLabel(comment.visibility)} · {formatDateTime(comment.created_at)}</span>
               </div>
               <button className="plain small danger" type="button" onClick={() => void removeComment(comment.id)}>Delete</button>
             </article>
@@ -5502,6 +5602,7 @@ function CampaignsView({
   campaigns,
   requirements,
   campaign,
+  campaignLoadingId,
   campaignName,
   setCampaignName,
   campaignDescription,
@@ -5532,6 +5633,7 @@ function CampaignsView({
   campaigns: JobCampaign[];
   requirements: Requirement[];
   campaign: JobCampaign | null;
+  campaignLoadingId: string;
   campaignName: string;
   setCampaignName: (value: string) => void;
   campaignDescription: string;
@@ -5559,6 +5661,7 @@ function CampaignsView({
 }) {
   const activeCampaign = campaign ?? campaigns[0] ?? null;
   const selectedCandidates = useMemo(() => activeCampaign?.candidates ?? [], [activeCampaign?.candidates]);
+  const activeCampaignLoading = Boolean(activeCampaign?.id && campaignLoadingId === activeCampaign.id);
   const [autoOpenedCampaignId, setAutoOpenedCampaignId] = useState("");
   const [stageNote, setStageNote] = useState("");
   const [editingCampaign, setEditingCampaign] = useState(false);
@@ -5758,9 +5861,14 @@ function CampaignsView({
             ) : null}
             <div className="campaignRailList">
               {campaigns.map((item) => (
-                <button className={activeCampaign.id === item.id ? "active" : ""} key={item.id} onClick={() => openCampaign(item.id)}>
+                <button
+                  className={`${activeCampaign.id === item.id ? "active" : ""} ${campaignLoadingId === item.id ? "loading" : ""}`.trim()}
+                  key={item.id}
+                  onClick={() => openCampaign(item.id)}
+                  disabled={campaignLoadingId === item.id}
+                >
                   <strong>{item.name}</strong>
-                  <span>{domainLabel(item.status)} | {item.candidate_count} candidates</span>
+                  <span>{campaignLoadingId === item.id ? "Loading campaign..." : `${domainLabel(item.status)} | ${item.candidate_count} candidates`}</span>
                 </button>
               ))}
             </div>
@@ -5773,6 +5881,7 @@ function CampaignsView({
                 <h2>{activeCampaign.name}</h2>
                 <p>{activeCampaign.description || "No hiring brief saved yet."}</p>
                 <div className="campaignCleanBadges">
+                  {activeCampaignLoading ? <span>Loading details...</span> : null}
                   <span>{domainLabel(activeCampaign.status)}</span>
                   <span>{activeCampaign.requirement_title || "No requirement uploaded"}</span>
                   <span>{scorecardCompleteness}% scorecard</span>
@@ -6277,7 +6386,12 @@ function CampaignsView({
               </div>
             </div>
           ) : null}
-          {activeTab === "pipeline" && !selectedCandidates.length ? <EmptyPanel title="No campaign candidates yet" body="Find matches from the existing database, or upload resumes directly into this campaign." /> : null}
+          {activeTab === "pipeline" && !selectedCandidates.length ? (
+            <EmptyPanel
+              title={activeCampaignLoading ? "Loading campaign candidates" : "No campaign candidates yet"}
+              body={activeCampaignLoading ? "Fetching the latest campaign pipeline, matches, uploads, and activity." : "Find matches from the existing database, or upload resumes directly into this campaign."}
+            />
+          ) : null}
           </main>
         </div>
       )}
@@ -6762,27 +6876,33 @@ function VersionMetadataCard({ label, version }: { label: string; version?: Cand
 function TeamSettings({
   members,
   invitations,
+  mailMessages,
   governancePolicy,
   piiAccessEvents,
   inviteMember,
   resendInvite,
   cancelInvite,
+  retryMail,
   updateRole,
   disableMember,
   updateGovernancePolicy,
   refreshPiiAudit,
+  refreshMailMessages,
 }: {
   members: TeamMember[];
   invitations: TenantInvitation[];
+  mailMessages: MailMessage[];
   governancePolicy: GovernancePolicy | null;
   piiAccessEvents: PiiAccessEvent[];
   inviteMember: (email: string, role: string) => void;
   resendInvite: (invitationId: string) => void;
   cancelInvite: (invitationId: string) => void;
+  retryMail: (messageId: string) => void;
   updateRole: (membershipId: string, role: string) => void;
   disableMember: (membershipId: string) => void;
   updateGovernancePolicy: (policy: Partial<GovernancePolicy>) => void;
   refreshPiiAudit: () => void;
+  refreshMailMessages: () => void;
 }) {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("recruiter");
@@ -6938,6 +7058,36 @@ function TeamSettings({
                       </div>
                     );
                   })}
+                </div>
+              </section>
+              <section className="panel">
+                <div className="panelHead">
+                  <h3>Email Delivery</h3>
+                  <button className="plain small" type="button" onClick={refreshMailMessages}>Refresh</button>
+                </div>
+                <p className="panelIntro">Invitation emails are queued and tracked here. Failed delivery can be retried without creating a new invite.</p>
+                <div className="settingsTable mailDeliveryTable">
+                  <div className="settingsRow mailRow header"><span>Recipient</span><span>Type</span><span>Status</span><span>Sent</span><span>Actions</span></div>
+                  {mailMessages.length ? mailMessages.slice(0, 12).map((message) => (
+                    <div className="settingsRow mailRow" key={message.id}>
+                      <span>{message.to_email}</span>
+                      <span>{domainLabel(message.message_type)}</span>
+                      <span>
+                        <b className={`mailStatus ${message.status}`}>{domainLabel(message.status)}</b>
+                        {message.error_message ? <small>{message.error_message}</small> : null}
+                      </span>
+                      <span>{message.sent_at ? formatDateTime(message.sent_at) : formatDateTime(message.created_at)}</span>
+                      <span>
+                        {["failed", "skipped", "dry_run"].includes(message.status) ? (
+                          <button className="plain small" type="button" onClick={() => retryMail(message.id)}>Retry</button>
+                        ) : (
+                          <span className="muted">{message.provider}</span>
+                        )}
+                      </span>
+                    </div>
+                  )) : (
+                    <div className="emptyTableState">No invitation email records yet.</div>
+                  )}
                 </div>
               </section>
             </>

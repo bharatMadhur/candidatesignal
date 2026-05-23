@@ -28,6 +28,13 @@ RESUME_INTEL_GCS_BUCKET=${DOCUMENT_BUCKET}
 RESUME_INTEL_LITELLM_BASE_URL=${RESUME_INTEL_LITELLM_BASE_URL}
 RESUME_INTEL_LITELLM_MODEL=${RESUME_INTEL_LITELLM_MODEL}
 RESUME_INTEL_EMBEDDING_MODEL=${RESUME_INTEL_EMBEDDING_MODEL}
+RESUME_INTEL_MAIL_ENABLED=${RESUME_INTEL_MAIL_ENABLED:-0}
+RESUME_INTEL_MAIL_DRY_RUN=${RESUME_INTEL_MAIL_DRY_RUN:-1}
+RESUME_INTEL_MAIL_PROVIDER=${RESUME_INTEL_MAIL_PROVIDER:-resend}
+RESUME_INTEL_MAIL_FROM_EMAIL=${RESUME_INTEL_MAIL_FROM_EMAIL:-no-reply@candidatesignal.ai}
+RESUME_INTEL_MAIL_FROM_NAME=${RESUME_INTEL_MAIL_FROM_NAME:-candidateSignal.ai}
+RESUME_INTEL_MAIL_REPLY_TO=${RESUME_INTEL_MAIL_REPLY_TO:-}
+RESUME_INTEL_APP_BASE_URL=${RESUME_INTEL_APP_BASE_URL:-${APP_ORIGIN}}
 LINKEDIN_APIFY_ACTOR_ID=${LINKEDIN_APIFY_ACTOR_ID:-LpVuK3Zozwuipa5bp}
 LINKEDIN_APIFY_SCRAPER_MODE=${LINKEDIN_APIFY_SCRAPER_MODE:-Profile details no email (\$4 per 1k)}
 OCR_REMOTE_URL=${OCR_URL}
@@ -59,6 +66,7 @@ render_secrets() {
   printf "%s" "$(secret_value resume-intel-bootstrap-token)" > "${secrets_dir}/bootstrap-token"
   printf "%s" "$(secret_value litellm-api-key)" > "${secrets_dir}/litellm-api-key"
   printf "%s" "${APIFY_API_TOKEN:-$(secret_value apify-api-token)}" > "${secrets_dir}/apify-api-token"
+  printf "%s" "${RESEND_API_KEY:-$(secret_value resend-api-key)}" > "${secrets_dir}/resend-api-key"
   printf "%s" "$(secret_value ocr-internal-token)" > "${secrets_dir}/ocr-internal-token"
   printf "%s" "${RESUME_INTEL_ALERT_WEBHOOK_URL:-$(secret_value operational-alert-webhook-url)}" > "${secrets_dir}/alert-webhook-url"
   chmod 600 "${secrets_dir}"/*
