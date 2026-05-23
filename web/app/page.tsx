@@ -146,7 +146,7 @@ type WorkspaceChatMessage = CopilotMessage & {
   metadata?: Record<string, any>;
 };
 
-type CandidateReviewSignal = "low_coverage" | "role_fact_review";
+type CandidateReviewSignal = "low_coverage" | "role_fact_review" | "profile_freshness_review";
 type ReviewCenterItem = {
   title: string;
   body: string;
@@ -2075,6 +2075,7 @@ function Dashboard({
 }) {
   const urgentCoverageCandidates = candidates.filter((item) => (item.coverage ?? 1) > 0 && (item.coverage ?? 1) < 0.65 && !candidateReviewSignalDone(item, "low_coverage"));
   const roleFactReviewCandidates = candidates.filter((item) => candidateRoleFactsNeedReview(item) && !candidateReviewSignalDone(item, "role_fact_review"));
+  const profileFreshnessReviewCandidates = candidates.filter(candidateProfileFreshnessNeedsReview);
   const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
   const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const newToday = candidates.filter((item) => item.updated_at && new Date(item.updated_at).getTime() >= dayAgo).length;
@@ -2128,6 +2129,17 @@ function Dashboard({
         run: () => openCandidate(item.document_id, "evidence"),
         done: () => markReviewSignal(item.document_id, "role_fact_review" as const),
       })),
+    ...profileFreshnessReviewCandidates
+      .slice(0, 2)
+      .map((item) => ({
+        title: `${item.name ?? "Candidate"} needs profile freshness review`,
+        body: candidateProfileFreshnessLabel(item.profile_freshness) || "Open the profile to verify LinkedIn, current location, or recently updated work history.",
+        action: "Review profile",
+        doneAction: "Mark reviewed",
+        label: "Freshness review",
+        run: () => openCandidate(item.document_id),
+        done: () => markReviewSignal(item.document_id, "profile_freshness_review" as const),
+      })),
   ].slice(0, 5);
   const reviewCount = actionItems.length;
   const activeCampaigns = campaigns.filter((item) => item.status !== "archived").slice(0, 4);
@@ -2149,8 +2161,8 @@ function Dashboard({
             <strong>{newToday || newThisWeek}</strong>
             <em>Candidate profiles from recent resume activity</em>
           </button>
-          <button className="stitchMetricCard attention" onClick={() => setView("operations")}>
-            <div><span>Review Center</span><b><AlertTriangle size={20} /></b></div>
+          <button className="stitchMetricCard attention" onClick={() => actionItems[0]?.run() ?? setView("database")}>
+            <div><span>Review Center</span><b>{reviewCount ? <AlertTriangle size={20} /> : <CheckCircle2 size={20} />}</b></div>
             <strong>{reviewCount}</strong>
             <em>Files or profiles waiting for a clear recruiter/admin decision</em>
           </button>
@@ -3521,6 +3533,7 @@ function CandidateDetail({
   const coverage = candidate.primary_key_coverage;
   const coverageScore = Number(coverage?.score ?? 0);
   const needsUploadReview = coverageScore > 0 && coverageScore < 0.8 && !reviewedSignals.includes("low_coverage");
+  const profileFreshnessNeedsReview = candidateProfileFreshnessNeedsReview(candidate);
   const verifiedFactRows = [
     candidate.name ? { label: "Name", value: candidate.name, source: "Parsed identity field", query: [candidate.name] } : null,
     candidate.contact?.email ? { label: "Email", value: candidate.contact.email, source: "Parsed contact field", query: [candidate.contact.email] } : null,
@@ -3675,6 +3688,7 @@ function CandidateDetail({
     ...concerns.slice(0, 3),
     ...coverageReasons.slice(0, 2).map((reason) => `${reason.label}: ${reason.detail}`),
     roleFactNeedsReview ? "Current role facts need recruiter review before relying on matching." : "",
+    profileFreshnessNeedsReview && profileFreshness?.summary ? profileFreshness.summary : "",
     !primaryLinkedIn ? "LinkedIn profile was not found in the resume." : linkedinVerified ? "" : "LinkedIn profile is present but not verified yet.",
   ].filter((item): item is string => Boolean(item));
 
@@ -3765,6 +3779,7 @@ function CandidateDetail({
           <button className="plain" type="button" onClick={() => setActiveTab("notes")}>Recruiter Notes</button>
           {canReparse ? <button className="plain" type="button" onClick={() => reparseCandidate(candidate.document_id)}>Reparse CV</button> : null}
           {roleFactNeedsReview ? <button className="plain" type="button" onClick={() => markReviewSignal("role_fact_review")}>Mark role reviewed</button> : null}
+          {profileFreshnessNeedsReview ? <button className="plain" type="button" onClick={() => markReviewSignal("profile_freshness_review")}>Mark freshness reviewed</button> : null}
           <button className="plain candidateHazardAction" type="button" onClick={() => deleteCandidate(candidate.document_id)}><AlertTriangle size={14} /> Remove Upload</button>
           <button className="primary" type="button" onClick={match}>Match to Role</button>
         </section>
@@ -3879,6 +3894,9 @@ function CandidateDetail({
                     <div><span>Coverage</span><strong>{coverage ? `${Math.round(coverage.score * 100)}%` : "Unknown"}</strong></div>
                   </div>
                   {profileFreshness?.summary ? <p className="muted">{profileFreshness.summary}</p> : null}
+                  {profileFreshnessNeedsReview ? (
+                    <button className="plain small" type="button" onClick={() => markReviewSignal("profile_freshness_review")}>Mark freshness reviewed</button>
+                  ) : null}
                 </article>
                 <article className="briefCard candidateDecisionCard">
                   <span className="reportLabel">Recruiter context</span>
@@ -7562,6 +7580,15 @@ function profileFreshnessBadgeClass(status?: string) {
   return "freshnessBadge review";
 }
 
+function candidateProfileFreshness(candidate: CandidateSummary | Candidate): CandidateSummary["profile_freshness"] {
+  return (candidate as CandidateSummary).profile_freshness ?? (candidate as Candidate).derived?.profile_freshness;
+}
+
+function candidateProfileFreshnessNeedsReview(candidate: CandidateSummary | Candidate) {
+  const freshness = candidateProfileFreshness(candidate);
+  return ["stale", "possibly_stale", "needs_verification"].includes(String(freshness?.status ?? "")) && !candidateReviewSignalDone(candidate, "profile_freshness_review");
+}
+
 function candidateListHazards(candidate: CandidateSummary) {
   const hazards: string[] = [];
   const coverage = Number(candidate.coverage ?? 0);
@@ -7577,7 +7604,7 @@ function candidateListHazards(candidate: CandidateSummary) {
   ) {
     hazards.push("Possible repeated candidate upload");
   }
-  if (["stale", "possibly_stale"].includes(String(candidate.profile_freshness?.status ?? ""))) {
+  if (candidateProfileFreshnessNeedsReview(candidate)) {
     hazards.push(candidate.profile_freshness?.summary ?? "Profile may be stale");
   }
   return hazards;

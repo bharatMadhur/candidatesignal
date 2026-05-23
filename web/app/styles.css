@@ -1837,8 +1837,8 @@ a:focus {
 }
 
 .stitchMetricCard.attention b {
-  background: var(--danger-soft);
-  color: var(--warn);
+  background: var(--surface-mid);
+  color: var(--primary);
 }
 
 .stitchMetricCard strong {
