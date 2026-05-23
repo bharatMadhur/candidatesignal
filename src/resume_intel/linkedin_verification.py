@@ -14,6 +14,7 @@ from .candidate_facts import factual_current_company, factual_current_title
 from .db import db
 from .db_store import add_note_db, load_candidate_db, load_raw_text_db, save_candidate_db
 from .pii import _canonical_linkedin_profile_url
+from .profile_freshness import enrich_profile_freshness
 from .settings import Settings, load_settings
 from .timeline import build_timeline_profile
 from .vector_search import upsert_candidate_search_chunks
@@ -111,6 +112,7 @@ def run_linkedin_verification(run_id: str, tenant_id: str) -> dict[str, Any]:
             comparison=comparison,
         )
         updated_record = _attach_linkedin_result_to_candidate(candidate_record, snapshot, comparison, diff, str(run["id"]))
+        enrich_profile_freshness(updated_record)
         raw_text = load_raw_text_db(str(run["document_id"]), tenant_id)
         with db() as conn:
             conn.execute(

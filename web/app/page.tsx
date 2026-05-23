@@ -3364,6 +3364,7 @@ function CandidateTable({ candidates, open }: { candidates: CandidateSummary[]; 
       {sortedCandidates.map((item) => {
         const hazardItems = candidateListHazards(item);
         const noteSignals = candidateNoteSignalLabels(item).slice(0, 2);
+        const freshness = candidateProfileFreshnessLabel(item.profile_freshness);
         return (
           <button className="tableRow" key={item.document_id} onClick={() => open(item.document_id)}>
             <span className="truncateCell candidateListNameCell" title={item.name ?? "Unknown"}>
@@ -3383,7 +3384,10 @@ function CandidateTable({ candidates, open }: { candidates: CandidateSummary[]; 
               {(item.top_domains ?? []).slice(0, 2).map(domainLabel).join(", ") || "Missing"}
               {noteSignals.length ? <small>{noteSignals.join(" | ")}</small> : null}
             </span>
-            <span className="truncateCell" title={[item.location, ...(item.countries ?? [])].filter(Boolean).join(" / ") || "Missing"}>{[item.location, ...(item.countries ?? [])].filter(Boolean).join(" / ") || "Missing"}</span>
+            <span className="truncateCell" title={[item.location, ...(item.countries ?? [])].filter(Boolean).join(" / ") || "Missing"}>
+              {[item.location, ...(item.countries ?? [])].filter(Boolean).join(" / ") || "Missing"}
+              {freshness ? <small>{freshness}</small> : null}
+            </span>
             <span className="coverageCell"><i style={{ width: `${Math.round((item.coverage ?? 0) * 100)}%` }} />{item.coverage ? `${Math.round(item.coverage * 100)}%` : "N/A"}</span>
             <span>{item.duplicate_risk_score ? <b className="riskBadge">{Math.round(item.duplicate_risk_score * 100)}% {versionStatusLabel(item.duplicate_status)}</b> : "Unique"}</span>
             <span>{item.updated_at ? new Date(item.updated_at).toLocaleDateString() : "N/A"}</span>
@@ -3471,6 +3475,7 @@ function CandidateDetail({
   const otherLinkedinUrls = toTextList(piiIntel.other_linkedin_urls ?? []);
   const portfolioUrls = toTextList(piiIntel.portfolio_websites ?? []);
   const profileVerification = candidate.derived?.profile_verification ?? {};
+  const profileFreshness = candidate.derived?.profile_freshness ?? {};
   const linkedinExternal = profileVerification.linkedin_external ?? {};
   const recruiterNoteSignals = candidate.derived?.recruiter_note_signals ?? {};
   const factVerification = candidate.derived?.fact_verification ?? {};
@@ -3746,6 +3751,7 @@ function CandidateDetail({
             <div className="candidateReportBadges">
               <span>{formatYears(accounting?.total_years_unique ?? hr?.total_years_experience)} experience</span>
               {roleFactNeedsReview ? <span className="factReviewBadge"><AlertTriangle size={13} /> Role facts need review</span> : <span className="factVerifiedBadge">Role facts verified</span>}
+              {profileFreshness?.label ? <span className={profileFreshnessBadgeClass(profileFreshness.status)}>{profileFreshness.label}</span> : null}
               {currentLocation ? <span className="currentLocationBadge">Current location: {currentLocation}</span> : <span className="currentLocationBadge muted">Current location not stated</span>}
               <span className={versionSummary.needsReview ? "versionReviewBadge" : ""}>{versionSummary.needsReview ? <AlertTriangle size={13} /> : null}{versionSummary.badge}</span>
               {reparseStatusBatch ? <span className="reparseStatusBadge">Reparse: {domainLabel(reparseStatusBatch.status)}</span> : null}
@@ -3867,10 +3873,12 @@ function CandidateDetail({
                   <span className="reportLabel">Profile verification</span>
                   <h3><ShieldCheck size={18} /> Verification</h3>
                   <div className="decisionFactList">
+                    <div><span>Freshness</span><strong>{profileFreshness?.label ?? "Unknown"}</strong></div>
                     <div><span>LinkedIn</span><strong>{linkedinVerified ? (linkedinConfidenceLabel ?? "Verified") : primaryLinkedIn ? "Needs verification" : "Not found"}</strong></div>
                     <div><span>Portfolio</span><strong>{primaryPortfolio ? "Found" : "Not found"}</strong></div>
                     <div><span>Coverage</span><strong>{coverage ? `${Math.round(coverage.score * 100)}%` : "Unknown"}</strong></div>
                   </div>
+                  {profileFreshness?.summary ? <p className="muted">{profileFreshness.summary}</p> : null}
                 </article>
                 <article className="briefCard candidateDecisionCard">
                   <span className="reportLabel">Recruiter context</span>
@@ -7542,6 +7550,18 @@ function candidateNoteSignalKey(signal: { category?: string; label?: string; val
   return `${category}:${label}`.replace(/\s+/g, "_");
 }
 
+function candidateProfileFreshnessLabel(freshness?: CandidateSummary["profile_freshness"]) {
+  if (!freshness?.label) return "";
+  if (freshness.status === "fresh") return freshness.label;
+  return freshness.summary ? `${freshness.label}: ${freshness.summary}` : freshness.label;
+}
+
+function profileFreshnessBadgeClass(status?: string) {
+  if (status === "fresh") return "freshnessBadge fresh";
+  if (status === "stale" || status === "possibly_stale") return "freshnessBadge stale";
+  return "freshnessBadge review";
+}
+
 function candidateListHazards(candidate: CandidateSummary) {
   const hazards: string[] = [];
   const coverage = Number(candidate.coverage ?? 0);
@@ -7556,6 +7576,9 @@ function candidateListHazards(candidate: CandidateSummary) {
     && normalizeCandidateVersionStatus(candidate.duplicate_status) === "suggested"
   ) {
     hazards.push("Possible repeated candidate upload");
+  }
+  if (["stale", "possibly_stale"].includes(String(candidate.profile_freshness?.status ?? ""))) {
+    hazards.push(candidate.profile_freshness?.summary ?? "Profile may be stale");
   }
   return hazards;
 }

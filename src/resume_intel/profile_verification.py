@@ -10,6 +10,8 @@ LINKEDIN_PROFILE_RE = re.compile(r"^https://(?:[a-z]{2,3}\.)?linkedin\.com/in/[^
 def enrich_profile_verification(record: dict[str, Any]) -> dict[str, Any]:
     """Add deterministic profile/link verification signals without external calls."""
 
+    derived = record.setdefault("derived", {})
+    existing = derived.get("profile_verification") if isinstance(derived.get("profile_verification"), dict) else {}
     pii = (record.get("derived") or {}).get("pii_contact_intelligence") or {}
     linkedins = [str(item).strip() for item in pii.get("linkedin_urls") or [] if str(item).strip()]
     portfolios = [str(item).strip() for item in pii.get("portfolio_websites") or [] if str(item).strip()]
@@ -18,8 +20,7 @@ def enrich_profile_verification(record: dict[str, Any]) -> dict[str, Any]:
     linkedin_status = _linkedin_status(linkedins)
     portfolio_status = "present" if portfolios else "missing"
     github_status = "present" if githubs else "missing"
-    derived = record.setdefault("derived", {})
-    derived["profile_verification"] = {
+    deterministic = {
         "verification_source": "deterministic_link_shape",
         "external_verification_status": "not_configured",
         "linkedin": {
@@ -47,7 +48,39 @@ def enrich_profile_verification(record: dict[str, Any]) -> dict[str, Any]:
             if signal
         ],
     }
+    derived["profile_verification"] = _merge_profile_verification(existing, deterministic)
     return record
+
+
+def _merge_profile_verification(existing: dict[str, Any], deterministic: dict[str, Any]) -> dict[str, Any]:
+    """Preserve external verification results while refreshing deterministic link-shape checks."""
+
+    if not existing:
+        return deterministic
+    merged = {**deterministic, **existing}
+    for key in ("linkedin", "portfolio", "github"):
+        existing_item = existing.get(key) if isinstance(existing.get(key), dict) else {}
+        deterministic_item = deterministic.get(key) if isinstance(deterministic.get(key), dict) else {}
+        merged[key] = {**deterministic_item, **existing_item}
+        if key == "linkedin" and deterministic_item.get("url") and not merged[key].get("url"):
+            merged[key]["url"] = deterministic_item["url"]
+    existing_signals = existing.get("application_validity_signals") or []
+    deterministic_signals = deterministic.get("application_validity_signals") or []
+    merged["application_validity_signals"] = _dedupe([*deterministic_signals, *existing_signals])
+    return merged
+
+
+def _dedupe(values: list[Any]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        text = str(value or "").strip()
+        key = text.lower()
+        if not text or key in seen:
+            continue
+        seen.add(key)
+        result.append(text)
+    return result
 
 
 def _linkedin_status(urls: list[str]) -> str:

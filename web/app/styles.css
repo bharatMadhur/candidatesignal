@@ -5479,8 +5479,28 @@ button:disabled {
   color: var(--muted);
 }
 
+.candidateReportBadges .freshnessBadge {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.candidateReportBadges .freshnessBadge.fresh {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+}
+
+.candidateReportBadges .freshnessBadge.review,
+.candidateReportBadges .freshnessBadge.stale {
+  border-color: #d8cfc2;
+  background: #fbfaf7;
+  color: #6b5a42;
+}
+
 .candidateReportBadges .factReviewBadge,
-.candidateReportBadges .versionReviewBadge {
+.candidateReportBadges .versionReviewBadge,
+.candidateReportBadges .freshnessBadge {
   display: inline-flex;
   align-items: center;
   gap: 6px;

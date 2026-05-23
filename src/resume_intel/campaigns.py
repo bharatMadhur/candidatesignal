@@ -778,6 +778,7 @@ def _candidate_summary(record: dict[str, Any], updated_at: Any = None) -> dict[s
     hr_profile = record.get("derived", {}).get("hr_profile", {})
     fact_verification = record.get("derived", {}).get("fact_verification") or {}
     location_intelligence = record.get("derived", {}).get("location_intelligence") or {}
+    profile_freshness = record.get("derived", {}).get("profile_freshness") or {}
     return {
         "document_id": record.get("document_id"),
         "name": record.get("name"),
@@ -788,6 +789,7 @@ def _candidate_summary(record: dict[str, Any], updated_at: Any = None) -> dict[s
         "fact_verification_status": fact_verification.get("status"),
         "current_role_verification_status": fact_verification.get("current_role_status"),
         "current_role_flags": fact_verification.get("current_role_flags") or [],
+        "profile_freshness": profile_freshness if isinstance(profile_freshness, dict) else {},
         "total_years_experience": hr_profile.get("total_years_experience"),
         "seniority": hr_profile.get("seniority_level"),
         "location": candidate_current_location(record),

@@ -15,6 +15,7 @@ from .fact_verification import enrich_fact_verification
 from .geo import candidate_current_location, enrich_record_locations
 from .note_signals import candidate_note_signal_summary, delete_note_signals, replace_note_signals
 from .pii import enrich_record_pii
+from .profile_freshness import enrich_profile_freshness
 from .profile_verification import enrich_profile_verification
 from .timeline import build_timeline_profile
 from .vector_search import upsert_candidate_search_chunks
@@ -41,6 +42,7 @@ def save_candidate_db(
     enrich_record_locations(record, raw_text)
     normalize_domain_years(record, raw_text)
     enrich_fact_verification(record, raw_text)
+    enrich_profile_freshness(record)
     record["primary_key_coverage"] = primary_key_coverage(record)
     contact = record.get("contact") or {}
     with db() as conn:
@@ -132,6 +134,7 @@ def public_candidate_record(record: dict[str, Any], *, allow_pii: bool = True) -
     public["source_file"] = original_filename
     if allow_pii:
         enrich_profile_verification(public)
+    enrich_profile_freshness(public)
     if not allow_pii:
         _redact_record_pii(public)
     metadata = public.get("_metadata")
@@ -229,6 +232,7 @@ def list_candidates_db(tenant_id: str | None = None) -> list[dict[str, Any]]:
         location_intelligence = record.get("derived", {}).get("location_intelligence") or {}
         experience_by_domain = record.get("derived", {}).get("experience_by_domain") or {}
         note_signal_summary = record.get("derived", {}).get("recruiter_note_signals") or {}
+        profile_freshness = record.get("derived", {}).get("profile_freshness") or {}
         top_domains = sorted(experience_by_domain, key=lambda key: _domain_year_value(experience_by_domain.get(key)), reverse=True)[:5]
         candidates.append(
             {
@@ -251,6 +255,7 @@ def list_candidates_db(tenant_id: str | None = None) -> list[dict[str, Any]]:
                     if isinstance(item, dict) and item.get("country")
                 ],
                 "note_signals": note_signal_summary.get("signals") if isinstance(note_signal_summary, dict) else [],
+                "profile_freshness": profile_freshness if isinstance(profile_freshness, dict) else {},
                 "coverage": record.get("primary_key_coverage", {}).get("score"),
                 "reviewed_signals": reviewed_signals.get(row["document_id"], []),
                 **duplicate_risk.get(row["document_id"], {"duplicate_risk_score": 0, "duplicate_status": None}),
@@ -358,6 +363,7 @@ def add_note_db(
             note_content=note_content,
         )
         _attach_note_signal_summary(conn, record, tenant_id, document_id)
+        enrich_profile_freshness(record)
         conn.execute(
             "update candidates set record_json=%s, updated_at=now() where document_id=%s and tenant_id=%s",
             (Jsonb(record), document_id, tenant_id),
@@ -420,6 +426,7 @@ def update_note_db(
     record["primary_key_coverage"] = primary_key_coverage(record)
     with db() as conn:
         _attach_note_signal_summary(conn, record, tenant_id, document_id)
+        enrich_profile_freshness(record)
         conn.execute("update candidates set record_json=%s, updated_at=now() where document_id=%s and tenant_id=%s", (Jsonb(record), document_id, tenant_id))
         _upsert_training_data_example(conn, record, raw_text, tenant_id, "recruiter_note")
         _record_activity_event(
@@ -470,6 +477,7 @@ def delete_note_db(
     record["primary_key_coverage"] = primary_key_coverage(record)
     with db() as conn:
         _attach_note_signal_summary(conn, record, tenant_id, document_id)
+        enrich_profile_freshness(record)
         conn.execute("update candidates set record_json=%s, updated_at=now() where document_id=%s and tenant_id=%s", (Jsonb(record), document_id, tenant_id))
         _upsert_training_data_example(conn, record, raw_text, tenant_id, "recruiter_note")
         _record_activity_event(
@@ -518,6 +526,7 @@ def update_candidate_profile_db(document_id: str, user_id: str, updates: dict[st
     enrich_record_locations(record, raw_text)
     normalize_domain_years(record, raw_text)
     enrich_fact_verification(record, raw_text)
+    enrich_profile_freshness(record)
     record["primary_key_coverage"] = primary_key_coverage(record)
     contact = record.get("contact") or {}
     with db() as conn:

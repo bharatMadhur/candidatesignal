@@ -38,6 +38,15 @@ export type CandidateSummary = {
   top_chunks?: string[];
   evidence?: Array<{ chunk_type?: string; source_label?: string; page_number?: number | null; snippet?: string }>;
   note_signals?: Array<{ category?: string; label?: string; value?: string | null; source_text?: string | null }>;
+  profile_freshness?: {
+    status?: string;
+    label?: string;
+    score?: number;
+    summary?: string;
+    verified_sources?: string[];
+    missing_verifications?: string[];
+    flags?: Array<{ key?: string; label?: string; severity?: string }>;
+  };
   coverage?: number | null;
   duplicate_risk_score?: number;
   duplicate_status?: string | null;
