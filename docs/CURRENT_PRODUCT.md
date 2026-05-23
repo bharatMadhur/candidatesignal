@@ -28,6 +28,8 @@ This is the current product reference. It replaces the old running-issues docume
 - Every tenant-owned row must have `tenant_id`.
 - Candidate versioning replaces destructive duplicate merging.
 - Matching candidates by PII/name/company creates version suggestions, not automatic merges.
+- Candidate archive/remove actions are soft deletes from active recruiter workflows; source documents, notes, versions, and audit history remain preserved.
+- Campaign archive/remove actions are soft deletes from active campaign lists; campaign activity is preserved.
 - Contact PII visibility is role-gated and audited.
 - External LLM synthesis over candidate data is tenant opt-in and should redact PII by default.
 
@@ -46,4 +48,5 @@ This is the current product reference. It replaces the old running-issues docume
 - Backend unit tests must pass before deployment.
 - Next.js build must pass before deployment.
 - `npm run smoke` should pass against a running UI.
+- `npm run e2e` should pass public-route checks and should run authenticated recruiter checks when `E2E_COMPANY_EMAIL` and `E2E_COMPANY_PASSWORD` are provided.
 - Tenant isolation, candidate versioning, Copilot filtering, matching, upload, and auth flows need regression coverage when changed.
