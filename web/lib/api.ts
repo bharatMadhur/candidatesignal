@@ -804,6 +804,18 @@ export async function bootstrap(email: string, password: string) {
   return request("/auth/bootstrap", { method: "POST", body: JSON.stringify({ email, password }) });
 }
 
+export async function companySignup(companyName: string, ownerName: string, email: string, password: string): Promise<{ tenant: Tenant; user: CurrentUser }> {
+  return request("/auth/company-signup", {
+    method: "POST",
+    body: JSON.stringify({
+      company_name: companyName,
+      owner_name: ownerName,
+      email,
+      password,
+    }),
+  });
+}
+
 export async function me(token: string) {
   return request("/auth/me", { token });
 }

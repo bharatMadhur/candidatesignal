@@ -5,9 +5,16 @@ const password = process.env.E2E_COMPANY_PASSWORD;
 
 test("public entry keeps login on the homepage and removes legacy login pages", async ({ page }) => {
   await page.goto("/");
+  const loginPanel = page.locator(".loginPanel");
   await expect(page.getByText(/candidateSignal\.ai/i).first()).toBeVisible();
   await expect(page.getByText(/company login|company workspace/i).first()).toBeVisible();
   await expect(page.getByText(/applicant login|applicant portal/i).first()).toBeVisible();
+  await page.getByRole("button", { name: /create a company workspace/i }).click();
+  await expect(page.getByRole("heading", { name: /create company workspace/i })).toBeVisible();
+  await expect(loginPanel.getByLabel(/company name/i)).toBeVisible();
+  await expect(loginPanel.getByLabel(/your name|owner name/i)).toBeVisible();
+  await expect(loginPanel.getByLabel(/work email/i)).toBeVisible();
+  await expect(loginPanel.getByRole("button", { name: /create free workspace/i })).toBeVisible();
   const loginResponse = await page.goto("/login");
   expect(loginResponse?.status()).toBe(404);
   const adminLoginResponse = await page.goto("/admin/login");

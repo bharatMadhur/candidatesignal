@@ -65,6 +65,7 @@ import {
   chatCopilot,
   archiveCopilotThread,
   archiveCampaign,
+  companySignup,
   createCampaign,
   createCampaignRequirement,
   createCandidateRederiveJob,
@@ -276,6 +277,11 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   const [inviteName, setInviteName] = useState("");
   const [invitePassword, setInvitePassword] = useState("");
   const [inviteMode, setInviteMode] = useState(false);
+  const [signupMode, setSignupMode] = useState(false);
+  const [signupCompanyName, setSignupCompanyName] = useState("");
+  const [signupOwnerName, setSignupOwnerName] = useState("");
+  const [signupEmail, setSignupEmail] = useState("");
+  const [signupPassword, setSignupPassword] = useState("");
   const [loginMode, setLoginMode] = useState<"company" | "admin">(initialLoginMode ?? "company");
   const [applicantLoginSelected, setApplicantLoginSelected] = useState(false);
   const [loginError, setLoginError] = useState("");
@@ -298,6 +304,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     if (invite) {
       setInviteToken(invite);
       setInviteMode(true);
+      setSignupMode(false);
       setApplicantLoginSelected(false);
     }
     const saved = window.localStorage.getItem("resume-intel-token");
@@ -703,10 +710,47 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     }
   }
 
+  async function handleCompanySignup() {
+    setBusy(true);
+    setStatus("Creating company workspace...");
+    setLoginError("");
+    try {
+      const normalizedEmail = signupEmail.trim().toLowerCase();
+      await companySignup(signupCompanyName, signupOwnerName, normalizedEmail, signupPassword);
+      setStatus("Workspace created. Signing in...");
+      const result = await signInWithBetterAuth(normalizedEmail, signupPassword);
+      const nextToken = window.localStorage.getItem("resume-intel-token") || result.token || "";
+      if (!nextToken) throw new Error("Login did not return a bearer token");
+      const current = await me(nextToken) as { user: CurrentUser };
+      if (isPlatformAdmin(current.user)) {
+        window.localStorage.removeItem("resume-intel-token");
+        throw new Error("Self-service signup created an invalid admin session.");
+      }
+      window.localStorage.setItem("resume-intel-token", nextToken);
+      setToken(nextToken);
+      setCurrentUser(current.user);
+      setWorkspaceMode("tenant");
+      setSignupMode(false);
+      setView("dashboard");
+      setStatus("Company workspace created");
+      await refresh(nextToken, "tenant");
+    } catch (error) {
+      const message = readableError(error);
+      window.localStorage.removeItem("resume-intel-token");
+      setToken("");
+      setCurrentUser(null);
+      setLoginError(message);
+      setStatus("Signup failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleAcceptInvitation() {
     if (!inviteToken.trim() || !inviteName.trim() || !invitePassword.trim()) return;
     await run("Accepting invite", () => acceptInvitation(inviteToken, inviteName, invitePassword));
     setInviteMode(false);
+    setSignupMode(false);
     setInviteToken("");
     setEmail("");
     setPassword("");
@@ -722,6 +766,8 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     if (lockedLoginMode) return;
     setLoginMode(mode);
     setApplicantLoginSelected(false);
+    setSignupMode(false);
+    setInviteMode(false);
     setEmail("");
     setPassword("");
     setLoginError("");
@@ -1404,8 +1450,11 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     const showLocalDevHelp = process.env.NODE_ENV !== "production";
     const isAdminLogin = loginMode === "admin";
     const showApplicantComingSoon = applicantLoginSelected && !isAdminLogin && !inviteMode;
+    const showCompanySignup = signupMode && !isAdminLogin && !inviteMode && !showApplicantComingSoon;
     const showMergedHome = showPublicHome && !lockedLoginMode && !inviteMode;
-    const canShowPublicLoginTabs = showMergedHome && !inviteMode;
+    const canShowPublicLoginTabs = showMergedHome && !inviteMode && !signupMode;
+    const loginEmailPlaceholder = showLocalDevHelp ? (isAdminLogin ? "admin@example.com" : "recruiter@example.com") : (isAdminLogin ? "owner@candidatesignal.ai" : "name@company.com");
+    const passwordPlaceholder = showLocalDevHelp ? "resume-intel" : "Password";
     const loginPanel = (
         <section className={showMergedHome ? "loginPanel stitchAuthCard" : "loginPanel"}>
           <ShieldCheck size={28} />
@@ -1423,9 +1472,11 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
             </>
           ) : (
             <>
-              <h1>{showApplicantComingSoon ? "Applicant Login" : isAdminLogin ? "Admin Login" : "Company Login"}</h1>
+              <h1>{showCompanySignup ? "Create Company Workspace" : showApplicantComingSoon ? "Applicant Login" : isAdminLogin ? "Admin Login" : "Company Login"}</h1>
               <p>
-                {showApplicantComingSoon
+                {showCompanySignup
+                  ? "Register your company workspace and become the tenant owner. No platform-admin approval is required."
+                  : showApplicantComingSoon
                   ? "Applicant and student access is coming soon."
                   : isAdminLogin
                     ? "Platform owners only. This opens the admin system, not the recruiter app."
@@ -1472,7 +1523,64 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                   <span>{isAdminLogin ? "Create companies, allocate seats, invite company owners." : "Upload resumes, search candidates, run campaigns and matching."}</span>
                 </div>
               )}
-              {showApplicantComingSoon ? (
+              {showCompanySignup ? (
+                <>
+                  <input
+                    value={signupCompanyName}
+                    onChange={(event) => {
+                      setSignupCompanyName(event.target.value);
+                      setLoginError("");
+                    }}
+                    placeholder="Company name"
+                    aria-label="Company name"
+                    autoComplete="organization"
+                  />
+                  <input
+                    value={signupOwnerName}
+                    onChange={(event) => {
+                      setSignupOwnerName(event.target.value);
+                      setLoginError("");
+                    }}
+                    placeholder="Your name"
+                    aria-label="Your name"
+                    autoComplete="name"
+                  />
+                  <input
+                    value={signupEmail}
+                    onChange={(event) => {
+                      setSignupEmail(event.target.value);
+                      setLoginError("");
+                    }}
+                    placeholder="work@email.com"
+                    aria-label="Work email"
+                    autoComplete="username"
+                  />
+                  <input
+                    value={signupPassword}
+                    onChange={(event) => {
+                      setSignupPassword(event.target.value);
+                      setLoginError("");
+                    }}
+                    placeholder="Create password (10+ characters)"
+                    type="password"
+                    aria-label="Create password"
+                    autoComplete="new-password"
+                  />
+                  <button
+                    className="primary"
+                    onClick={handleCompanySignup}
+                    disabled={busy || !signupCompanyName.trim() || !signupOwnerName.trim() || !signupEmail.trim() || signupPassword.length < 10}
+                  >
+                    <Rocket size={16} /> {busy ? "Creating..." : "Create Free Workspace"}
+                  </button>
+                  <div className="loginHelpBox">
+                    <strong>Private company workspace</strong>
+                    <span>Your data is tenant-isolated. Platform admins manage billing and company setup, not candidate databases.</span>
+                  </div>
+                  {loginError ? <div className="loginError">{loginError}</div> : null}
+                  <button className="plain" type="button" onClick={() => setSignupMode(false)} disabled={busy}>Back to company login</button>
+                </>
+              ) : showApplicantComingSoon ? (
                 <div className="applicantComingSoonCard">
                   <Users size={26} />
                   <strong>Applicant portal is coming soon</strong>
@@ -1488,7 +1596,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                       setLoginError("");
                     }}
                     onKeyDown={handleLoginKeyDown}
-                    placeholder={isAdminLogin ? "admin@example.com" : "recruiter@example.com"}
+                    placeholder={loginEmailPlaceholder}
                     aria-label={isAdminLogin ? "Admin email or username" : "Company email or username"}
                     autoComplete="username"
                   />
@@ -1499,7 +1607,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                       setLoginError("");
                     }}
                     onKeyDown={handleLoginKeyDown}
-                    placeholder="resume-intel"
+                    placeholder={passwordPlaceholder}
                     type="password"
                     aria-label="Password"
                     autoComplete="current-password"
@@ -1522,6 +1630,9 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                   </button> : null}
                   {!isAdminLogin ? <button className="plain" onClick={() => setInviteMode(true)} disabled={busy}>
                     Accept invite
+                  </button> : null}
+                  {!isAdminLogin ? <button className="plain" onClick={() => setSignupMode(true)} disabled={busy}>
+                    Create a company workspace
                   </button> : null}
                 </>
               )}
@@ -1546,8 +1657,8 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               <a href="#security">Security</a>
             </nav>
             <div className="stitchNavActions">
-              <button className="plain" type="button" onClick={() => setApplicantLoginSelected(true)}>Applicant Login</button>
-              <button className="primary" type="button" onClick={() => setApplicantLoginSelected(false)}>Company Login</button>
+              <button className="plain" type="button" onClick={() => { setSignupMode(false); setApplicantLoginSelected(true); }}>Applicant Login</button>
+              <button className="primary" type="button" onClick={() => { setSignupMode(false); setApplicantLoginSelected(false); }}>Company Login</button>
             </div>
           </header>
 
@@ -1561,10 +1672,10 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               </h1>
               <p>Built for calm, evidence-backed hiring. Cut through traditional screening noise and discover the real professional signal in your company talent pool without mixing company data.</p>
               <div className="stitchHeroActions">
-                <button className="primary" type="button" onClick={() => setApplicantLoginSelected(false)}>
+                <button className="primary" type="button" onClick={() => { setSignupMode(true); setApplicantLoginSelected(false); }}>
                   <Rocket size={16} /> Get Started
                 </button>
-                <button className="secondary" type="button" onClick={() => setApplicantLoginSelected(true)}>
+                <button className="secondary" type="button" onClick={() => { setSignupMode(false); setApplicantLoginSelected(true); }}>
                   <Users size={16} /> Applicant Portal
                 </button>
               </div>
@@ -1620,7 +1731,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                     <li>Resume database, Copilot search, campaign matching.</li>
                     <li>Member invites, recruiter notes, and privacy controls.</li>
                   </ul>
-                  <button className="primary" type="button" onClick={() => setApplicantLoginSelected(false)}>Company Login</button>
+                  <button className="primary" type="button" onClick={() => { setSignupMode(true); setApplicantLoginSelected(false); }}>Create Free Workspace</button>
                 </article>
                 <article className="pricingCompactPlan soon">
                   <div>
@@ -1707,7 +1818,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
           <section className="stitchFinalCta">
             <h2>Ready to hire with evidence?</h2>
             <p>Start with company access, upload resumes, and turn candidate data into recruiter-ready decisions.</p>
-            <button className="primary" type="button" onClick={() => setApplicantLoginSelected(false)}>Start with Company Login</button>
+            <button className="primary" type="button" onClick={() => { setSignupMode(true); setApplicantLoginSelected(false); }}>Create Free Workspace</button>
           </section>
 
           <footer className="stitchPublicFooter">

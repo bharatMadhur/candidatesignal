@@ -136,6 +136,7 @@ from .tenancy import (
     accept_invitation,
     cancel_invitation,
     create_invitation,
+    create_self_service_company,
     create_tenant,
     create_tenant_with_owner_invitation,
     deactivate_member,
@@ -260,6 +261,13 @@ class AuthRequest(BaseModel):
     password: str
     name: str | None = None
     setup_token: str | None = None
+
+
+class CompanySignupRequest(BaseModel):
+    company_name: str
+    owner_name: str
+    email: str
+    password: str
 
 
 class TenantRequest(BaseModel):
@@ -427,6 +435,16 @@ class LinkedInImportRequest(BaseModel):
 def bootstrap(request: AuthRequest) -> dict:
     user = bootstrap_platform_admin(request.email, request.password, request.name, request.setup_token)
     return {"user": user}
+
+
+@app.post("/auth/company-signup")
+def auth_company_signup(request: CompanySignupRequest) -> dict:
+    return create_self_service_company(
+        company_name=request.company_name,
+        owner_name=request.owner_name,
+        owner_email=request.email,
+        password=request.password,
+    )
 
 
 @app.post("/auth/login")

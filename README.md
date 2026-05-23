@@ -78,7 +78,9 @@ Every company is a tenant. Every business row is tenant-scoped:
 
 V1 assumes one company per user. Recruiters see the full tenant candidate database.
 
-Platform admins create tenants through `/admin/tenants`. Tenant admins manage members through `/team`.
+Companies can now self-register from the public homepage. The signup flow creates an active tenant, a tenant-owner user, and a Better Auth credential account in one transaction, then the UI signs the owner into the company workspace. Set `RESUME_INTEL_SELF_SIGNUP_ENABLED=0` if onboarding should return to invite-only.
+
+Platform admins can still create tenants through `/admin/tenants`. Tenant admins manage members through `/team`.
 
 Platform admin company onboarding:
 
@@ -94,6 +96,7 @@ Platform admin company onboarding:
 Admin endpoints:
 
 ```text
+POST /auth/company-signup
 GET /admin/tenants
 POST /admin/tenants
 GET /admin/tenants/{tenant_id}

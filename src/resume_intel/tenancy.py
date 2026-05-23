@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -9,7 +10,7 @@ from typing import Any
 from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
-from .auth import create_user
+from .auth import create_user, hash_password
 from .db import db
 
 
@@ -74,6 +75,77 @@ def create_tenant(name: str, seat_limit: int, created_by_user_id: str | None) ->
     return _tenant_row(row)
 
 
+def create_self_service_company(
+    *,
+    company_name: str,
+    owner_name: str,
+    owner_email: str,
+    password: str,
+    seat_limit: int | None = None,
+) -> dict[str, Any]:
+    if not _self_signup_enabled():
+        raise HTTPException(status_code=403, detail="company self-signup is disabled")
+    clean_company_name = company_name.strip()
+    clean_owner_name = owner_name.strip()
+    if not clean_owner_name:
+        raise HTTPException(status_code=400, detail="owner name is required")
+    if len(password) < 10:
+        raise HTTPException(status_code=400, detail="password must be at least 10 characters")
+    normalized_email = normalize_email(owner_email)
+    requested_seats = seat_limit if seat_limit is not None else _self_signup_default_seats()
+    validate_tenant_creation_request(clean_company_name, requested_seats, normalized_email, "tenant_owner")
+    with db() as conn:
+        _assert_self_signup_email_available(conn, normalized_email)
+        password_hash = hash_password(password)
+        user_row = conn.execute(
+            """
+            insert into users (email, password_hash, role, name, email_verified, updated_at)
+            values (%s, %s, 'recruiter', %s, false, now())
+            returning id, email, role, name, created_at
+            """,
+            (normalized_email, password_hash, clean_owner_name),
+        ).fetchone()
+        conn.execute(
+            """
+            insert into accounts (user_id, account_id, provider_id, password)
+            values (%s, %s, 'credential', %s)
+            """,
+            (user_row["id"], str(user_row["id"]), password_hash),
+        )
+        tenant_row = _insert_tenant(
+            conn,
+            clean_company_name,
+            requested_seats,
+            str(user_row["id"]),
+            plan="self_service_free",
+            audit_action="tenant.self_signup_created",
+        )
+        conn.execute(
+            """
+            insert into tenant_memberships (tenant_id, user_id, role, status, joined_at)
+            values (%s, %s, 'tenant_owner', 'active', now())
+            """,
+            (tenant_row["id"], user_row["id"]),
+        )
+        conn.execute(
+            """
+            insert into audit_logs (tenant_id, user_id, action, entity_type, entity_id, metadata)
+            values (%s, %s, 'member.self_signup_owner_created', 'user', %s, %s)
+            """,
+            (
+                tenant_row["id"],
+                user_row["id"],
+                str(user_row["id"]),
+                Jsonb({"email": normalized_email, "company_name": clean_company_name}),
+            ),
+        )
+        conn.commit()
+    return {
+        "tenant": _tenant_row(tenant_row),
+        "user": _public_signup_user(user_row, tenant_row),
+    }
+
+
 def create_tenant_with_owner_invitation(
     name: str,
     seat_limit: int,
@@ -106,7 +178,15 @@ def create_tenant_with_owner_invitation(
     return {"tenant": _tenant_row(row), "owner_invitation": owner_invitation}
 
 
-def _insert_tenant(conn: Any, name: str, seat_limit: int, created_by_user_id: str | None) -> Any:
+def _insert_tenant(
+    conn: Any,
+    name: str,
+    seat_limit: int,
+    created_by_user_id: str | None,
+    *,
+    plan: str = "manual",
+    audit_action: str = "tenant.created",
+) -> Any:
     base_slug = slugify(name)
     slug = base_slug
     index = 2
@@ -116,16 +196,54 @@ def _insert_tenant(conn: Any, name: str, seat_limit: int, created_by_user_id: st
     row = conn.execute(
         """
         insert into tenants (name, slug, status, plan, seat_limit, created_by_user_id)
-        values (%s, %s, 'active', 'manual', %s, %s)
+        values (%s, %s, 'active', %s, %s, %s)
         returning id, name, slug, status, plan, seat_limit, created_at, updated_at
         """,
-        (name.strip(), slug, seat_limit, created_by_user_id),
+        (name.strip(), slug, plan, seat_limit, created_by_user_id),
     ).fetchone()
     conn.execute(
         "insert into audit_logs (tenant_id, user_id, action, entity_type, entity_id) values (%s, %s, %s, %s, %s)",
-        (row["id"], created_by_user_id, "tenant.created", "tenant", str(row["id"])),
+        (row["id"], created_by_user_id, audit_action, "tenant", str(row["id"])),
     )
     return row
+
+
+def _assert_self_signup_email_available(conn: Any, normalized_email: str) -> None:
+    existing_user = conn.execute(
+        """
+        select users.role, tenants.name as tenant_name
+        from users
+        left join tenant_memberships on tenant_memberships.user_id = users.id
+          and tenant_memberships.status='active'
+        left join tenants on tenants.id = tenant_memberships.tenant_id
+        where lower(users.email)=lower(%s)
+        limit 1
+        """,
+        (normalized_email,),
+    ).fetchone()
+    if existing_user and _is_platform_role(existing_user["role"]):
+        raise HTTPException(status_code=409, detail="platform admin accounts cannot create company workspaces")
+    if existing_user and existing_user.get("tenant_name"):
+        raise HTTPException(status_code=409, detail=f"user already belongs to company {existing_user['tenant_name']}")
+    if existing_user:
+        raise HTTPException(status_code=409, detail="email is already registered")
+    existing_invitation = conn.execute(
+        """
+        select tenants.name as tenant_name
+        from tenant_invitations
+        join tenants on tenants.id = tenant_invitations.tenant_id
+        where lower(tenant_invitations.email)=lower(%s)
+          and tenant_invitations.status='pending'
+          and tenant_invitations.expires_at > now()
+        limit 1
+        """,
+        (normalized_email,),
+    ).fetchone()
+    if existing_invitation:
+        raise HTTPException(
+            status_code=409,
+            detail=f"pending invitation already exists for company {existing_invitation['tenant_name']}; accept that invite instead",
+        )
 
 
 def _assert_invitee_available(conn: Any, normalized_email: str) -> None:
@@ -722,6 +840,34 @@ def _parse_job_progress(status: str, stage: str) -> int:
 
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _self_signup_enabled() -> bool:
+    return os.getenv("RESUME_INTEL_SELF_SIGNUP_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _self_signup_default_seats() -> int:
+    raw = os.getenv("RESUME_INTEL_SELF_SIGNUP_SEAT_LIMIT", "5").strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        value = 5
+    return max(1, min(value, 50))
+
+
+def _public_signup_user(user_row: Any, tenant_row: Any) -> dict[str, Any]:
+    return {
+        "id": str(user_row["id"]),
+        "email": user_row["email"],
+        "name": user_row.get("name"),
+        "role": "tenant_owner",
+        "platform_role": user_row["role"],
+        "tenant_role": "tenant_owner",
+        "tenant_id": str(tenant_row["id"]),
+        "tenant_name": tenant_row["name"],
+        "workspace_access": "tenant_member",
+        "created_at": user_row["created_at"].isoformat() if user_row.get("created_at") else None,
+    }
 
 
 def _tenant_row(row: Any) -> dict[str, Any]:
