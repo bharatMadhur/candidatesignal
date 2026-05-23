@@ -27,6 +27,7 @@ import {
   CampaignScorecard,
   CandidateMaintenanceJob,
   CandidateSummary,
+  CollaborationComment,
   LinkedInImportJob,
   LinkedInVerificationRun,
   AuditEvent,
@@ -45,6 +46,7 @@ import {
   RequirementMatch,
   RequirementMatchRun,
   RequirementMatchRunChange,
+  RecruiterTask,
   TeamMember,
   Tenant,
   TenantAdminDetail,
@@ -65,11 +67,15 @@ import {
   createCampaign,
   createCampaignRequirement,
   createCandidateRederiveJob,
+  createCollaborationComment,
+  createRecruiterTask,
   createTenant,
   createRequirement,
   createRequirementFromCopilotThread,
   decideCandidateVersion,
+  deleteCollaborationComment,
   deleteCandidate,
+  deleteRecruiterTask,
   getTeam,
   getCampaign,
   getCandidateDocumentHtml,
@@ -97,8 +103,10 @@ import {
   listOperationalAlerts,
   listPiiAccessEvents,
   listCandidateMaintenanceJobs,
+  listCollaborationComments,
   listParseDeadLetters,
   listParseBatches,
+  listRecruiterTasks,
   listRequirements,
   listTenants,
   me,
@@ -124,6 +132,7 @@ import {
   updateCandidateProfile,
   updateCampaignScorecard,
   updateGovernancePolicy,
+  updateRecruiterTask,
   uploadCampaignRequirement,
   verifyLinkedInProfile,
   deleteNote,
@@ -1811,6 +1820,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
             <CandidateDetail
               candidate={candidate}
               token={token}
+              teamMembers={teamMembers}
               reparseBatches={parseBatches}
               noteName={noteName}
               setNoteName={setNoteName}
@@ -1857,6 +1867,8 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
 
           {workspaceMode === "tenant" && view === "campaigns" ? (
             <CampaignsView
+              token={token}
+              teamMembers={teamMembers}
               campaigns={campaigns}
               requirements={requirements}
               campaign={campaign}
@@ -3422,6 +3434,7 @@ function CandidateTable({ candidates, open }: { candidates: CandidateSummary[]; 
 function CandidateDetail({
   candidate,
   token,
+  teamMembers,
   reparseBatches,
   noteName,
   setNoteName,
@@ -3447,6 +3460,7 @@ function CandidateDetail({
 }: {
   candidate: Candidate;
   token: string;
+  teamMembers: TeamMember[];
   reparseBatches: ParseBatch[];
   noteName: string;
   setNoteName: (value: string) => void;
@@ -4010,65 +4024,68 @@ function CandidateDetail({
         ) : null}
 
         {activeTab === "notes" ? (
-          <section className="briefCard recruiterNotesReport polishedNotesReport" id="candidate-notes">
-          <div className="notesComposerHeader">
-            <div>
-              <h3>Recruiter Notes</h3>
-              <p>Notes are saved to the candidate profile and included in search/matching context.</p>
-            </div>
-            <NoteTypeButtons setNoteName={setNoteName} />
-          </div>
-          <input value={noteName} onChange={(event) => setNoteName(event.target.value)} placeholder="Note title" />
-          <textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Write recruiter notes. These become searchable candidate context." />
-          <button className="secondary" type="button" onClick={() => void saveNote()} disabled={!note.trim() || noteSaveState === "saving"}>
-            {noteSaveState === "saving" ? "Saving..." : noteSaveState === "saved" ? "Saved" : "Save Note"}
-          </button>
-          {noteSaveError ? <p className="noteSaveFeedback error">{noteSaveError}</p> : null}
-          {noteSaveState === "saved" ? <p className="noteSaveFeedback success">Recruiter note saved to this candidate.</p> : null}
-          <div className="notes">
-            {(candidate.notes ?? []).map((item, index) => (
-              <article key={`${item.created_at}-${index}`}>
-                {editingNoteId === item.id ? (
-                  <>
-                    <input value={editingNoteName} onChange={(event) => setEditingNoteName(event.target.value)} />
-                    <textarea value={editingNoteContent} onChange={(event) => setEditingNoteContent(event.target.value)} />
-                    <div className="jobActions">
-                      <button className="plain small" type="button" onClick={() => setEditingNoteId("")}>Cancel</button>
-                      <button className="secondary small" type="button" onClick={() => {
-                        if (!item.id) return;
-                        updateSavedNote(item.id, editingNoteName, editingNoteContent);
-                        setEditingNoteId("");
-                      }}>Save</button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <strong>{item.name}</strong>
-                    <p>{item.content}</p>
-                    <span>{item.created_at ? new Date(item.created_at).toLocaleString() : "Saved"}</span>
-                    {item.id ? (
-                      <div className="jobActions">
-                        <button className="plain small" type="button" onClick={() => {
-                          setEditingNoteId(item.id ?? "");
-                          setEditingNoteName(item.name);
-                          setEditingNoteContent(item.content);
-                        }}>Edit</button>
-                        <button
-                          className="plain small danger"
-                          type="button"
-                          disabled={deletingNoteId === item.id}
-                          onClick={() => item.id && deleteSavedNote(item.id)}
-                        >
-                          {deletingNoteId === item.id ? "Deleting..." : "Delete"}
-                        </button>
-                      </div>
-                    ) : null}
-                  </>
-                )}
-              </article>
-            ))}
-          </div>
-        </section>
+          <section className="candidateNotesWorkspace" id="candidate-notes">
+            <article className="briefCard recruiterNotesReport polishedNotesReport">
+              <div className="notesComposerHeader">
+                <div>
+                  <h3>Recruiter Notes</h3>
+                  <p>Notes are saved to the candidate profile and included in search/matching context.</p>
+                </div>
+                <NoteTypeButtons setNoteName={setNoteName} />
+              </div>
+              <input value={noteName} onChange={(event) => setNoteName(event.target.value)} placeholder="Note title" />
+              <textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Write recruiter notes. These become searchable candidate context." />
+              <button className="secondary" type="button" onClick={() => void saveNote()} disabled={!note.trim() || noteSaveState === "saving"}>
+                {noteSaveState === "saving" ? "Saving..." : noteSaveState === "saved" ? "Saved" : "Save Note"}
+              </button>
+              {noteSaveError ? <p className="noteSaveFeedback error">{noteSaveError}</p> : null}
+              {noteSaveState === "saved" ? <p className="noteSaveFeedback success">Recruiter note saved to this candidate.</p> : null}
+              <div className="notes">
+                {(candidate.notes ?? []).map((item, index) => (
+                  <article key={`${item.created_at}-${index}`}>
+                    {editingNoteId === item.id ? (
+                      <>
+                        <input value={editingNoteName} onChange={(event) => setEditingNoteName(event.target.value)} />
+                        <textarea value={editingNoteContent} onChange={(event) => setEditingNoteContent(event.target.value)} />
+                        <div className="jobActions">
+                          <button className="plain small" type="button" onClick={() => setEditingNoteId("")}>Cancel</button>
+                          <button className="secondary small" type="button" onClick={() => {
+                            if (!item.id) return;
+                            updateSavedNote(item.id, editingNoteName, editingNoteContent);
+                            setEditingNoteId("");
+                          }}>Save</button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <strong>{item.name}</strong>
+                        <p>{item.content}</p>
+                        <span>{item.created_at ? new Date(item.created_at).toLocaleString() : "Saved"} | {domainLabel(item.visibility ?? "team")}</span>
+                        {item.id ? (
+                          <div className="jobActions">
+                            <button className="plain small" type="button" onClick={() => {
+                              setEditingNoteId(item.id ?? "");
+                              setEditingNoteName(item.name);
+                              setEditingNoteContent(item.content);
+                            }}>Edit</button>
+                            <button
+                              className="plain small danger"
+                              type="button"
+                              disabled={deletingNoteId === item.id}
+                              onClick={() => item.id && deleteSavedNote(item.id)}
+                            >
+                              {deletingNoteId === item.id ? "Deleting..." : "Delete"}
+                            </button>
+                          </div>
+                        ) : null}
+                      </>
+                    )}
+                  </article>
+                ))}
+              </div>
+            </article>
+            <CollaborationPanel token={token} entityType="candidate" entityId={candidate.document_id} teamMembers={teamMembers} />
+          </section>
         ) : null}
 
         {activeTab === "evidence" ? (
@@ -4724,6 +4741,244 @@ function NoteTypeButtons({ setNoteName }: { setNoteName: (value: string) => void
   );
 }
 
+function CollaborationPanel({
+  token,
+  entityType,
+  entityId,
+  teamMembers,
+  compact = false,
+}: {
+  token: string;
+  entityType: "candidate" | "campaign" | "campaign_candidate";
+  entityId: string;
+  teamMembers: TeamMember[];
+  compact?: boolean;
+}) {
+  const [comments, setComments] = useState<CollaborationComment[]>([]);
+  const [tasks, setTasks] = useState<RecruiterTask[]>([]);
+  const [commentBody, setCommentBody] = useState("");
+  const [commentVisibility, setCommentVisibility] = useState("team");
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskBody, setTaskBody] = useState("");
+  const [taskAssignee, setTaskAssignee] = useState("");
+  const [taskPriority, setTaskPriority] = useState("normal");
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const activeTeamMembers = teamMembers.filter((member) => member.status === "active");
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError("");
+    Promise.all([
+      listCollaborationComments(token, entityType, entityId),
+      listRecruiterTasks(token, { entity_type: entityType, entity_id: entityId }),
+    ])
+      .then(([commentResult, taskResult]) => {
+        if (!active) return;
+        setComments(commentResult.comments);
+        setTasks(taskResult.tasks);
+      })
+      .catch((loadError) => {
+        if (active) setError(readableError(loadError));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [entityId, entityType, token]);
+
+  async function refresh() {
+    const [commentResult, taskResult] = await Promise.all([
+      listCollaborationComments(token, entityType, entityId),
+      listRecruiterTasks(token, { entity_type: entityType, entity_id: entityId }),
+    ]);
+    setComments(commentResult.comments);
+    setTasks(taskResult.tasks);
+  }
+
+  async function addComment() {
+    if (!commentBody.trim() || saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      const result = await createCollaborationComment(token, {
+        entity_type: entityType,
+        entity_id: entityId,
+        body: commentBody,
+        visibility: commentVisibility,
+      });
+      setComments((value) => [...value, result.comment]);
+      setCommentBody("");
+    } catch (commentError) {
+      setError(readableError(commentError));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeComment(commentId: string) {
+    setSaving(true);
+    setError("");
+    try {
+      await deleteCollaborationComment(token, commentId);
+      setComments((value) => value.filter((comment) => comment.id !== commentId));
+    } catch (deleteError) {
+      setError(readableError(deleteError));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function addTask() {
+    if (!taskTitle.trim() || saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      const result = await createRecruiterTask(token, {
+        entity_type: entityType,
+        entity_id: entityId,
+        title: taskTitle,
+        body: taskBody,
+        assignee_user_id: taskAssignee || null,
+        priority: taskPriority,
+      });
+      setTasks((value) => [result.task, ...value]);
+      setTaskTitle("");
+      setTaskBody("");
+      setTaskAssignee("");
+      setTaskPriority("normal");
+    } catch (taskError) {
+      setError(readableError(taskError));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function updateTaskStatus(taskId: string, status: "open" | "in_progress" | "done" | "cancelled") {
+    setSaving(true);
+    setError("");
+    try {
+      const result = await updateRecruiterTask(token, taskId, { status });
+      setTasks((value) => value.map((task) => task.id === taskId ? result.task : task));
+    } catch (taskError) {
+      setError(readableError(taskError));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeTask(taskId: string) {
+    setSaving(true);
+    setError("");
+    try {
+      await deleteRecruiterTask(token, taskId);
+      setTasks((value) => value.filter((task) => task.id !== taskId));
+    } catch (taskError) {
+      setError(readableError(taskError));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const openTasks = tasks.filter((task) => !["done", "cancelled"].includes(task.status));
+  const completedTasks = tasks.filter((task) => task.status === "done");
+
+  return (
+    <section className={compact ? "collaborationPanel compact" : "collaborationPanel"}>
+      <header className="collaborationHeader">
+        <div>
+          <span className="reportLabel">Team Collaboration</span>
+          <h3>Comments & Tasks</h3>
+          <p>Use @email mentions, assign follow-ups, and keep recruiter handoffs tied to this {entityType.replace("_", " ")}.</p>
+        </div>
+        <button className="plain small" type="button" onClick={() => void refresh()} disabled={loading || saving}>
+          {loading ? "Loading..." : "Refresh"}
+        </button>
+      </header>
+      {error ? <p className="noteSaveFeedback error">{error}</p> : null}
+      <div className="collaborationGrid">
+        <article className="collaborationComposer">
+          <strong>Add team comment</strong>
+          <textarea
+            value={commentBody}
+            onChange={(event) => setCommentBody(event.target.value)}
+            placeholder="Example: @recruiter@company.com please verify visa status before client submission."
+          />
+          <div className="collaborationControls">
+            <select value={commentVisibility} onChange={(event) => setCommentVisibility(event.target.value)}>
+              <option value="team">Team visible</option>
+              <option value="private">Private to me</option>
+              <option value="client_ready">Client-ready note</option>
+            </select>
+            <button className="secondary small" type="button" onClick={() => void addComment()} disabled={saving || !commentBody.trim()}>Post</button>
+          </div>
+        </article>
+        <article className="collaborationComposer">
+          <strong>Create follow-up task</strong>
+          <input value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} placeholder="Task title" />
+          <textarea value={taskBody} onChange={(event) => setTaskBody(event.target.value)} placeholder="Context, ask, or next step" />
+          <div className="collaborationControls">
+            <select value={taskAssignee} onChange={(event) => setTaskAssignee(event.target.value)}>
+              <option value="">Unassigned</option>
+              {activeTeamMembers.map((member) => <option key={member.id} value={member.user_id}>{member.email}</option>)}
+            </select>
+            <select value={taskPriority} onChange={(event) => setTaskPriority(event.target.value)}>
+              <option value="normal">Normal</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+              <option value="low">Low</option>
+            </select>
+            <button className="secondary small" type="button" onClick={() => void addTask()} disabled={saving || !taskTitle.trim()}>Create</button>
+          </div>
+        </article>
+      </div>
+      <div className="collaborationLists">
+        <section className="collaborationList">
+          <div className="collaborationListHeader">
+            <strong>Open tasks</strong>
+            <span>{openTasks.length}</span>
+          </div>
+          {openTasks.length ? openTasks.slice(0, compact ? 4 : 8).map((task) => (
+            <article className="collaborationItem task" key={task.id}>
+              <div>
+                <strong>{task.title}</strong>
+                {task.body ? <p>{task.body}</p> : null}
+                <span>{task.assignee_email ? `Assigned to ${task.assignee_email}` : "Unassigned"} | {domainLabel(task.priority)} | {formatDateTime(task.created_at)}</span>
+              </div>
+              <div className="collaborationItemActions">
+                {task.status === "open" ? <button className="plain small" type="button" onClick={() => void updateTaskStatus(task.id, "in_progress")}>Start</button> : null}
+                <button className="secondary small" type="button" onClick={() => void updateTaskStatus(task.id, "done")}>Done</button>
+                <button className="plain small danger" type="button" onClick={() => void removeTask(task.id)}>Delete</button>
+              </div>
+            </article>
+          )) : <p className="muted">No open tasks for this item.</p>}
+          {completedTasks.length ? <span className="collaborationCompleteCount">{completedTasks.length} completed</span> : null}
+        </section>
+        <section className="collaborationList">
+          <div className="collaborationListHeader">
+            <strong>Team comments</strong>
+            <span>{comments.length}</span>
+          </div>
+          {comments.length ? comments.slice(0, compact ? 4 : 10).map((comment) => (
+            <article className="collaborationItem" key={comment.id}>
+              <div>
+                <strong>{comment.user_name || comment.user_email || "Team member"}</strong>
+                <p>{comment.body}</p>
+                <span>{domainLabel(comment.visibility)} | {formatDateTime(comment.created_at)}</span>
+              </div>
+              <button className="plain small danger" type="button" onClick={() => void removeComment(comment.id)}>Delete</button>
+            </article>
+          )) : <p className="muted">No team comments yet.</p>}
+        </section>
+      </div>
+    </section>
+  );
+}
+
 function CandidateVersionRail({
   candidate,
   matches,
@@ -5242,6 +5497,8 @@ function MatchResults({
 }
 
 function CampaignsView({
+  token,
+  teamMembers,
   campaigns,
   requirements,
   campaign,
@@ -5270,6 +5527,8 @@ function CampaignsView({
   setSelectedCandidateId,
   busy,
 }: {
+  token: string;
+  teamMembers: TeamMember[];
   campaigns: JobCampaign[];
   requirements: Requirement[];
   campaign: JobCampaign | null;
@@ -5817,24 +6076,29 @@ function CampaignsView({
             </section>
           ) : null}
 
-          {activeTab === "activity" ? <section className="campaignActivityTimeline">
-            <div className="campaignActivityHead">
-              <span className="eyebrow">Campaign Timeline</span>
-              <strong>{campaignTimeline.length} events</strong>
-            </div>
-            <div>
-              {campaignTimeline.slice(0, 8).map((event) => (
-                <article key={event.id}>
-                  <i />
-                  <div>
-                    <strong>{event.title}</strong>
-                    <span>{event.body}</span>
-                  </div>
-                  <time>{formatDateTime(event.date)}</time>
-                </article>
-              ))}
-            </div>
-          </section> : null}
+          {activeTab === "activity" ? (
+            <section className="campaignActivityWorkspace">
+              <section className="campaignActivityTimeline">
+                <div className="campaignActivityHead">
+                  <span className="eyebrow">Campaign Timeline</span>
+                  <strong>{campaignTimeline.length} events</strong>
+                </div>
+                <div>
+                  {campaignTimeline.slice(0, 8).map((event) => (
+                    <article key={event.id}>
+                      <i />
+                      <div>
+                        <strong>{event.title}</strong>
+                        <span>{event.body}</span>
+                      </div>
+                      <time>{formatDateTime(event.date)}</time>
+                    </article>
+                  ))}
+                </div>
+              </section>
+              <CollaborationPanel token={token} entityType="campaign" entityId={activeCampaign.id} teamMembers={teamMembers} compact />
+            </section>
+          ) : null}
 
           {activeTab === "pipeline" && selectedCandidates.length ? (
             <div className="campaignPipelineFocus">
@@ -6003,6 +6267,7 @@ function CampaignsView({
                             <p>No campaign notes yet. Save one here when this candidate moves through the campaign.</p>
                           )}
                         </div>
+                        <CollaborationPanel token={token} entityType="campaign_candidate" entityId={selectedCampaignCandidate.id} teamMembers={teamMembers} compact />
                       </div>
                     </>
                   ) : (

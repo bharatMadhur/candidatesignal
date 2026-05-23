@@ -332,23 +332,28 @@ def add_note_db(
     content: str,
     tenant_id: str | None = None,
     *,
+    visibility: str = "team",
+    note_type: str = "general",
+    campaign_id: str | None = None,
     reindex_search: bool = True,
 ) -> dict[str, Any]:
     tenant_id = tenant_id or _default_tenant_id()
     record = load_candidate_db(document_id, tenant_id)
     note_name = name.strip() or "HR Note"
     note_content = content.strip()
+    note_visibility = _validated_note_visibility(visibility)
+    note_type = (note_type or "general").strip().lower()[:80] or "general"
     with db() as conn:
         raw_row = conn.execute("select raw_text from candidates where document_id=%s and tenant_id=%s", (document_id, tenant_id)).fetchone()
     raw_text = raw_row["raw_text"] if raw_row else None
     with db() as conn:
         note_row = conn.execute(
             """
-            insert into notes (tenant_id, document_id, user_id, name, content)
-            values (%s, %s, %s, %s, %s)
-            returning id, name, content, created_at, updated_at
+            insert into notes (tenant_id, document_id, user_id, name, content, visibility, note_type, campaign_id)
+            values (%s, %s, %s, %s, %s, %s, %s, %s)
+            returning id, user_id, name, content, visibility, note_type, campaign_id, created_at, updated_at
             """,
-            (tenant_id, document_id, user_id, note_name, note_content),
+            (tenant_id, document_id, user_id, note_name, note_content, note_visibility, note_type, campaign_id),
         ).fetchone()
         conn.commit()
     note = _note_row(note_row)
@@ -381,7 +386,7 @@ def add_note_db(
             "note.created",
             f"Note added: {note_name}",
             note_content[:500],
-            {"note_id": note["id"], "note_name": note_name},
+            {"note_id": note["id"], "note_name": note_name, "visibility": note_visibility, "note_type": note_type, "campaign_id": campaign_id},
         )
         conn.commit()
     if reindex_search:
@@ -397,19 +402,42 @@ def update_note_db(
     content: str,
     tenant_id: str | None = None,
     *,
+    visibility: str = "team",
+    note_type: str = "general",
+    campaign_id: str | None = None,
+    can_manage_any_note: bool = False,
     reindex_search: bool = True,
 ) -> dict[str, Any]:
     tenant_id = tenant_id or _default_tenant_id()
     record = load_candidate_db(document_id, tenant_id)
+    note_visibility = _validated_note_visibility(visibility)
+    note_type = (note_type or "general").strip().lower()[:80] or "general"
     with db() as conn:
         row = conn.execute(
             """
             update notes
-            set name=%s, content=%s, updated_at=now()
+            set name=%s,
+                content=%s,
+                visibility=%s,
+                note_type=%s,
+                campaign_id=%s,
+                updated_at=now()
             where id=%s and document_id=%s and tenant_id=%s and deleted_at is null
-            returning id, name, content, created_at, updated_at
+              and (user_id=%s or %s)
+            returning id, user_id, name, content, visibility, note_type, campaign_id, created_at, updated_at
             """,
-            (name.strip() or "HR Note", content.strip(), note_id, document_id, tenant_id),
+            (
+                name.strip() or "HR Note",
+                content.strip(),
+                note_visibility,
+                note_type,
+                campaign_id,
+                note_id,
+                document_id,
+                tenant_id,
+                user_id,
+                can_manage_any_note,
+            ),
         ).fetchone()
         raw_row = conn.execute("select raw_text from candidates where document_id=%s and tenant_id=%s", (document_id, tenant_id)).fetchone()
         if row:
@@ -441,7 +469,7 @@ def update_note_db(
             "note.updated",
             "Note updated",
             content.strip()[:500],
-            {"note_id": note_id},
+            {"note_id": note_id, "visibility": note_visibility, "note_type": note_type, "campaign_id": campaign_id},
         )
         conn.commit()
     if reindex_search:
@@ -455,6 +483,7 @@ def delete_note_db(
     user_id: str,
     tenant_id: str | None = None,
     *,
+    can_manage_any_note: bool = False,
     reindex_search: bool = True,
 ) -> dict[str, Any]:
     tenant_id = tenant_id or _default_tenant_id()
@@ -465,9 +494,10 @@ def delete_note_db(
             update notes
             set deleted_at=now(), updated_at=now()
             where id=%s and document_id=%s and tenant_id=%s and deleted_at is null
+              and (user_id=%s or %s)
             returning id
             """,
-            (note_id, document_id, tenant_id),
+            (note_id, document_id, tenant_id, user_id, can_manage_any_note),
         ).fetchone()
         raw_row = conn.execute("select raw_text from candidates where document_id=%s and tenant_id=%s", (document_id, tenant_id)).fetchone()
         if row:
@@ -1184,7 +1214,7 @@ def _sync_notes_from_db(record: dict[str, Any], tenant_id: str, document_id: str
     with db() as conn:
         rows = conn.execute(
             """
-            select id, name, content, created_at, updated_at
+            select id, user_id, name, content, visibility, note_type, campaign_id, created_at, updated_at
             from notes
             where tenant_id=%s and document_id=%s and deleted_at is null
             order by created_at
@@ -1192,6 +1222,13 @@ def _sync_notes_from_db(record: dict[str, Any], tenant_id: str, document_id: str
             (tenant_id, document_id),
         ).fetchall()
     record["notes"] = [_note_row(row) for row in rows]
+
+
+def _validated_note_visibility(value: str) -> str:
+    visibility = (value or "team").strip().lower()
+    if visibility not in {"team", "private", "client_ready"}:
+        raise ValueError(f"unsupported note visibility: {value}")
+    return visibility
 
 
 def _upsert_training_data_example(conn: Any, record: dict[str, Any], raw_text: str | None, tenant_id: str, source_type: str) -> None:
@@ -1239,8 +1276,12 @@ def _record_activity_event(
 def _note_row(row: Any) -> dict[str, Any]:
     return {
         "id": str(row["id"]),
+        "user_id": str(row["user_id"]) if row.get("user_id") else None,
         "name": row["name"],
         "content": row["content"],
+        "visibility": row.get("visibility") or "team",
+        "note_type": row.get("note_type") or "general",
+        "campaign_id": str(row["campaign_id"]) if row.get("campaign_id") else None,
         "created_at": row["created_at"].isoformat() if row["created_at"] else None,
         "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
     }

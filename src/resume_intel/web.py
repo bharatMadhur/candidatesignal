@@ -37,6 +37,20 @@ from .campaigns import (
     update_campaign,
     update_campaign_scorecard,
 )
+from .collaboration import (
+    create_comment as create_collaboration_comment,
+    create_task as create_recruiter_task,
+    delete_comment as delete_collaboration_comment,
+    delete_saved_view as delete_workspace_view,
+    delete_task as delete_recruiter_task,
+    list_comments as list_collaboration_comments,
+    list_notifications as list_recruiter_notifications,
+    list_saved_views as list_workspace_views,
+    list_tasks as list_recruiter_tasks,
+    mark_notification_read as mark_recruiter_notification_read,
+    save_workspace_view,
+    update_task as update_recruiter_task,
+)
 from .copilot_synthesis import COPILOT_SYNTHESIS_CANDIDATE_LIMIT, synthesize_copilot_answer
 from .copilot_threads import append_copilot_message, archive_copilot_thread, create_copilot_thread, get_copilot_thread, list_copilot_threads
 from .db import db, migrate
@@ -204,6 +218,9 @@ async def request_logging_middleware(request: Request, call_next):
 class NoteRequest(BaseModel):
     name: str
     content: str
+    visibility: str = "team"
+    note_type: str = "general"
+    campaign_id: str | None = None
 
 
 class CandidateProfileUpdateRequest(BaseModel):
@@ -327,6 +344,42 @@ class CampaignScorecardRequest(BaseModel):
 class CampaignCandidateStatusRequest(BaseModel):
     status: str
     note: str | None = None
+
+
+class CollaborationCommentRequest(BaseModel):
+    entity_type: str
+    entity_id: str
+    body: str
+    visibility: str = "team"
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class RecruiterTaskRequest(BaseModel):
+    entity_type: str
+    entity_id: str
+    title: str
+    body: str | None = None
+    assignee_user_id: str | None = None
+    due_at: str | None = None
+    priority: str = "normal"
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class RecruiterTaskUpdateRequest(BaseModel):
+    title: str | None = None
+    body: str | None = None
+    status: str | None = None
+    assignee_user_id: str | None = None
+    due_at: str | None = None
+    priority: str | None = None
+
+
+class SavedWorkspaceViewRequest(BaseModel):
+    name: str
+    view_type: str
+    query: str | None = None
+    filters: dict[str, Any] = Field(default_factory=dict)
+    visibility: str = "private"
 
 
 class CampaignMatchRequest(BaseModel):
@@ -624,7 +677,7 @@ def candidate(document_id: str, user: dict = Depends(current_user)) -> dict:
             live_matches = find_matches_for_record(raw_record, tenant_id=tenant_id)
             persist_matches(raw_record, live_matches, tenant_id)
             matches = list_matches_for_candidate(document_id, tenant_id)
-        record = public_candidate_record(raw_record, allow_pii=_can_view_pii(user))
+        record = _public_candidate_for_user(raw_record, user)
         record["candidate_versions"] = {"matches": matches}
         record["reviewed_signals"] = reviewed_candidate_signals_db(document_id, tenant_id)
         if _can_view_pii(user):
@@ -654,7 +707,7 @@ def update_candidate_profile(document_id: str, request: CandidateProfileUpdateRe
         persist_matches(record, live_matches, tenant_id)
         matches = list_matches_for_candidate(document_id, tenant_id)
         record["candidate_versions"] = {"matches": matches}
-        public_record = public_candidate_record(record, allow_pii=_can_view_pii(user))
+        public_record = _public_candidate_for_user(record, user)
         public_record["reviewed_signals"] = reviewed_candidate_signals_db(document_id, tenant_id)
         return public_record
     except FileNotFoundError as exc:
@@ -870,11 +923,24 @@ def create_note(
         raise HTTPException(status_code=400, detail="note content is required")
     try:
         tenant_id = _tenant_id(user)
-        record = add_note_db(document_id, user["id"], request.name, request.content, tenant_id, reindex_search=False)
+        record = add_note_db(
+            document_id,
+            user["id"],
+            request.name,
+            request.content,
+            tenant_id,
+            visibility=request.visibility,
+            note_type=request.note_type,
+            campaign_id=request.campaign_id,
+            can_manage_any_note=_can_manage_recruiter_notes(user),
+            reindex_search=False,
+        )
         _schedule_candidate_search_reindex(background_tasks, document_id, tenant_id)
-        return public_candidate_record(record)
+        return _public_candidate_for_user(record, user)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="candidate not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.patch("/candidates/{document_id}/notes/{note_id}")
@@ -890,11 +956,24 @@ def update_note(
         raise HTTPException(status_code=400, detail="note content is required")
     try:
         tenant_id = _tenant_id(user)
-        record = update_note_db(document_id, note_id, user["id"], request.name, request.content, tenant_id, reindex_search=False)
+        record = update_note_db(
+            document_id,
+            note_id,
+            user["id"],
+            request.name,
+            request.content,
+            tenant_id,
+            visibility=request.visibility,
+            note_type=request.note_type,
+            campaign_id=request.campaign_id,
+            reindex_search=False,
+        )
         _schedule_candidate_search_reindex(background_tasks, document_id, tenant_id)
-        return public_candidate_record(record)
+        return _public_candidate_for_user(record, user)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="candidate or note not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.delete("/candidates/{document_id}/notes/{note_id}")
@@ -907,11 +986,193 @@ def delete_note(
     require_tenant_write(user)
     try:
         tenant_id = _tenant_id(user)
-        record = delete_note_db(document_id, note_id, user["id"], tenant_id, reindex_search=False)
+        record = delete_note_db(
+            document_id,
+            note_id,
+            user["id"],
+            tenant_id,
+            can_manage_any_note=_can_manage_recruiter_notes(user),
+            reindex_search=False,
+        )
         _schedule_candidate_search_reindex(background_tasks, document_id, tenant_id)
-        return public_candidate_record(record)
+        return _public_candidate_for_user(record, user)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="candidate or note not found") from exc
+
+
+@app.get("/collaboration/comments")
+def collaboration_comments(
+    entity_type: str = Query(...),
+    entity_id: str = Query(...),
+    user: dict = Depends(current_user),
+) -> dict:
+    try:
+        comments = list_collaboration_comments(_tenant_id(user), user["id"], entity_type, entity_id)
+        return {"comments": comments, "user": user}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="collaboration entity not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/collaboration/comments")
+def collaboration_comment_create(request: CollaborationCommentRequest, user: dict = Depends(current_user)) -> dict:
+    require_tenant_write(user)
+    try:
+        comment = create_collaboration_comment(
+            _tenant_id(user),
+            user["id"],
+            request.entity_type,
+            request.entity_id,
+            request.body,
+            request.visibility,
+            request.metadata,
+        )
+        return {"comment": comment, "user": user}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="collaboration entity not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/collaboration/comments/{comment_id}")
+def collaboration_comment_delete(comment_id: str, user: dict = Depends(current_user)) -> dict:
+    require_tenant_write(user)
+    try:
+        return delete_collaboration_comment(_tenant_id(user), user["id"], comment_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="comment not found") from exc
+
+
+@app.get("/collaboration/tasks")
+def collaboration_tasks(
+    status: str | None = Query(None),
+    assignee: str | None = Query(None),
+    entity_type: str | None = Query(None),
+    entity_id: str | None = Query(None),
+    user: dict = Depends(current_user),
+) -> dict:
+    try:
+        tasks = list_recruiter_tasks(
+            _tenant_id(user),
+            user["id"],
+            status=status,
+            assignee=assignee,
+            entity_type=entity_type,
+            entity_id=entity_id,
+        )
+        return {"tasks": tasks, "user": user}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/collaboration/tasks")
+def collaboration_task_create(request: RecruiterTaskRequest, user: dict = Depends(current_user)) -> dict:
+    require_tenant_write(user)
+    try:
+        task = create_recruiter_task(
+            _tenant_id(user),
+            user["id"],
+            request.entity_type,
+            request.entity_id,
+            request.title,
+            body=request.body,
+            assignee_user_id=request.assignee_user_id,
+            due_at=request.due_at,
+            priority=request.priority,
+            metadata=request.metadata,
+        )
+        return {"task": task, "user": user}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="collaboration entity or assignee not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.patch("/collaboration/tasks/{task_id}")
+def collaboration_task_update(task_id: str, request: RecruiterTaskUpdateRequest, user: dict = Depends(current_user)) -> dict:
+    require_tenant_write(user)
+    try:
+        task = update_recruiter_task(
+            _tenant_id(user),
+            user["id"],
+            task_id,
+            title=request.title,
+            body=request.body,
+            status=request.status,
+            assignee_user_id=request.assignee_user_id,
+            due_at=request.due_at,
+            priority=request.priority,
+        )
+        return {"task": task, "user": user}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="task or assignee not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/collaboration/tasks/{task_id}")
+def collaboration_task_delete(task_id: str, user: dict = Depends(current_user)) -> dict:
+    require_tenant_write(user)
+    try:
+        return delete_recruiter_task(_tenant_id(user), user["id"], task_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="task not found") from exc
+
+
+@app.get("/collaboration/notifications")
+def collaboration_notifications(
+    unread_only: bool = Query(False),
+    limit: int = Query(50),
+    user: dict = Depends(current_user),
+) -> dict:
+    notifications = list_recruiter_notifications(_tenant_id(user), user["id"], unread_only=unread_only, limit=limit)
+    return {"notifications": notifications, "user": user}
+
+
+@app.post("/collaboration/notifications/{notification_id}/read")
+def collaboration_notification_read(notification_id: str, user: dict = Depends(current_user)) -> dict:
+    try:
+        notification = mark_recruiter_notification_read(_tenant_id(user), user["id"], notification_id)
+        return {"notification": notification, "user": user}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="notification not found") from exc
+
+
+@app.get("/collaboration/saved-views")
+def collaboration_saved_views(view_type: str | None = Query(None), user: dict = Depends(current_user)) -> dict:
+    try:
+        views = list_workspace_views(_tenant_id(user), user["id"], view_type=view_type)
+        return {"views": views, "user": user}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/collaboration/saved-views")
+def collaboration_saved_view_create(request: SavedWorkspaceViewRequest, user: dict = Depends(current_user)) -> dict:
+    require_tenant_write(user)
+    try:
+        view = save_workspace_view(
+            _tenant_id(user),
+            user["id"],
+            request.name,
+            request.view_type,
+            query=request.query,
+            filters=request.filters,
+            visibility=request.visibility,
+        )
+        return {"view": view, "user": user}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/collaboration/saved-views/{view_id}")
+def collaboration_saved_view_delete(view_id: str, user: dict = Depends(current_user)) -> dict:
+    require_tenant_write(user)
+    try:
+        return delete_workspace_view(_tenant_id(user), user["id"], view_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="saved view not found") from exc
 
 
 @app.get("/candidates/{document_id}/entity-resolution")
@@ -1648,6 +1909,30 @@ def _auto_batch_name(files: list[UploadFile], *, prefix: str = "Resume upload") 
 def _can_view_pii(user: dict) -> bool:
     tenant_id = user.get("tenant_id")
     return bool(tenant_id and role_can_view_contact_pii(tenant_id, user.get("tenant_role")))
+
+
+def _can_manage_recruiter_notes(user: dict) -> bool:
+    return user.get("tenant_role") in {"tenant_owner", "tenant_admin"}
+
+
+def _public_candidate_for_user(record: dict, user: dict) -> dict:
+    public = public_candidate_record(record, allow_pii=_can_view_pii(user))
+    public["notes"] = _visible_notes_for_user(public.get("notes"), user)
+    return public
+
+
+def _visible_notes_for_user(notes: Any, user: dict) -> list[dict]:
+    if not isinstance(notes, list):
+        return []
+    user_id = str(user.get("id") or "")
+    visible: list[dict] = []
+    for note in notes:
+        if not isinstance(note, dict):
+            continue
+        if note.get("visibility") == "private" and str(note.get("user_id") or "") != user_id:
+            continue
+        visible.append(note)
+    return visible
 
 
 def _redact_summary_pii(item: dict) -> dict:

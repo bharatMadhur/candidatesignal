@@ -12055,6 +12055,158 @@ h3 {
   grid-template-columns: minmax(0, 1fr) minmax(340px, 0.78fr);
 }
 
+.candidateNotesWorkspace,
+.campaignActivityWorkspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.72fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.collaborationPanel {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #e2e8ee;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.035);
+  padding: 14px;
+}
+
+.collaborationPanel.compact {
+  gap: 12px;
+  padding: 12px;
+}
+
+.collaborationHeader,
+.collaborationListHeader,
+.collaborationControls,
+.collaborationItem,
+.collaborationItemActions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.collaborationHeader h3 {
+  margin: 2px 0 4px;
+  color: #182536;
+  font-size: 18px;
+  letter-spacing: -0.03em;
+}
+
+.collaborationHeader p {
+  max-width: 680px;
+  margin: 0;
+  color: #617083;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.collaborationGrid,
+.collaborationLists {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.collaborationPanel.compact .collaborationGrid,
+.collaborationPanel.compact .collaborationLists {
+  grid-template-columns: 1fr;
+}
+
+.collaborationComposer,
+.collaborationList {
+  display: grid;
+  gap: 9px;
+  border: 1px solid #e5ebf0;
+  border-radius: 9px;
+  background: #fbfcfd;
+  padding: 11px;
+}
+
+.collaborationComposer strong,
+.collaborationListHeader strong {
+  color: #243447;
+  font-size: 13px;
+}
+
+.collaborationComposer input,
+.collaborationComposer textarea,
+.collaborationComposer select,
+.collaborationControls select {
+  width: 100%;
+  border: 1px solid #dbe4ec;
+  border-radius: 8px;
+  background: #fff;
+  color: #182536;
+  font-size: 13px;
+  padding: 9px 10px;
+}
+
+.collaborationComposer textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
+.collaborationControls {
+  align-items: center;
+}
+
+.collaborationControls select {
+  min-width: 0;
+}
+
+.collaborationItem {
+  align-items: stretch;
+  border: 1px solid #e5ebf0;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.collaborationItem > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.collaborationItem strong {
+  color: #182536;
+  font-size: 13px;
+}
+
+.collaborationItem p {
+  margin: 0;
+  color: #334155;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.collaborationItem span,
+.collaborationCompleteCount,
+.collaborationListHeader span {
+  color: #66778a;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.collaborationItemActions {
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+@media (max-width: 1280px) {
+  .candidateNotesWorkspace,
+  .campaignActivityWorkspace,
+  .collaborationGrid,
+  .collaborationLists {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 1180px) {
   .candidateCleanHeader,
   .candidateContextRail,

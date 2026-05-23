@@ -149,7 +149,7 @@ export type Candidate = {
     details?: string[];
   }>;
   certifications: string[];
-  notes?: Array<{ id?: string; name: string; content: string; created_at: string; updated_at?: string | null }>;
+  notes?: Array<{ id?: string; user_id?: string | null; name: string; content: string; visibility?: string; note_type?: string; campaign_id?: string | null; created_at: string; updated_at?: string | null }>;
   derived?: any;
   candidate_intelligence?: any;
   llm_hr_intelligence?: any;
@@ -631,6 +631,82 @@ export type CampaignScorecard = {
   score_weights?: Record<string, number>;
 };
 
+export type CollaborationEntityType = "candidate" | "campaign" | "campaign_candidate";
+export type CollaborationComment = {
+  id: string;
+  tenant_id: string;
+  entity_type: CollaborationEntityType | string;
+  entity_id: string;
+  document_id?: string | null;
+  campaign_id?: string | null;
+  campaign_candidate_id?: string | null;
+  user_id?: string | null;
+  user_email?: string | null;
+  user_name?: string | null;
+  body: string;
+  visibility: "team" | "private" | "client_ready" | string;
+  metadata?: any;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type RecruiterTask = {
+  id: string;
+  tenant_id: string;
+  entity_type: CollaborationEntityType | string;
+  entity_id: string;
+  document_id?: string | null;
+  campaign_id?: string | null;
+  campaign_candidate_id?: string | null;
+  title: string;
+  body?: string | null;
+  status: "open" | "in_progress" | "done" | "cancelled" | string;
+  priority: "low" | "normal" | "high" | "urgent" | string;
+  due_at?: string | null;
+  assignee_user_id?: string | null;
+  assignee_email?: string | null;
+  assignee_name?: string | null;
+  created_by_user_id?: string | null;
+  created_by_email?: string | null;
+  created_by_name?: string | null;
+  completed_at?: string | null;
+  metadata?: any;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type RecruiterNotification = {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  actor_user_id?: string | null;
+  actor_email?: string | null;
+  actor_name?: string | null;
+  event_type: string;
+  title: string;
+  body?: string | null;
+  entity_type?: string | null;
+  entity_id?: string | null;
+  metadata?: any;
+  read_at?: string | null;
+  created_at?: string | null;
+};
+
+export type SavedWorkspaceView = {
+  id: string;
+  tenant_id: string;
+  user_id?: string | null;
+  user_email?: string | null;
+  user_name?: string | null;
+  name: string;
+  view_type: string;
+  query?: string | null;
+  filters?: any;
+  visibility: "private" | "team" | string;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 export type WorkerStatus = {
   online: boolean;
   queued_count: number;
@@ -1040,19 +1116,19 @@ export async function reparseCandidate(token: string, id: string, autoStart = tr
   });
 }
 
-export async function addNote(documentId: string, name: string, content: string, token: string): Promise<Candidate> {
+export async function addNote(documentId: string, name: string, content: string, token: string, options: { visibility?: string; note_type?: string; campaign_id?: string | null } = {}): Promise<Candidate> {
   return request(`/candidates/${documentId}/notes`, {
     method: "POST",
     token,
-    body: JSON.stringify({ name, content }),
+    body: JSON.stringify({ name, content, ...options }),
   });
 }
 
-export async function updateNote(documentId: string, noteId: string, name: string, content: string, token: string): Promise<Candidate> {
+export async function updateNote(documentId: string, noteId: string, name: string, content: string, token: string, options: { visibility?: string; note_type?: string; campaign_id?: string | null } = {}): Promise<Candidate> {
   return request(`/candidates/${documentId}/notes/${noteId}`, {
     method: "PATCH",
     token,
-    body: JSON.stringify({ name, content }),
+    body: JSON.stringify({ name, content, ...options }),
   });
 }
 
@@ -1061,6 +1137,83 @@ export async function deleteNote(documentId: string, noteId: string, token: stri
     method: "DELETE",
     token,
   });
+}
+
+export async function listCollaborationComments(token: string, entityType: CollaborationEntityType, entityId: string): Promise<{ comments: CollaborationComment[] }> {
+  return request(`/collaboration/comments?entity_type=${encodeURIComponent(entityType)}&entity_id=${encodeURIComponent(entityId)}`, { token });
+}
+
+export async function createCollaborationComment(token: string, payload: {
+  entity_type: CollaborationEntityType;
+  entity_id: string;
+  body: string;
+  visibility?: "team" | "private" | "client_ready" | string;
+  metadata?: any;
+}): Promise<{ comment: CollaborationComment }> {
+  return request("/collaboration/comments", {
+    method: "POST",
+    token,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteCollaborationComment(token: string, id: string): Promise<{ id: string; deleted: boolean }> {
+  return request(`/collaboration/comments/${id}`, { method: "DELETE", token });
+}
+
+export async function listRecruiterTasks(token: string, params: { status?: string; assignee?: string; entity_type?: CollaborationEntityType; entity_id?: string } = {}): Promise<{ tasks: RecruiterTask[] }> {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value) search.set(key, value);
+  });
+  const suffix = search.toString() ? `?${search.toString()}` : "";
+  return request(`/collaboration/tasks${suffix}`, { token });
+}
+
+export async function createRecruiterTask(token: string, payload: {
+  entity_type: CollaborationEntityType;
+  entity_id: string;
+  title: string;
+  body?: string | null;
+  assignee_user_id?: string | null;
+  due_at?: string | null;
+  priority?: string;
+  metadata?: any;
+}): Promise<{ task: RecruiterTask }> {
+  return request("/collaboration/tasks", { method: "POST", token, body: JSON.stringify(payload) });
+}
+
+export async function updateRecruiterTask(token: string, id: string, payload: Partial<Pick<RecruiterTask, "title" | "body" | "status" | "assignee_user_id" | "due_at" | "priority">>): Promise<{ task: RecruiterTask }> {
+  return request(`/collaboration/tasks/${id}`, { method: "PATCH", token, body: JSON.stringify(payload) });
+}
+
+export async function deleteRecruiterTask(token: string, id: string): Promise<{ id: string; deleted: boolean }> {
+  return request(`/collaboration/tasks/${id}`, { method: "DELETE", token });
+}
+
+export async function listRecruiterNotifications(token: string, params: { unread_only?: boolean; limit?: number } = {}): Promise<{ notifications: RecruiterNotification[] }> {
+  const search = new URLSearchParams();
+  if (params.unread_only) search.set("unread_only", "true");
+  if (params.limit) search.set("limit", String(params.limit));
+  const suffix = search.toString() ? `?${search.toString()}` : "";
+  return request(`/collaboration/notifications${suffix}`, { token });
+}
+
+export async function markRecruiterNotificationRead(token: string, id: string): Promise<{ notification: RecruiterNotification }> {
+  return request(`/collaboration/notifications/${id}/read`, { method: "POST", token });
+}
+
+export async function listSavedWorkspaceViews(token: string, viewType?: string): Promise<{ views: SavedWorkspaceView[] }> {
+  const suffix = viewType ? `?view_type=${encodeURIComponent(viewType)}` : "";
+  return request(`/collaboration/saved-views${suffix}`, { token });
+}
+
+export async function saveWorkspaceView(token: string, payload: { name: string; view_type: string; query?: string | null; filters?: any; visibility?: "private" | "team" | string }): Promise<{ view: SavedWorkspaceView }> {
+  return request("/collaboration/saved-views", { method: "POST", token, body: JSON.stringify(payload) });
+}
+
+export async function deleteSavedWorkspaceView(token: string, id: string): Promise<{ id: string; deleted: boolean }> {
+  return request(`/collaboration/saved-views/${id}`, { method: "DELETE", token });
 }
 
 export async function listRequirements(token: string): Promise<{ requirements: Requirement[] }> {
