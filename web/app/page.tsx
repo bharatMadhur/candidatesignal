@@ -2030,7 +2030,7 @@ function AccountSettingsMenu({
         {setView ? (
           <div className="accountMenuActions">
             {canManageWorkspaceSettings ? <button type="button" onClick={() => setView("team")}><ShieldCheck size={16} /> Team Settings</button> : null}
-            {canManageWorkspaceSettings ? <button type="button" onClick={() => setView("operations")}><AlertTriangle size={16} /> Review Queue</button> : null}
+            {canManageWorkspaceSettings ? <button type="button" onClick={() => setView("operations")}><AlertTriangle size={16} /> Upload Review</button> : null}
             <button type="button" onClick={() => setView("versions")}><GitBranch size={16} /> Candidate Versions</button>
           </div>
         ) : null}
@@ -2093,7 +2093,7 @@ function Dashboard({
     ...(operationalAlertCount ? [{
       title: "Processing items are waiting",
       body: `${operationalAlertCount} processing item${operationalAlertCount === 1 ? "" : "s"} are available for admin review. Recruiters can keep working.`,
-      action: "Open Operations",
+      action: "Open Processing Health",
       label: "Processing review",
       run: () => setView("operations"),
     }] : []),
@@ -3118,7 +3118,7 @@ function OperationsView(props: {
                 </div>
                 <div className="jobActions">
                   <button className="plain small" disabled={props.busy} onClick={() => props.retryJob(item.job_id)}>Retry</button>
-                  <button className="plain small danger" disabled={props.busy} onClick={() => props.resolveDeadLetter(item.id)}>Acknowledge</button>
+                  <button className="plain small danger" disabled={props.busy} onClick={() => props.resolveDeadLetter(item.id)}>Mark reviewed</button>
                 </div>
               </article>
             ))}

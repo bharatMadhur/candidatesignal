@@ -3,7 +3,7 @@ export const WORKSPACE_NAV_LABELS = {
   candidates: "Candidates",
   campaigns: "Campaigns",
   copilot: "Copilot",
-  review: "Review",
+  review: "Upload Review",
   upload: "Upload",
 } as const;
 
