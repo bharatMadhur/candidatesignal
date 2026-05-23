@@ -473,9 +473,19 @@ DELETE /candidates/{id}/notes/{note_id}
 cd web
 npm run build
 npm run smoke
+npm run e2e
 ```
 
 `npm run smoke` expects the Next.js UI to be running and defaults to `http://127.0.0.1:3001`. Override with `SMOKE_BASE_URL=https://your-host`.
+
+`npm run e2e` runs Playwright. The public homepage/legacy-route check always runs. Authenticated recruiter workflow checks are skipped unless these are provided:
+
+```env
+E2E_COMPANY_EMAIL=recruiter@example.com
+E2E_COMPANY_PASSWORD=resume-intel
+```
+
+Use `E2E_BASE_URL=https://your-host` to run the same suite against an already-running local or deployed UI.
 
 Smoke endpoints:
 
