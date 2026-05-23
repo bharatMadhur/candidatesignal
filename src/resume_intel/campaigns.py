@@ -130,6 +130,60 @@ def update_campaign(
     return get_campaign(campaign_id, tenant_id)
 
 
+def soft_delete_campaign(
+    campaign_id: str,
+    tenant_id: str,
+    user_id: str,
+    *,
+    reason: str = "removed_by_recruiter",
+) -> dict[str, Any]:
+    deleted_reason = (reason or "removed_by_recruiter").strip()[:300]
+    with db() as conn:
+        row = conn.execute(
+            """
+            update job_campaigns
+            set deleted_at=coalesce(deleted_at, now()),
+                deleted_by_user_id=coalesce(deleted_by_user_id, %s),
+                deleted_reason=coalesce(nullif(deleted_reason, ''), %s),
+                status=case when status='active' then 'archived' else status end,
+                updated_at=now()
+            where id=%s
+              and tenant_id=%s
+              and deleted_at is null
+            returning id, name, status, deleted_at
+            """,
+            (user_id, deleted_reason, campaign_id, tenant_id),
+        ).fetchone()
+        if not row:
+            existing = conn.execute(
+                "select id from job_campaigns where id=%s and tenant_id=%s",
+                (campaign_id, tenant_id),
+            ).fetchone()
+            if not existing:
+                raise FileNotFoundError(campaign_id)
+            return {"id": campaign_id, "deleted": True, "already_deleted": True}
+        conn.execute(
+            """
+            insert into audit_logs (tenant_id, user_id, action, entity_type, entity_id, metadata)
+            values (%s, %s, 'campaign.deleted', 'job_campaign', %s, %s)
+            """,
+            (
+                tenant_id,
+                user_id,
+                campaign_id,
+                Jsonb({
+                    "reason": deleted_reason,
+                    "name": row["name"],
+                    "status": row["status"],
+                    "deleted_at": row["deleted_at"].isoformat() if row.get("deleted_at") else None,
+                    "soft_delete": True,
+                }),
+            ),
+        )
+        conn.commit()
+    return {"id": campaign_id, "deleted": True, "already_deleted": False}
+
+
 def attach_campaign_requirement(
     campaign_id: str,
     tenant_id: str,
@@ -237,6 +291,7 @@ def list_campaigns(tenant_id: str) -> list[dict[str, Any]]:
             left join campaign_candidates on campaign_candidates.campaign_id = job_campaigns.id
             left join parse_batches on parse_batches.campaign_id = job_campaigns.id
             where job_campaigns.tenant_id=%s
+              and job_campaigns.deleted_at is null
             group by job_campaigns.id, requirements.id, requirements.title, requirements.status,
                      requirements.original_text, requirements.extracted_json,
                      requirements.recruiter_answers, requirements.final_profile
@@ -265,6 +320,7 @@ def get_campaign(campaign_id: str, tenant_id: str) -> dict[str, Any]:
             left join campaign_candidates on campaign_candidates.campaign_id = job_campaigns.id
             left join parse_batches on parse_batches.campaign_id = job_campaigns.id
             where job_campaigns.id=%s and job_campaigns.tenant_id=%s
+              and job_campaigns.deleted_at is null
             group by job_campaigns.id, requirements.id, requirements.title, requirements.status,
                      requirements.original_text, requirements.extracted_json,
                      requirements.recruiter_answers, requirements.final_profile
@@ -278,6 +334,9 @@ def get_campaign(campaign_id: str, tenant_id: str) -> dict[str, Any]:
             join candidates on candidates.document_id = campaign_candidates.candidate_id
               and candidates.tenant_id = campaign_candidates.tenant_id
              and candidates.deleted_at is null
+            join job_campaigns on job_campaigns.id = campaign_candidates.campaign_id
+              and job_campaigns.tenant_id = campaign_candidates.tenant_id
+              and job_campaigns.deleted_at is null
             where campaign_candidates.campaign_id=%s and campaign_candidates.tenant_id=%s
             order by campaign_candidates.score desc, campaign_candidates.updated_at desc
             """,
@@ -452,7 +511,7 @@ def set_campaign_candidate_status(campaign_id: str, candidate_id: str, status: s
             from job_campaigns
             join candidates on candidates.document_id=%s and candidates.tenant_id=job_campaigns.tenant_id
               and candidates.deleted_at is null
-            where job_campaigns.id=%s and job_campaigns.tenant_id=%s
+            where job_campaigns.id=%s and job_campaigns.tenant_id=%s and job_campaigns.deleted_at is null
             on conflict (campaign_id, candidate_id) do update set
               status=excluded.status,
               owner_user_id=%s,
@@ -615,6 +674,7 @@ def _campaign_row(row: dict[str, Any]) -> dict[str, Any]:
         "upload_batch_count": int(row.get("upload_batch_count") or 0),
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
         "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
+        "deleted_at": row["deleted_at"].isoformat() if row.get("deleted_at") else None,
     }
 
 

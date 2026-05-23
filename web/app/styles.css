@@ -362,6 +362,22 @@
   color: #9f2d20;
 }
 
+.candidateHazardAction,
+.plain.candidateHazardAction,
+.campaignDeleteAction {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-color: var(--line) !important;
+  background: var(--surface) !important;
+  color: var(--ink) !important;
+}
+
+.candidateHazardAction svg,
+.campaignDeleteAction svg {
+  color: var(--warn);
+}
+
 .campaignPipelineBoard {
   grid-template-columns: repeat(10, minmax(210px, 1fr));
   overflow-x: auto;
@@ -5191,9 +5207,9 @@ button:disabled {
 }
 
 .currentLocationBadge {
-  border-color: rgba(21, 128, 61, 0.24) !important;
-  background: #f2fbf5 !important;
-  color: #166534 !important;
+  border-color: var(--line) !important;
+  background: var(--surface) !important;
+  color: var(--ink) !important;
 }
 
 .currentLocationBadge.muted {
@@ -5402,9 +5418,9 @@ button:disabled {
 }
 
 .candidateReportBadges .reparseStatusBadge {
-  border-color: var(--primary-mid);
-  background: var(--primary-soft);
-  color: var(--primary);
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--muted);
 }
 
 .candidateReportBadges .factReviewBadge {
@@ -5414,9 +5430,9 @@ button:disabled {
 }
 
 .candidateReportBadges .factVerifiedBadge {
-  border-color: #bbf7d0;
-  background: #f0fdf4;
-  color: #166534;
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--muted);
 }
 
 .candidateReportBadges .versionReviewBadge {
@@ -6212,14 +6228,14 @@ button:disabled {
 }
 
 .linkedinHeaderBadge.verified {
-  border-color: #bbf7d0;
-  background: #f4fbf6;
-  color: #166534;
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--ink);
 }
 
 .linkedinHeaderBadge.verified a,
 .linkedinHeaderBadge.verified b {
-  color: #166534;
+  color: var(--ink);
 }
 
 .statusBadge {

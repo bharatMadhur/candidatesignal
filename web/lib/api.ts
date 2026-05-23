@@ -591,6 +591,7 @@ export type JobCampaign = {
   matches?: RequirementMatch[];
   created_at?: string | null;
   updated_at?: string | null;
+  deleted_at?: string | null;
 };
 
 export type CampaignScorecard = {
@@ -883,6 +884,14 @@ export async function updateCampaign(token: string, id: string, payload: { name?
     method: "PATCH",
     token,
     body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteCampaign(token: string, id: string, reason = "removed_by_recruiter"): Promise<{ id: string; deleted: boolean; already_deleted?: boolean }> {
+  return request(`/campaigns/${id}`, {
+    method: "DELETE",
+    token,
+    body: JSON.stringify({ reason }),
   });
 }
 

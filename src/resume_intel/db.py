@@ -336,6 +336,9 @@ def migrate() -> None:
               name text not null,
               description text not null default '',
               status text not null default 'active',
+              deleted_at timestamptz,
+              deleted_by_user_id uuid references users(id) on delete set null,
+              deleted_reason text,
               created_at timestamptz not null default now(),
               updated_at timestamptz not null default now()
             );
@@ -823,6 +826,7 @@ def migrate() -> None:
         conn.execute("create index if not exists copilot_threads_tenant_idx on copilot_threads (tenant_id, status, updated_at desc);")
         conn.execute("create index if not exists copilot_messages_thread_idx on copilot_messages (tenant_id, thread_id, created_at);")
         conn.execute("create index if not exists job_campaigns_tenant_idx on job_campaigns (tenant_id, updated_at desc);")
+        conn.execute("create index if not exists job_campaigns_active_tenant_idx on job_campaigns (tenant_id, updated_at desc) where deleted_at is null;")
         conn.execute("create index if not exists campaign_candidates_campaign_idx on campaign_candidates (tenant_id, campaign_id, score desc);")
         conn.execute("create index if not exists parse_worker_seen_idx on parse_worker_heartbeats (tenant_id, last_seen_at desc);")
         conn.execute("create index if not exists memberships_user_idx on tenant_memberships (user_id, status);")

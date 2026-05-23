@@ -19,6 +19,9 @@ class _Result:
     def fetchone(self) -> dict[str, Any] | None:
         return self.row
 
+    def fetchall(self) -> list[dict[str, Any]]:
+        return [] if self.row is None else [self.row]
+
 
 class _FakeConnection:
     def __init__(self, campaign_candidate_row: dict[str, Any] | None) -> None:
@@ -45,6 +48,21 @@ class _FakeDb:
 
     def __exit__(self, *args: object) -> None:
         return None
+
+
+class _CampaignDeleteConnection(_FakeConnection):
+    def __init__(self, update_row: dict[str, Any] | None, exists_row: dict[str, Any] | None = None) -> None:
+        super().__init__(None)
+        self.update_row = update_row
+        self.exists_row = exists_row
+
+    def execute(self, sql: str, params: tuple[Any, ...] = ()) -> _Result:
+        self.executed.append((sql, params))
+        if "update job_campaigns" in sql and "deleted_at=coalesce" in sql:
+            return _Result(self.update_row)
+        if "select id from job_campaigns" in sql:
+            return _Result(self.exists_row)
+        return _Result()
 
 
 class CampaignCandidateStatusTests(unittest.TestCase):
@@ -201,6 +219,38 @@ class CampaignCandidateStatusTests(unittest.TestCase):
         self.assertEqual(result["matches"], [])
         self.assertEqual(result["match_mode"], "incremental")
         self.assertEqual(connection.executed, [])
+
+    def test_campaign_delete_is_soft_delete_with_audit_log(self) -> None:
+        connection = _CampaignDeleteConnection(
+            {
+                "id": "campaign-1",
+                "name": "Data Engineer",
+                "status": "archived",
+                "deleted_at": None,
+            }
+        )
+        campaigns.db = lambda: _FakeDb(connection)
+
+        result = campaigns.soft_delete_campaign("campaign-1", "tenant-1", "user-1", reason="duplicate campaign")
+
+        self.assertTrue(result["deleted"])
+        self.assertFalse(result["already_deleted"])
+        update_sql, update_params = connection.executed[0]
+        self.assertIn("deleted_at=coalesce(deleted_at, now())", update_sql)
+        self.assertIn("tenant_id=%s", update_sql)
+        self.assertIn("deleted_at is null", update_sql)
+        self.assertEqual(update_params[:2], ("user-1", "duplicate campaign"))
+        self.assertTrue(any("campaign.deleted" in sql for sql, _params in connection.executed))
+        self.assertTrue(connection.committed)
+
+    def test_campaign_delete_is_idempotent_when_already_deleted(self) -> None:
+        connection = _CampaignDeleteConnection(None, {"id": "campaign-1"})
+        campaigns.db = lambda: _FakeDb(connection)
+
+        result = campaigns.soft_delete_campaign("campaign-1", "tenant-1", "user-1")
+
+        self.assertTrue(result["deleted"])
+        self.assertTrue(result["already_deleted"])
 
 
 if __name__ == "__main__":

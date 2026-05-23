@@ -71,6 +71,7 @@ import {
   createRequirementFromCopilotThread,
   decideCandidateVersion,
   deleteCandidate,
+  deleteCampaign,
   getTeam,
   getCampaign,
   getCandidateDocumentHtml,
@@ -1098,6 +1099,28 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     setCampaigns((items) => items.map((item) => item.id === result.id ? result : item));
   }
 
+  async function handleDeleteCampaign(id: string) {
+    if (!id || !token) return;
+    const campaignToDelete = campaigns.find((item) => item.id === id) ?? campaign;
+    const typed = window.prompt(`Soft delete "${campaignToDelete?.name ?? "this campaign"}"? Type delete to confirm.`);
+    if (typed !== "delete") {
+      setStatus("Campaign delete cancelled. Type delete exactly to confirm.");
+      return;
+    }
+    const result = await run("Deleting campaign", () => deleteCampaign(token, id));
+    if (!result?.deleted) return;
+    const remaining = campaigns.filter((item) => item.id !== id);
+    setCampaigns(remaining);
+    if (campaign?.id === id) {
+      setCampaign(null);
+      setCampaignSelectedCandidateId("");
+      if (remaining[0]?.id) {
+        await handleOpenCampaign(remaining[0].id);
+      }
+    }
+    setStatus("Campaign soft-deleted. History is preserved, but it is removed from the workspace list.");
+  }
+
   async function handleCreateCampaignRequirement(id: string, text: string) {
     if (!id || !token || !text.trim()) return;
     const result = await run("Extracting campaign requirement", () => createCampaignRequirement(token, id, text));
@@ -1843,6 +1866,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               createCampaign={handleCreateCampaign}
               openCampaign={handleOpenCampaign}
               updateCampaign={handleUpdateCampaign}
+              deleteCampaign={handleDeleteCampaign}
               createRequirement={handleCreateCampaignRequirement}
               uploadRequirement={handleUploadCampaignRequirement}
               saveScorecard={handleSaveCampaignScorecard}
@@ -3712,7 +3736,7 @@ function CandidateDetail({
           <button className="plain" type="button" onClick={() => setActiveTab("notes")}>Recruiter Notes</button>
           {canReparse ? <button className="plain" type="button" onClick={() => reparseCandidate(candidate.document_id)}>Reparse CV</button> : null}
           {roleFactNeedsReview ? <button className="plain" type="button" onClick={() => markReviewSignal("role_fact_review")}>Mark role reviewed</button> : null}
-          <button className="plain danger" type="button" onClick={() => deleteCandidate(candidate.document_id)}>Remove Upload</button>
+          <button className="plain candidateHazardAction" type="button" onClick={() => deleteCandidate(candidate.document_id)}><AlertTriangle size={14} /> Remove Upload</button>
           <button className="primary" type="button" onClick={match}>Match to Role</button>
         </section>
       </header>
@@ -3730,7 +3754,7 @@ function CandidateDetail({
           </div>
           <button className="plain" onClick={() => setShowCorrectionPanel((value) => !value)}>Edit extracted fields</button>
           <button className="plain" onClick={() => markReviewSignal("low_coverage")}>Mark reviewed</button>
-          <button className="plain danger" onClick={() => deleteCandidate(candidate.document_id)}>Remove from database</button>
+          <button className="plain candidateHazardAction" onClick={() => deleteCandidate(candidate.document_id)}><AlertTriangle size={14} /> Remove from database</button>
         </article>
       ) : null}
       {showCorrectionPanel ? (
@@ -5313,6 +5337,7 @@ function CampaignsView({
   createCampaign,
   openCampaign,
   updateCampaign,
+  deleteCampaign,
   createRequirement,
   uploadRequirement,
   saveScorecard,
@@ -5340,6 +5365,7 @@ function CampaignsView({
   createCampaign: () => void;
   openCampaign: (id: string) => void;
   updateCampaign: (id: string, payload: { name?: string; description?: string; status?: string; requirement_id?: string | null; unlink_requirement?: boolean }) => void;
+  deleteCampaign: (id: string) => void;
   createRequirement: (id: string, text: string) => void;
   uploadRequirement: (id: string, file: File) => void;
   saveScorecard: (id: string, scorecard: CampaignScorecard) => void;
@@ -5573,6 +5599,7 @@ function CampaignsView({
                 ) : (
                   <button className="plain" type="button" onClick={() => setCampaignLifecycle("closed")} disabled={busy}>Finish Campaign</button>
                 )}
+                <button className="plain campaignDeleteAction" type="button" onClick={() => deleteCampaign(activeCampaign.id)} disabled={busy}><AlertTriangle size={14} /> Delete</button>
                 <button className="secondary" onClick={() => setActiveTab("uploads")} disabled={campaignClosed}>Upload Resumes</button>
                 <button className="primary" onClick={() => matchCampaign(activeCampaign.id)} disabled={busy || campaignClosed || !activeCampaign.requirement_id}>{RECRUITER_COPY.matchingButton}</button>
               </div>

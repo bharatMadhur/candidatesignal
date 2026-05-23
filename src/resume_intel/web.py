@@ -32,6 +32,7 @@ from .campaigns import (
     list_campaigns,
     run_campaign_match,
     set_campaign_candidate_status,
+    soft_delete_campaign,
     update_campaign,
     update_campaign_scorecard,
 )
@@ -286,6 +287,10 @@ class CampaignUpdateRequest(BaseModel):
     status: str | None = None
     requirement_id: str | None = None
     unlink_requirement: bool = False
+
+
+class CampaignDeleteRequest(BaseModel):
+    reason: str = "removed_by_recruiter"
 
 
 class CampaignRequirementTextRequest(BaseModel):
@@ -1161,6 +1166,20 @@ def job_campaign(campaign_id: str, user: dict = Depends(current_user)) -> dict:
         if not _can_view_pii(user):
             campaign = _redact_campaign_pii(campaign)
         return campaign
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="campaign not found") from exc
+
+
+@app.delete("/campaigns/{campaign_id}")
+def delete_job_campaign(campaign_id: str, request: CampaignDeleteRequest | None = None, user: dict = Depends(current_user)) -> dict:
+    require_tenant_write(user)
+    try:
+        return soft_delete_campaign(
+            campaign_id,
+            _tenant_id(user),
+            user["id"],
+            reason=(request.reason if request else "removed_by_recruiter"),
+        )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="campaign not found") from exc
 
