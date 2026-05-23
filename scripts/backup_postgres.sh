@@ -10,7 +10,7 @@ BACKUP_DIR="${BACKUP_DIR:-backups}"
 mkdir -p "$BACKUP_DIR"
 
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-TARGET="$BACKUP_DIR/candidatSignal_${STAMP}.dump"
+TARGET="$BACKUP_DIR/candidateSignal_${STAMP}.dump"
 
 pg_dump "$DATABASE_URL" --format=custom --no-owner --no-acl --file "$TARGET"
 echo "$TARGET"
