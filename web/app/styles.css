@@ -3579,6 +3579,7 @@ a:focus {
 
 .savedThreadsDrawer {
   display: grid;
+  min-height: 0;
   gap: 10px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -3609,7 +3610,7 @@ a:focus {
 }
 
 .savedThreadsDrawer .threadList {
-  max-height: min(300px, 34vh);
+  max-height: clamp(150px, 24vh, 240px);
   margin-top: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -3625,12 +3626,12 @@ a:focus {
 .threadList article {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 6px;
+  gap: 5px;
   align-items: center;
   border: 1px solid var(--soft-line);
   border-radius: 8px;
   background: var(--surface-low);
-  padding: 6px 7px;
+  padding: 5px 6px;
 }
 
 .threadList article.active {
@@ -3670,8 +3671,8 @@ a:focus {
 }
 
 .threadActions .tiny {
-  min-height: 24px;
-  padding: 0 6px;
+  min-height: 22px;
+  padding: 0 5px;
   font-size: 10px;
 }
 
