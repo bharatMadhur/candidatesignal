@@ -3,6 +3,33 @@ from __future__ import annotations
 from resume_intel import vector_search
 
 
+class _Result:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def fetchall(self):
+        return self.rows
+
+
+class _SearchConnection:
+    def __init__(self, responses):
+        self.responses = list(responses)
+
+    def execute(self, *_args, **_kwargs):
+        return _Result(self.responses.pop(0))
+
+
+class _SearchDb:
+    def __init__(self, connection):
+        self.connection = connection
+
+    def __enter__(self):
+        return self.connection
+
+    def __exit__(self, *_args):
+        return None
+
+
 def test_candidate_search_returns_exact_name_matches_without_semantic_noise(monkeypatch):
     exact = [{"document_id": "shubh-1", "name": "Shubh Almal", "search_match_type": "exact"}]
     semantic_called = False
@@ -68,3 +95,34 @@ def test_semantic_scores_collapse_confirmed_resume_versions(monkeypatch):
     assert list(result) == ["new-doc"]
     assert result["new-doc"]["semantic_score"] == 0.91
     assert result["new-doc"]["version_source_document_id"] == "old-doc"
+
+
+def test_exact_search_returns_canonical_candidate_when_old_version_matches(monkeypatch):
+    old_row = {
+        "document_id": "old-doc",
+        "name": "Candidate Old",
+        "email": "old@example.com",
+        "phone": None,
+        "source_file": "legacy-spark-resume.pdf",
+        "record_json": {"original_filename": "legacy-spark-resume.pdf", "derived": {"hr_profile": {}}},
+        "updated_at": None,
+    }
+    new_row = {
+        "document_id": "new-doc",
+        "name": "Candidate New",
+        "email": "new@example.com",
+        "phone": None,
+        "source_file": "current-resume.pdf",
+        "record_json": {"original_filename": "current-resume.pdf", "derived": {"hr_profile": {}}},
+        "updated_at": None,
+    }
+    connection = _SearchConnection([[old_row], [new_row]])
+    monkeypatch.setattr(vector_search, "db", lambda: _SearchDb(connection))
+    monkeypatch.setattr(vector_search, "canonical_candidate_map", lambda tenant_id: {"old-doc": "new-doc"})
+
+    result = vector_search.exact_candidate_search("legacy-spark", tenant_id="tenant-1")
+
+    assert len(result) == 1
+    assert result[0]["document_id"] == "new-doc"
+    assert result[0]["version_source_document_id"] == "old-doc"
+    assert result[0]["evidence"][0]["source_label"] == "Exact candidate identity/version match"

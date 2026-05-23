@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .candidate_versions import canonical_candidate_map, hidden_version_document_ids
+from .candidate_versions import canonical_candidate_map
 from .db import db
 from .geo import candidate_current_location, countries_for_search
 from .settings import load_settings
@@ -405,11 +405,36 @@ def exact_candidate_search(query_text: str, limit: int = 25, tenant_id: str | No
             """,
             [tenant_id, tenant_id, *params, max(limit * 4, 50)],
         ).fetchall()
-    hidden_version_ids = hidden_version_document_ids(tenant_id) if tenant_id else set()
-    ranked = sorted((row for row in rows if str(row["document_id"]) not in hidden_version_ids), key=lambda row: _exact_match_rank(row, normalized), reverse=True)
+    canonical_map = canonical_candidate_map(tenant_id) if tenant_id else {}
+    ranked = sorted(rows, key=lambda row: _exact_match_rank(row, normalized), reverse=True)
+    canonical_ids = list(dict.fromkeys(canonical_map.get(str(row["document_id"]), str(row["document_id"])) for row in ranked))[:limit]
+    canonical_rows_by_id = {str(row["document_id"]): row for row in rows}
+    missing_canonical_ids = [document_id for document_id in canonical_ids if document_id not in canonical_rows_by_id]
+    if missing_canonical_ids:
+        with db() as conn:
+            canonical_rows = conn.execute(
+                """
+                select document_id, name, email, phone, source_file, record_json, updated_at
+                from candidates
+                where document_id = any(%s::text[])
+                  and (%s::uuid is null or tenant_id=%s)
+                  and deleted_at is null
+                """,
+                (missing_canonical_ids, tenant_id, tenant_id),
+            ).fetchall()
+        canonical_rows_by_id.update({str(row["document_id"]): row for row in canonical_rows})
     results: list[dict[str, Any]] = []
-    for row in ranked[:limit]:
-        match_rank, match_field = _exact_match_rank(row, normalized)
+    seen_canonical_ids: set[str] = set()
+    for source_row in ranked:
+        source_document_id = str(source_row["document_id"])
+        canonical_id = canonical_map.get(source_document_id, source_document_id)
+        if canonical_id in seen_canonical_ids:
+            continue
+        row = canonical_rows_by_id.get(canonical_id)
+        if not row:
+            continue
+        seen_canonical_ids.add(canonical_id)
+        match_rank, match_field = _exact_match_rank(source_row, normalized)
         results.append(
             _candidate_summary(
                 row,
@@ -419,18 +444,21 @@ def exact_candidate_search(query_text: str, limit: int = 25, tenant_id: str | No
                     "evidence": [
                         {
                             "chunk_type": match_field,
-                            "source_label": "Exact candidate identity match",
+                            "source_label": "Exact candidate identity/version match" if canonical_id != source_document_id else "Exact candidate identity match",
                             "page_number": None,
-                            "snippet": _exact_match_snippet(row, match_field),
+                            "snippet": _exact_match_snippet(source_row, match_field),
                             "embedding_model": "exact",
                         }
                     ],
                     "search_match_type": "exact",
                     "search_match_field": match_field,
                     "search_match_score": match_rank,
+                    "version_source_document_id": source_document_id if canonical_id != source_document_id else None,
                 },
             )
         )
+        if len(results) >= limit:
+            break
     return results
 
 
