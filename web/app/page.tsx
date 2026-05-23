@@ -3491,6 +3491,7 @@ function CandidateDetail({
   const [linkedinVerifyState, setLinkedinVerifyState] = useState<"idle" | "running" | "done" | "error">("idle");
   const [linkedinVerifyError, setLinkedinVerifyError] = useState("");
   const [correctionForm, setCorrectionForm] = useState<CandidateCorrectionForm>(() => candidateCorrectionForm(candidate));
+  const reportTopRef = useRef<HTMLElement | null>(null);
   const intelligence = candidate.candidate_intelligence;
   const finalProfile = intelligence?.final_candidate_profile;
   const recruiterDashboard = intelligence?.hr_intelligence?.recruiter_dashboard;
@@ -3713,6 +3714,13 @@ function CandidateDetail({
     setShowCorrectionPanel(false);
   }
 
+  function selectCandidateTab(tab: CandidateDetailTab) {
+    setActiveTab(tab);
+    window.requestAnimationFrame(() => {
+      reportTopRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+    });
+  }
+
   async function verifyLinkedIn() {
     const targetUrl = linkedinUrlDraft.trim() || primaryLinkedIn || "";
     setLinkedinVerifyState("running");
@@ -3791,8 +3799,8 @@ function CandidateDetail({
         </section>
         <section className="candidateCleanActions">
           <button className="plain" type="button" onClick={() => copyCurrentUrl()}>Copy Link</button>
-          <button className="plain" type="button" onClick={() => setActiveTab("cv")}>View CV</button>
-          <button className="plain" type="button" onClick={() => setActiveTab("notes")}>Recruiter Notes</button>
+          <button className="plain" type="button" onClick={() => selectCandidateTab("cv")}>View CV</button>
+          <button className="plain" type="button" onClick={() => selectCandidateTab("notes")}>Recruiter Notes</button>
           {canReparse ? <button className="plain" type="button" onClick={() => reparseCandidate(candidate.document_id)}>Reparse CV</button> : null}
           {roleFactNeedsReview ? <button className="plain" type="button" onClick={() => markReviewSignal("role_fact_review")}>Mark role reviewed</button> : null}
           {profileFreshnessNeedsReview ? <button className="plain" type="button" onClick={() => markReviewSignal("profile_freshness_review")}>Mark freshness reviewed</button> : null}
@@ -3826,22 +3834,22 @@ function CandidateDetail({
         />
       ) : null}
 
-      <main className="candidateReportMain candidateCleanMainShell">
+      <main ref={reportTopRef} className="candidateReportMain candidateCleanMainShell">
         <header className="candidateBriefHeader">
           <div>
             <h2>{activeTab === "overview" ? "Overview" : candidateTabs.find((tab) => tab.id === activeTab)?.label}</h2>
             <p>{RECRUITER_COPY.candidateReportSubtitle}</p>
           </div>
           <div>
-              <button className="plain" type="button" onClick={() => setActiveTab("evidence")}>Source Evidence</button>
+              <button className="plain" type="button" onClick={() => selectCandidateTab("evidence")}>Source Evidence</button>
               <button className="plain" type="button" onClick={() => setShowCorrectionPanel((value) => !value)}>Edit Extracted Data</button>
-              <button className="plain" type="button" onClick={() => setActiveTab("notes")}>Add Note</button>
+              <button className="plain" type="button" onClick={() => selectCandidateTab("notes")}>Add Note</button>
             </div>
         </header>
 
         <nav className="candidateReportTabs" aria-label="Candidate detail sections">
           {candidateTabs.map((tab) => (
-            <button key={tab.id} className={activeTab === tab.id ? "active" : ""} type="button" onClick={() => setActiveTab(tab.id)}>
+            <button key={tab.id} className={activeTab === tab.id ? "active" : ""} type="button" onClick={() => selectCandidateTab(tab.id)}>
               {tab.label}
             </button>
           ))}
@@ -4176,7 +4184,7 @@ function CandidateDetail({
                   <span className="reportLabel">Recruiter Context</span>
                   <h3>Notes</h3>
                 </div>
-                <button className="plain small" type="button" onClick={() => setActiveTab("notes")}>All Notes</button>
+                <button className="plain small" type="button" onClick={() => selectCandidateTab("notes")}>All Notes</button>
               </div>
               <NoteTypeButtons setNoteName={setNoteName} />
               <input value={noteName} onChange={(event) => setNoteName(event.target.value)} placeholder="Note title" />
@@ -4198,7 +4206,7 @@ function CandidateDetail({
                           setEditingNoteId(item.id ?? "");
                           setEditingNoteName(item.name);
                           setEditingNoteContent(item.content);
-                          setActiveTab("notes");
+                          selectCandidateTab("notes");
                         }}>Edit</button>
                         <button
                           className="plain small danger"
@@ -4220,7 +4228,7 @@ function CandidateDetail({
               <h3>Next Action</h3>
               <div>
                 <button className="primary" onClick={match}>Match to Role</button>
-                <button className="plain" onClick={() => setActiveTab("cv")}>View Resume</button>
+                <button className="plain" onClick={() => selectCandidateTab("cv")}>View Resume</button>
                 <button className="plain" onClick={() => setShowCorrectionPanel((value) => !value)}>Edit Fields</button>
               </div>
             </article>
@@ -4293,7 +4301,7 @@ function CandidateDetail({
               <article className="briefCard candidateRailVersions">
                 <div className="railCardHeader">
                   <h3>Versions</h3>
-                  <button className="plain small" type="button" onClick={() => setActiveTab("versions")}>Review</button>
+                  <button className="plain small" type="button" onClick={() => selectCandidateTab("versions")}>Review</button>
                 </div>
                 <p>{versionSummary.railText}</p>
                 <button className="plain small" type="button" onClick={openCandidateVersions}>Open Candidate Versions</button>
