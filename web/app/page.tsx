@@ -853,8 +853,8 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
 
   async function handleDeleteCandidate(documentId: string) {
     if (!token) return;
-    if (!window.confirm("Remove this upload from the active candidate database? The stored file and audit history are preserved, but this profile will no longer appear in search or campaigns.")) return;
-    await run("Removing candidate from active database", () => deleteCandidate(token, documentId, "removed_bad_or_wrong_upload"));
+    if (!window.confirm("Archive this upload from the active candidate database? The stored file, notes, versions, and audit history are preserved, but this profile will no longer appear in search or campaigns.")) return;
+    await run("Archiving candidate from active database", () => deleteCandidate(token, documentId, "removed_bad_or_wrong_upload"));
     setCandidate(null);
     setView("database");
     await refresh();
@@ -3804,7 +3804,7 @@ function CandidateDetail({
           {canReparse ? <button className="plain" type="button" onClick={() => reparseCandidate(candidate.document_id)}>Reparse CV</button> : null}
           {roleFactNeedsReview ? <button className="plain" type="button" onClick={() => markReviewSignal("role_fact_review")}>Mark role reviewed</button> : null}
           {profileFreshnessNeedsReview ? <button className="plain" type="button" onClick={() => markReviewSignal("profile_freshness_review")}>Mark freshness reviewed</button> : null}
-          <button className="plain candidateHazardAction" type="button" onClick={() => deleteCandidate(candidate.document_id)}><AlertTriangle size={14} /> Remove Upload</button>
+          <button className="plain candidateHazardAction" type="button" onClick={() => deleteCandidate(candidate.document_id)}><AlertTriangle size={14} /> Archive Upload</button>
           <button className="primary" type="button" onClick={match}>Match to Role</button>
         </section>
       </header>
@@ -3822,7 +3822,7 @@ function CandidateDetail({
           </div>
           <button className="plain" onClick={() => setShowCorrectionPanel((value) => !value)}>Edit extracted fields</button>
           <button className="plain" onClick={() => markReviewSignal("low_coverage")}>Mark reviewed</button>
-          <button className="plain candidateHazardAction" onClick={() => deleteCandidate(candidate.document_id)}><AlertTriangle size={14} /> Remove from database</button>
+          <button className="plain candidateHazardAction" onClick={() => deleteCandidate(candidate.document_id)}><AlertTriangle size={14} /> Archive from active database</button>
         </article>
       ) : null}
       {showCorrectionPanel ? (
