@@ -3350,13 +3350,17 @@ function CandidateTable({ candidates, open }: { candidates: CandidateSummary[]; 
       {sortedCandidates.map((item) => {
         const hazardItems = candidateListHazards(item);
         return (
-          <button className="tableRow" key={item.document_id} onClick={() => open(item.document_id)}>
+          <button className={hazardItems.length ? "tableRow candidateRowNeedsReview" : "tableRow"} key={item.document_id} onClick={() => open(item.document_id)}>
             <span className="truncateCell candidateListNameCell" title={item.name ?? "Unknown"}>
-              <span>
-                {hazardItems.length ? <AlertTriangle className="candidateListHazardIcon" size={15} aria-label={hazardItems.join(", ")} /> : null}
-                {item.name ?? "Unknown"}
+              <span className="candidateNameLine">
+                <span className="candidateListNameText">{item.name ?? "Unknown"}</span>
+                {hazardItems.length ? (
+                  <span className="candidateListHazardBadge" title={hazardItems.join("\n")} aria-label={`Review needed: ${hazardItems.join(", ")}`}>
+                    <AlertTriangle size={14} />
+                  </span>
+                ) : null}
               </span>
-              <small>{hazardItems[0] ?? item.email ?? item.phone ?? "No contact ID"}</small>
+              <small className={hazardItems.length ? "candidateListHazardCopy" : undefined}>{hazardItems[0] ?? item.email ?? item.phone ?? "No contact ID"}</small>
             </span>
             <span className="truncateCell" title={item.current_title ?? "Missing"}>
               {item.current_title ?? "Missing"}
