@@ -6,6 +6,7 @@ import os
 import shutil
 import time
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -143,7 +144,14 @@ MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 configure_logging()
 http_logger = logging.getLogger("resume_intel.http")
 
-app = FastAPI(title="candidateSignal.ai API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    migrate()
+    yield
+
+
+app = FastAPI(title="candidateSignal.ai API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -352,11 +360,6 @@ class LinkedInImportRequest(BaseModel):
     note_name: str | None = None
     note_content: str | None = None
     auto_start: bool = True
-
-
-@app.on_event("startup")
-def startup() -> None:
-    migrate()
 
 
 @app.post("/auth/bootstrap")
