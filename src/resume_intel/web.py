@@ -913,7 +913,10 @@ def delete_note(
 
 @app.get("/candidates/{document_id}/entity-resolution")
 def candidate_versions_for_candidate_legacy(document_id: str, user: dict = Depends(current_user)) -> dict:
-    return candidate_versions_for_candidate(document_id, user)
+    raise HTTPException(
+        status_code=410,
+        detail="entity resolution is retired; use /candidates/{document_id}/candidate-versions",
+    )
 
 
 @app.get("/candidates/{document_id}/candidate-versions")
@@ -933,7 +936,10 @@ def candidate_versions_for_candidate(document_id: str, user: dict = Depends(curr
 
 @app.get("/entity-resolution/requirements")
 def resolution_requirements(user: dict = Depends(current_user)) -> dict:
-    return version_requirements(user)
+    raise HTTPException(
+        status_code=410,
+        detail="entity resolution is retired; use /candidate-versions/requirements",
+    )
 
 
 @app.get("/candidate-versions/requirements")
@@ -943,7 +949,10 @@ def version_requirements(user: dict = Depends(current_user)) -> dict:
 
 @app.get("/entity-resolution/clusters")
 def resolution_clusters(user: dict = Depends(current_user)) -> dict:
-    return version_clusters(user)
+    raise HTTPException(
+        status_code=410,
+        detail="entity resolution is retired; use /candidate-versions/clusters",
+    )
 
 
 @app.get("/candidate-versions/clusters")
@@ -953,23 +962,26 @@ def version_clusters(user: dict = Depends(current_user)) -> dict:
 
 @app.post("/entity-resolution/{match_id}/same-person")
 def same_person(match_id: str, user: dict = Depends(current_user)) -> dict:
-    try:
-        return decide_match(match_id, "versioned", user["id"], _tenant_id(user))
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="match not found") from exc
+    raise HTTPException(
+        status_code=410,
+        detail="same-person decisions are retired; use /candidate-versions/{match_id}/versioned",
+    )
 
 
 @app.post("/entity-resolution/{match_id}/not-same-person")
 def not_same_person(match_id: str, user: dict = Depends(current_user)) -> dict:
-    try:
-        return decide_match(match_id, "separate", user["id"], _tenant_id(user))
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="match not found") from exc
+    raise HTTPException(
+        status_code=410,
+        detail="not-same-person decisions are retired; use /candidate-versions/{match_id}/separate",
+    )
 
 
 @app.post("/entity-resolution/{match_id}/versioned")
 def versioned_candidate(match_id: str, user: dict = Depends(current_user)) -> dict:
-    return mark_candidate_versions(match_id, user)
+    raise HTTPException(
+        status_code=410,
+        detail="entity resolution is retired; use /candidate-versions/{match_id}/versioned",
+    )
 
 
 @app.post("/candidate-versions/{match_id}/versioned")
@@ -982,7 +994,10 @@ def mark_candidate_versions(match_id: str, user: dict = Depends(current_user)) -
 
 @app.post("/entity-resolution/{match_id}/separate")
 def separate_candidate_versions(match_id: str, user: dict = Depends(current_user)) -> dict:
-    return keep_candidate_versions_separate(match_id, user)
+    raise HTTPException(
+        status_code=410,
+        detail="entity resolution is retired; use /candidate-versions/{match_id}/separate",
+    )
 
 
 @app.post("/candidate-versions/{match_id}/separate")
@@ -995,7 +1010,10 @@ def keep_candidate_versions_separate(match_id: str, user: dict = Depends(current
 
 @app.post("/entity-resolution/{match_id}/review-later")
 def review_later(match_id: str, user: dict = Depends(current_user)) -> dict:
-    return review_candidate_versions_later(match_id, user)
+    raise HTTPException(
+        status_code=410,
+        detail="entity resolution is retired; use /candidate-versions/{match_id}/review-later",
+    )
 
 
 @app.post("/candidate-versions/{match_id}/review-later")
