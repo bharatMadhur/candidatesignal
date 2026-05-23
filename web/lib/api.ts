@@ -96,6 +96,7 @@ export type CopilotResponse = {
     location_requirement?: "preferred" | "required" | "ignored" | string;
     terms?: string[];
   };
+  metadata?: Record<string, any>;
   synthesis_status?: string;
   synthesis_usage?: any;
   thread?: CopilotThread;
@@ -750,7 +751,7 @@ export async function createRequirementFromCopilotThread(token: string, id: stri
   return request(`/copilot/threads/${id}/requirement-draft`, { method: "POST", token });
 }
 
-export async function chatCopilot(token: string, message: string, history: CopilotMessage[] = [], limit = 5, threadId?: string | null): Promise<CopilotResponse> {
+export async function chatCopilot(token: string, message: string, history: CopilotMessage[] = [], limit = 10, threadId?: string | null): Promise<CopilotResponse> {
   return request("/copilot/chat", {
     method: "POST",
     token,

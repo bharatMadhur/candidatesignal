@@ -335,10 +335,15 @@
   gap: 12px;
   margin: -8px 24px 18px;
   padding: 12px 14px;
-  border: 1px solid #e4b36d;
+  border: 1px solid var(--line);
   border-radius: 10px;
-  background: #fff8ec;
+  background: var(--surface);
   color: var(--ink);
+}
+
+.candidateBadUploadBanner > svg {
+  flex: 0 0 auto;
+  color: var(--warn);
 }
 
 .candidateBadUploadBanner div {
@@ -2810,6 +2815,10 @@ a:focus {
 
 .stitchSearchCommand button {
   min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   border: 0;
   border-radius: 8px;
   background: var(--primary);
@@ -2817,6 +2826,11 @@ a:focus {
   padding: 0 22px;
   cursor: pointer;
   font-weight: 800;
+}
+
+.stitchSearchCommand button svg {
+  color: currentColor;
+  animation: spin 1s linear infinite;
 }
 
 .stitchSearchCommand button:disabled {
@@ -4286,6 +4300,63 @@ button:disabled {
   gap: 14px;
 }
 
+.candidateDecisionGrid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.candidateDecisionCard {
+  grid-column: span 3;
+  align-content: start;
+  min-height: 210px;
+}
+
+.candidateDecisionCard:nth-child(3),
+.candidateDecisionCard:nth-child(4),
+.candidateDecisionCard:nth-child(5) {
+  grid-column: span 2;
+}
+
+.candidateDecisionCard h3 {
+  font-size: 20px;
+  line-height: 26px;
+}
+
+.candidateDecisionCard li {
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.decisionFactList {
+  display: grid;
+  gap: 8px;
+}
+
+.decisionFactList div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--soft-line);
+  border-radius: 8px;
+  background: var(--surface-low);
+  padding: 8px 10px;
+}
+
+.decisionFactList span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.decisionFactList strong {
+  color: var(--ink);
+  font-size: 13px;
+  text-align: right;
+}
+
 .candidateSkillDomainGrid {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(260px, 0.9fr);
@@ -5337,9 +5408,9 @@ button:disabled {
 }
 
 .candidateReportBadges .factReviewBadge {
-  border-color: #fed7aa;
-  background: #fff7ed;
-  color: #9a3412;
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--muted);
 }
 
 .candidateReportBadges .factVerifiedBadge {
@@ -5349,31 +5420,47 @@ button:disabled {
 }
 
 .candidateReportBadges .versionReviewBadge {
-  border-color: #fed7aa;
-  background: #fff7ed;
-  color: #9a3412;
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.candidateReportBadges .factReviewBadge,
+.candidateReportBadges .versionReviewBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.candidateReportBadges .factReviewBadge svg,
+.candidateReportBadges .versionReviewBadge svg {
+  color: var(--warn);
 }
 
 .factReviewText {
-  color: #9a3412 !important;
+  color: var(--ink) !important;
   font-weight: 900;
 }
 
 .factReviewAction {
-  border-color: #fed7aa !important;
-  background: #fff7ed !important;
-  color: #9a3412 !important;
+  border-color: var(--line) !important;
+  background: var(--surface) !important;
+  color: var(--muted) !important;
 }
 
 .factVerificationWarning {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  border: 1px solid #fed7aa;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fff7ed;
-  color: #9a3412;
+  background: var(--surface);
+  color: var(--ink);
   padding: 12px;
+}
+
+.factVerificationWarning > svg {
+  color: var(--warn);
 }
 
 .factVerificationWarning strong,
@@ -5383,7 +5470,7 @@ button:disabled {
 
 .factVerificationWarning span {
   margin-top: 3px;
-  color: #7c2d12;
+  color: var(--muted);
   font-size: 13px;
   line-height: 20px;
 }
@@ -5818,13 +5905,17 @@ button:disabled {
   display: flex;
   gap: 8px;
   align-items: start;
-  border: 1px solid var(--warn-soft);
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fffbeb;
-  color: #92400e;
+  background: var(--surface);
+  color: var(--ink);
   padding: 10px;
   font-size: 13px;
   line-height: 20px;
+}
+
+.evidenceMissing svg {
+  color: var(--warn);
 }
 
 .sourceEvidenceDrawer {
@@ -10115,7 +10206,7 @@ h3 {
 
 .campaignCleanWorkspace {
   display: grid;
-  grid-template-columns: 276px minmax(0, 1fr);
+  grid-template-columns: 300px minmax(0, 1fr);
   gap: 18px;
   align-items: start;
   padding: 22px;
@@ -10127,11 +10218,17 @@ h3 {
   display: grid;
   gap: 14px;
   max-height: calc(100vh - 108px);
-  overflow: auto;
+  overflow: hidden;
+  border: 1px solid #dfe7ed;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 8px 28px rgba(20, 31, 36, 0.06);
+  padding: 12px;
 }
 
 .campaignRailHeader,
 .campaignRailCreate,
+.campaignRailCreatePanel,
 .campaignCleanHeader,
 .campaignEditPanel,
 .campaignProgressMini,
@@ -10147,12 +10244,51 @@ h3 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px;
+  border: 0;
+  box-shadow: none;
+  padding: 4px 2px 10px;
+}
+
+.campaignRailHeader div {
+  display: grid;
+  gap: 3px;
+}
+
+.campaignRailHeader strong {
+  color: var(--ink);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.campaignRailNewButton {
+  min-height: 34px;
+  border: 1px solid #d8e2ea;
+  border-radius: 999px;
+  background: #22364a;
+  color: #ffffff;
+  cursor: pointer;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .campaignRailList {
   display: grid;
   gap: 8px;
+  max-height: calc(100vh - 254px);
+  overflow-y: auto;
+  padding-right: 3px;
+}
+
+.campaignRailList::-webkit-scrollbar {
+  width: 8px;
+}
+
+.campaignRailList::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: #cbd5df;
+  background-clip: padding-box;
 }
 
 .campaignRailList button {
@@ -10160,7 +10296,7 @@ h3 {
   gap: 4px;
   border: 1px solid var(--border);
   border-radius: 9px;
-  background: #fff;
+  background: #ffffff;
   color: var(--text);
   cursor: pointer;
   padding: 12px;
@@ -10168,19 +10304,33 @@ h3 {
 }
 
 .campaignRailList button.active {
-  border-color: var(--primary);
-  background: var(--primary-soft);
+  border-color: #22364a;
+  background: #eef3f5;
+  box-shadow: inset 4px 0 0 #22364a;
+}
+
+.campaignRailList button strong {
+  overflow: hidden;
+  color: #17212b;
+  font-size: 14px;
+  line-height: 19px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .campaignRailList span,
 .campaignRailCreate summary {
-  color: var(--muted);
+  color: #536677;
   font-size: 12px;
+  font-weight: 800;
 }
 
-.campaignRailCreate {
+.campaignRailCreate,
+.campaignRailCreatePanel {
   display: grid;
   gap: 10px;
+  border-color: #dfe7ed;
+  background: #f8faf9;
   padding: 12px;
 }
 
@@ -10190,12 +10340,19 @@ h3 {
 }
 
 .campaignRailCreate input,
-.campaignRailCreate textarea {
+.campaignRailCreate textarea,
+.campaignRailCreatePanel input,
+.campaignRailCreatePanel textarea {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: #f8faf9;
+  background: #ffffff;
   padding: 10px;
+}
+
+.campaignRailCreatePanel textarea {
+  min-height: 74px;
+  resize: vertical;
 }
 
 .campaignCleanMain {
@@ -10250,6 +10407,28 @@ h3 {
 
 .campaignCleanActions button {
   min-height: 38px;
+}
+
+.campaignClosedBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #d8e2ea;
+  border-radius: 10px;
+  background: #f8faf9;
+  color: #22364a;
+  padding: 12px 14px;
+}
+
+.campaignClosedBanner strong {
+  font-size: 14px;
+}
+
+.campaignClosedBanner span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .campaignEditPanel {
@@ -11360,6 +11539,7 @@ h3 {
   .campaignStageStrip,
   .campaignStageCandidate,
   .candidateCleanLayout,
+  .candidateDecisionGrid,
   .candidateReportTwoCol,
   .candidateSkillDomainGrid,
   .timelineYearAxis,
@@ -11772,8 +11952,16 @@ h3 {
   .candidateReviewWorkspace,
   .identityLocationGrid,
   .identityPiiList,
+  .candidateDecisionGrid,
   .campaignPipelineWorkspace,
   .uploadLandingGrid {
     grid-template-columns: 1fr;
+  }
+
+  .candidateDecisionCard,
+  .candidateDecisionCard:nth-child(3),
+  .candidateDecisionCard:nth-child(4),
+  .candidateDecisionCard:nth-child(5) {
+    grid-column: auto;
   }
 }

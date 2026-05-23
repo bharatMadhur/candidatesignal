@@ -219,6 +219,7 @@ def copilot_role_alias_groups(message: str) -> list[list[str]]:
     normalized = normalize_copilot_text(message)
     role_aliases = [
         ("data engineer", ["data engineer", "data engineering", "big data engineer", "etl", "data pipeline", "spark", "pyspark", "databricks"]),
+        ("software engineer", ["software engineer", "software developer", "founding engineer", "full stack engineer", "backend engineer", "frontend engineer", "application developer"]),
         ("ai engineer", ["ai engineer", "ml engineer", "machine learning engineer", "generative ai", "genai", "llm", "rag"]),
         ("cloud architect", ["cloud architect", "cloud architecture", "solutions architect", "azure architect", "aws architect"]),
         ("analytics", ["analytics", "bi", "business intelligence", "tableau", "power bi"]),

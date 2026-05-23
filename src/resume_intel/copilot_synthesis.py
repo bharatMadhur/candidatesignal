@@ -23,6 +23,13 @@ If evidence is weak, say what needs clarification.
 Return only valid JSON.
 """
 
+COPILOT_SYNTHESIS_CANDIDATE_LIMIT = 10
+
+
+def copilot_synthesis_candidates(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep external LLM synthesis bounded while retrieval can return more rows."""
+    return results[:COPILOT_SYNTHESIS_CANDIDATE_LIMIT]
+
 
 def synthesize_copilot_answer(
     *,
@@ -55,7 +62,7 @@ def synthesize_copilot_answer(
             redact_pii=policy["redact_pii_before_external_llm"],
             candidate_label=f"Candidate {index}",
         )
-        for index, item in enumerate(results, start=1)
+        for index, item in enumerate(copilot_synthesis_candidates(results), start=1)
     ]
     user_prompt = f"""Return this JSON shape:
 {{

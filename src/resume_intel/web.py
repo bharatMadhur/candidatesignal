@@ -35,7 +35,7 @@ from .campaigns import (
     update_campaign,
     update_campaign_scorecard,
 )
-from .copilot_synthesis import synthesize_copilot_answer
+from .copilot_synthesis import COPILOT_SYNTHESIS_CANDIDATE_LIMIT, synthesize_copilot_answer
 from .copilot_threads import append_copilot_message, archive_copilot_thread, create_copilot_thread, get_copilot_thread, list_copilot_threads
 from .db import db, migrate
 from .db_store import (
@@ -266,7 +266,7 @@ class SemanticSearchRequest(BaseModel):
 class CopilotChatRequest(BaseModel):
     message: str
     history: list[dict[str, str]] = Field(default_factory=list)
-    limit: int = 5
+    limit: int = 10
     thread_id: str | None = None
 
 
@@ -533,7 +533,7 @@ def copilot_chat(request: CopilotChatRequest, user: dict = Depends(current_user)
     if not message:
         raise HTTPException(status_code=400, detail="message is required")
     tenant_id = _tenant_id(user)
-    limit = max(1, min(request.limit, 10))
+    limit = max(1, min(request.limit, 100))
     if request.thread_id:
         try:
             thread = get_copilot_thread(request.thread_id, tenant_id)
@@ -568,6 +568,14 @@ def copilot_chat(request: CopilotChatRequest, user: dict = Depends(current_user)
     ]
     if synthesis.get("suggested_actions"):
         suggested_actions = list(dict.fromkeys([*synthesis["suggested_actions"], *suggested_actions]))[:5]
+    copilot_metadata = {
+        "limit": limit,
+        "returned_count": len(results),
+        "synthesis_candidate_limit": COPILOT_SYNTHESIS_CANDIDATE_LIMIT,
+        "synthesis_candidate_count": min(len(results), COPILOT_SYNTHESIS_CANDIDATE_LIMIT),
+        "query_intent": query_intent,
+        "synthesis": {key: value for key, value in synthesis.items() if key != "answer"},
+    }
     append_copilot_message(
         tenant_id,
         thread["id"],
@@ -578,7 +586,7 @@ def copilot_chat(request: CopilotChatRequest, user: dict = Depends(current_user)
         candidates=results,
         clarifying_questions=clarifying_questions,
         suggested_actions=suggested_actions,
-        metadata={"limit": limit, "query_intent": query_intent, "synthesis": {key: value for key, value in synthesis.items() if key != "answer"}},
+        metadata=copilot_metadata,
     )
     thread = get_copilot_thread(thread["id"], tenant_id)
     if not _can_view_pii(user):
@@ -589,6 +597,7 @@ def copilot_chat(request: CopilotChatRequest, user: dict = Depends(current_user)
         "clarifying_questions": clarifying_questions,
         "suggested_actions": suggested_actions,
         "query_intent": query_intent,
+        "metadata": copilot_metadata,
         "synthesis_status": synthesis["status"],
         "synthesis_usage": synthesis.get("usage"),
         "thread": thread,

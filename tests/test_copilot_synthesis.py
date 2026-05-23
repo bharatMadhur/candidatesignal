@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from resume_intel.copilot_synthesis import _candidate_for_synthesis
+from resume_intel.copilot_synthesis import COPILOT_SYNTHESIS_CANDIDATE_LIMIT, _candidate_for_synthesis, copilot_synthesis_candidates
 
 
 class CopilotSynthesisTests(unittest.TestCase):
@@ -41,6 +41,15 @@ class CopilotSynthesisTests(unittest.TestCase):
         self.assertEqual(safe["email"], "candidate@example.com")
         self.assertEqual(safe["phone"], "555-111-2222")
         self.assertEqual(safe["location"], "Columbus, OH")
+
+    def test_synthesis_candidate_set_is_capped_for_cost_control(self) -> None:
+        results = [{"document_id": f"doc-{index}"} for index in range(50)]
+
+        capped = copilot_synthesis_candidates(results)
+
+        self.assertEqual(len(capped), COPILOT_SYNTHESIS_CANDIDATE_LIMIT)
+        self.assertEqual(capped[0]["document_id"], "doc-0")
+        self.assertEqual(capped[-1]["document_id"], f"doc-{COPILOT_SYNTHESIS_CANDIDATE_LIMIT - 1}")
 
 
 if __name__ == "__main__":

@@ -125,6 +125,13 @@ class CopilotFilteringTest(unittest.TestCase):
         self.assertIn("data engineering", intent["role_groups"][0])
         self.assertEqual(intent["location_requirement"], "preferred")
 
+    def test_software_engineer_intent_uses_software_role_aliases(self):
+        intent = copilot_query_intent("software engineer")
+
+        self.assertTrue(intent["role_groups"])
+        self.assertIn("software developer", intent["role_groups"][0])
+        self.assertIn("backend engineer", intent["role_groups"][0])
+
     def test_explicit_location_requirement_is_detected(self):
         intent = copilot_query_intent("find me data engineer who must be in new york")
 
