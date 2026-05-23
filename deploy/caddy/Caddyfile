@@ -20,6 +20,11 @@
 		reverse_proxy api:8010
 	}
 
+	handle /api/auth/company-signup {
+		uri strip_prefix /api
+		reverse_proxy api:8010
+	}
+
 	handle /api/auth/platform/* {
 		uri strip_prefix /api
 		reverse_proxy api:8010

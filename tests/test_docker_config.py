@@ -57,6 +57,16 @@ class DockerConfigTests(unittest.TestCase):
         self.assertNotIn("OCR_COMMAND: ${OCR_COMMAND", compose)
         self.assertIn("OCR_COMMAND: ${DOCKER_OCR_COMMAND:-}", compose)
 
+    def test_caddy_routes_self_signup_to_fastapi_not_better_auth(self) -> None:
+        caddyfile = (ROOT / "deploy" / "caddy" / "Caddyfile").read_text()
+
+        signup_index = caddyfile.index("handle /api/auth/company-signup")
+        better_auth_index = caddyfile.index("handle /api/auth/*")
+        self.assertLess(signup_index, better_auth_index)
+        signup_block = caddyfile[signup_index:better_auth_index]
+        self.assertIn("uri strip_prefix /api", signup_block)
+        self.assertIn("reverse_proxy api:8010", signup_block)
+
 
 if __name__ == "__main__":
     unittest.main()
