@@ -1116,7 +1116,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
         await handleOpenCampaign(remaining[0].id);
       }
     }
-    setStatus("Campaign soft-deleted. History is preserved, but it is removed from the workspace list.");
+    setStatus("Campaign deleted. It has been removed from the workspace list.");
     await refresh();
   }
 
@@ -5633,8 +5633,8 @@ function CampaignsView({
                 <div>
                   <AlertTriangle size={18} />
                   <div>
-                    <strong>Soft delete this campaign?</strong>
-                    <span>{activeCampaign.name} will leave the workspace list. Candidate records, uploads, notes, matches, and audit history stay preserved.</span>
+                    <strong>Delete this campaign?</strong>
+                    <span>{activeCampaign.name} will leave the workspace list. Candidate profiles, uploads, notes, matches, and history stay available.</span>
                   </div>
                 </div>
                 <label>
@@ -5649,7 +5649,7 @@ function CampaignsView({
                 <div>
                   <button className="plain" type="button" onClick={() => { setDeleteConfirmOpen(false); setDeleteConfirmText(""); }}>Cancel</button>
                   <button className="plain campaignDeleteAction" type="button" disabled={busy || deleteConfirmText !== "delete"} onClick={confirmCampaignDelete}>
-                    <AlertTriangle size={14} /> Soft delete campaign
+                    <AlertTriangle size={14} /> Delete campaign
                   </button>
                 </div>
               </section>
