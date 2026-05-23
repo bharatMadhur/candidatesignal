@@ -1171,7 +1171,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
       if (!current) return current;
       return {
         ...current,
-        candidates: (current.candidates ?? []).map((item) => item.candidate_id === candidateId ? { ...item, ...updated } : item),
+        candidates: (current.candidates ?? []).map((item) => item.candidate_id === candidateId ? mergeCampaignCandidateUpdate(item, updated) : item),
       };
     });
   }
@@ -1683,9 +1683,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
           {workspaceMode === "tenant" && view === "dashboard" ? (
             <Dashboard
               candidates={candidates}
-              requirements={requirements}
               campaigns={campaigns}
-              clusters={clusters}
               deadLetterCount={parseDeadLetters.length}
               operationalAlertCount={operationalAlerts.length}
               setView={setView}
@@ -2060,9 +2058,7 @@ function AccessDeniedPanel({ title, body }: { title: string; body: string }) {
 
 function Dashboard({
   candidates,
-  requirements,
   campaigns,
-  clusters,
   deadLetterCount,
   operationalAlertCount,
   setView,
@@ -2070,9 +2066,7 @@ function Dashboard({
   markReviewSignal,
 }: {
   candidates: CandidateSummary[];
-  requirements: Requirement[];
   campaigns: JobCampaign[];
-  clusters: CandidateVersionMatch[];
   deadLetterCount: number;
   operationalAlertCount: number;
   setView: (view: View) => void;
@@ -2086,10 +2080,6 @@ function Dashboard({
   const newToday = candidates.filter((item) => item.updated_at && new Date(item.updated_at).getTime() >= dayAgo).length;
   const newThisWeek = candidates.filter((item) => item.updated_at && new Date(item.updated_at).getTime() >= weekAgo).length;
   const readyForReview = candidates.filter((item) => (item.coverage ?? 0) >= 0.8 && !(item.duplicate_risk_score && item.duplicate_risk_score >= 0.75)).length;
-  const lastUpdated = candidates
-    .map((item) => item.updated_at ? new Date(item.updated_at).getTime() : 0)
-    .filter(Boolean)
-    .sort((a, b) => b - a)[0];
   const domainCounts = topDomainCounts(candidates);
   const actionItems: ReviewCenterItem[] = [
     ...(deadLetterCount ? [{
@@ -4897,52 +4887,6 @@ function locationSignalLabel(signal: unknown) {
   return combined || textValue(item.label ?? item.name ?? item.value);
 }
 
-function CoverageSummary({ coverage }: { coverage?: Candidate["primary_key_coverage"] }) {
-  if (!coverage) {
-    return (
-      <section className="reportSideSection coverageSummary">
-        <span className="reportLabel">Profile Completeness</span>
-        <p className="muted">Coverage not calculated for this profile yet.</p>
-      </section>
-    );
-  }
-  const missingItems = (coverage.items ?? []).filter((item) => item.status === "missing");
-  const criticalMissing = missingItems.filter((item) => item.severity === "critical");
-  const enrichmentMissing = missingItems.filter((item) => item.severity !== "critical");
-  return (
-    <section className="reportSideSection coverageSummary">
-      <div className="coverageSummaryHead">
-        <span className="reportLabel">Profile Completeness</span>
-        <strong>{Math.round((coverage.score ?? 0) * 100)}%</strong>
-      </div>
-      <ProgressBar value={(coverage.score ?? 0) * 100} />
-      <div className="coverageCategoryList">
-        {(coverage.categories ?? []).map((category) => (
-          <article className={category.status === "critical_missing" ? "critical" : category.status === "needs_enrichment" ? "warn" : "complete"} key={category.key}>
-            <div>
-              <strong>{category.label}</strong>
-              <span>{category.present}/{category.total}</span>
-            </div>
-            <ProgressBar value={(category.score ?? 0) * 100} />
-          </article>
-        ))}
-      </div>
-      {criticalMissing.length ? (
-        <div className="coverageMissingBlock critical">
-          <strong>Critical missing</strong>
-          {criticalMissing.slice(0, 5).map((item) => <span key={item.key}>{item.label}</span>)}
-        </div>
-      ) : <div className="coverageMissingBlock complete"><strong>Critical fields complete</strong></div>}
-      {enrichmentMissing.length ? (
-        <div className="coverageMissingBlock">
-          <strong>Enrichment gaps</strong>
-          {enrichmentMissing.slice(0, 6).map((item) => <span key={item.key}>{item.label}</span>)}
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
 function PiiGroup({ label, values, compact = false }: { label: string; values: unknown; compact?: boolean }) {
   const list = toTextList(Array.isArray(values) ? values : []).slice(0, compact ? 6 : 4);
   return (
@@ -5453,7 +5397,7 @@ function CampaignsView({
     [campaignStages, pipelineCandidates],
   );
   const activeStageBucket = stageBuckets.find((stage) => stage.id === activePipelineStage) ?? stageBuckets[0];
-  const activeStageCandidates = activeStageBucket?.candidates ?? [];
+  const activeStageCandidates = useMemo(() => activeStageBucket?.candidates ?? [], [activeStageBucket]);
   const nonEmptyStageCount = stageBuckets.filter((stage) => stage.candidates.length).length;
   const selectedCampaignCandidate = activeStageCandidates.find((item) => item.candidate_id === selectedCandidateId) ?? activeStageCandidates[0] ?? null;
   const selectedCandidateStage = selectedCampaignCandidate ? stageCandidateStatus(selectedCampaignCandidate.status) : activePipelineStage;
@@ -5481,7 +5425,7 @@ function CampaignsView({
         setActivePipelineStage(firstNonEmptyStage.id);
       }
     }
-  }, [activePipelineStage, pipelineCandidates.length, stageBuckets]);
+  }, [activePipelineStage, pipelineCandidates.length, setActivePipelineStage, setSelectedCandidateId, stageBuckets]);
 
   useEffect(() => {
     if (!activeStageCandidates.length) {
@@ -5491,7 +5435,7 @@ function CampaignsView({
     if (!activeStageCandidates.some((item) => item.candidate_id === selectedCandidateId)) {
       setSelectedCandidateId(activeStageCandidates[0].candidate_id);
     }
-  }, [activeStageCandidates, selectedCandidateId]);
+  }, [activeStageCandidates, selectedCandidateId, setSelectedCandidateId]);
 
   useEffect(() => {
     setStageNote(selectedCampaignCandidate?.stage_note ?? "");
@@ -5521,7 +5465,7 @@ function CampaignsView({
     });
     setScorecardForm(campaignScorecardForm(activeCampaign));
     setRequirementDraft(activeCampaign.requirement?.original_text ?? activeCampaign.description ?? "");
-  }, [activeCampaign?.id, activeCampaign?.updated_at, activeCampaign?.requirement_id]);
+  }, [activeCampaign]);
 
   async function saveCampaignDetails() {
     if (!activeCampaign) return;
@@ -6101,6 +6045,24 @@ function CampaignsView({
                           <textarea value={stageNote} onChange={(event) => setStageNote(event.target.value)} placeholder="Add screening feedback, follow-up context, client fit, or why this candidate moved stages. This note only belongs to this candidate inside this campaign." />
                         </label>
                         <button className="secondary small" onClick={saveSelectedCampaignNote} disabled={campaignClosed}>Save campaign note</button>
+                        <div className="campaignCandidateHistory">
+                          <div>
+                            <strong>Campaign note history</strong>
+                            <span>{selectedCampaignCandidate.activity_events?.length ?? 0} updates</span>
+                          </div>
+                          {selectedCampaignCandidate.activity_events?.length ? (
+                            selectedCampaignCandidate.activity_events.slice(0, 5).map((event) => (
+                              <article key={event.id}>
+                                <time>{formatDateTime(event.created_at)}</time>
+                                <strong>{event.title}</strong>
+                                {event.body ? <p>{event.body}</p> : <p>No note added.</p>}
+                                {event.user_email ? <span>{event.user_email}</span> : null}
+                              </article>
+                            ))
+                          ) : (
+                            <p>No campaign notes yet. Save one here when this candidate moves through the campaign.</p>
+                          )}
+                        </div>
                       </div>
                     </>
                   ) : (
@@ -6287,6 +6249,19 @@ function campaignEvidenceItems(item: JobCampaignCandidate) {
   ].filter(Boolean);
 }
 
+function mergeCampaignCandidateUpdate(current: JobCampaignCandidate, updated: JobCampaignCandidate): JobCampaignCandidate {
+  const seen = new Set<string>();
+  const activityEvents = [
+    ...(updated.activity_events ?? []),
+    ...(current.activity_events ?? []),
+  ].filter((event) => {
+    if (!event?.id || seen.has(event.id)) return false;
+    seen.add(event.id);
+    return true;
+  });
+  return { ...current, ...updated, activity_events: activityEvents };
+}
+
 function stageCandidateStatus(status: string): CampaignPipelineStatus {
   if (status === "uploaded" || status === "matched" || status === "reviewing") return "recommended";
   if (status === "below_threshold") return "below_threshold";
@@ -6347,9 +6322,17 @@ function campaignReasonItems(item: JobCampaignCandidate) {
 }
 
 function campaignGapItems(item: JobCampaignCandidate) {
+  const threshold = Number(item.evidence?.incremental_match?.visibility_threshold ?? 0);
+  const thresholdLabel = threshold ? `${Math.round(threshold * 100)}%` : "review";
+  const thresholdReason = item.status === "below_threshold"
+    ? [`Below ${thresholdLabel} campaign threshold.`]
+    : [];
+  const incrementalReason = typeof item.evidence?.incremental_match?.reason === "string"
+    ? [item.evidence.incremental_match.reason]
+    : toTextList(item.evidence?.incremental_match?.reason);
   const explicit = toTextList(item.evidence?.top_gaps);
-  if (explicit.length) return explicit;
-  return Object.entries(item.evidence?.gaps ?? {}).flatMap(([key, value]) => gapItems(key, value));
+  const fallback = Object.entries(item.evidence?.gaps ?? {}).flatMap(([key, value]) => gapItems(key, value));
+  return uniqueTextList([...thresholdReason, ...incrementalReason, ...explicit, ...fallback]);
 }
 
 function campaignProgressStats(campaign: JobCampaign | null, candidates: JobCampaignCandidate[]) {
@@ -6396,7 +6379,16 @@ function campaignTimelineItems(campaign: JobCampaign | null, candidates: JobCamp
     });
   }
   for (const item of candidates) {
-    if (item.status === "shortlisted" || item.status === "rejected") {
+    const activityEvents = item.activity_events ?? [];
+    for (const event of activityEvents) {
+      events.push({
+        id: `${campaign.id}-${item.candidate_id}-activity-${event.id}`,
+        title: `${item.candidate?.name ?? item.candidate_id}: ${event.title}`,
+        body: event.body || "No note added.",
+        date: event.created_at,
+      });
+    }
+    if (!activityEvents.length && (item.status === "shortlisted" || item.status === "rejected")) {
       events.push({
         id: `${campaign.id}-${item.candidate_id}-${item.status}`,
         title: item.status === "shortlisted" ? "Candidate shortlisted" : "Candidate rejected",
@@ -7060,14 +7052,6 @@ function AdminMiniList({ title, count, rows }: { title: string; count: number; r
   );
 }
 
-function Tab({ icon, label, active, onClick }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void }) {
-  return <button className={active ? "tab active" : "tab"} onClick={onClick}>{icon}{label}</button>;
-}
-
-function MetricCard({ label, value, action }: { label: string; value: string; action: () => void }) {
-  return <button className="metricCard" onClick={action}><span>{label}</span><strong>{value}</strong></button>;
-}
-
 function Metric({ label, value }: { label: string; value: string }) {
   return <div className="metric"><span>{label}</span><strong>{value}</strong></div>;
 }
@@ -7095,15 +7079,6 @@ function EmptyPanel({ title, body, action }: { title: string; body: string; acti
       <strong>{title}</strong>
       <span>{body}</span>
       {action ? <div>{action}</div> : null}
-    </div>
-  );
-}
-
-function FieldEvidence({ source, snippet, compact = false }: { source: string; snippet?: string; compact?: boolean }) {
-  return (
-    <div className={compact ? "fieldEvidence compact" : "fieldEvidence"}>
-      <small>Source: {source}</small>
-      {snippet ? <q>{snippet}</q> : <em>Raw CV snippet not found for this field.</em>}
     </div>
   );
 }
@@ -7468,19 +7443,6 @@ function evidenceTerms(value: unknown) {
     .slice(0, 8);
 }
 
-function domainEvidenceTerms(domain: string) {
-  const aliases: Record<string, string[]> = {
-    generative_ai: ["generative ai", "genai", "llm", "rag", "langchain", "langgraph", "openai"],
-    conversational_ai: ["chatbot", "assistant", "bot", "dialogflow", "copilot"],
-    data_engineering: ["data engineering", "etl", "spark", "databricks", "pipeline"],
-    cloud_architecture: ["azure", "aws", "gcp", "cloud", "microservices"],
-    analytics_bi: ["analytics", "tableau", "power bi", "looker", "reporting"],
-    security_identity: ["security", "identity", "oauth", "rbac", "governance"],
-    microsoft_365: ["microsoft 365", "m365", "sharepoint", "teams", "outlook"],
-  };
-  return aliases[domain] ?? [domain.replaceAll("_", " ")];
-}
-
 function evidenceSourceLabel(evidence: { source_label?: string | null; chunk_type?: string | null; page_number?: number | null }) {
   const label = evidence.source_label || evidence.chunk_type || "Candidate evidence";
   const normalized = String(label).toLowerCase();
@@ -7805,16 +7767,6 @@ function isActiveMaintenanceJob(job: CandidateMaintenanceJob) {
   return ["queued", "running"].includes(job.status);
 }
 
-function Fact({ label, value, progress }: { label: string; value: string; progress?: number }) {
-  return (
-    <div className="fact">
-      <span>{label}</span>
-      <strong>{value}</strong>
-      {typeof progress === "number" ? <i><b style={{ width: `${Math.round(progress * 100)}%` }} /></i> : null}
-    </div>
-  );
-}
-
 function formatYears(value: unknown) {
   return typeof value === "number" ? `${value} yrs` : "Unknown";
 }
@@ -7903,4 +7855,14 @@ function toTextList(value: unknown): string[] {
     })
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function uniqueTextList(values: string[]): string[] {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized || seen.has(normalized)) return false;
+    seen.add(normalized);
+    return true;
+  });
 }

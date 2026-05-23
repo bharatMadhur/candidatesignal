@@ -538,6 +538,15 @@ export type JobCampaignCandidate = {
   last_stage_changed_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+  activity_events?: Array<{
+    id: string;
+    event_type: string;
+    title: string;
+    body?: string | null;
+    metadata?: any;
+    user_email?: string | null;
+    created_at?: string | null;
+  }>;
 };
 
 export type CampaignPipelineStatus =

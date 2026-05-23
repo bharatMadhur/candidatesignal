@@ -141,6 +141,37 @@ class CampaignCandidateStatusTests(unittest.TestCase):
         self.assertIn("Must-have matched: Python", payload["top_reasons"])
         self.assertIn("Missing nice-to-have: Airflow", payload["top_gaps"])
 
+    def test_candidate_link_row_preserves_campaign_activity_history(self) -> None:
+        row = {
+            "id": "link-1",
+            "tenant_id": "tenant-1",
+            "campaign_id": "campaign-1",
+            "candidate_id": "candidate-1",
+            "source": "copilot",
+            "status": "contacted",
+            "score": 0.72,
+            "evidence": {"recommendation": "Review-worthy"},
+            "stage_note": "Left voicemail",
+            "owner_user_id": None,
+            "last_stage_changed_at": None,
+            "created_at": None,
+            "updated_at": None,
+        }
+        activity = {
+            "id": "event-1",
+            "event_type": "campaign.stage_changed",
+            "title": "Moved to Contacted",
+            "body": "Left voicemail",
+            "metadata": {"status": "contacted"},
+            "user_email": "recruiter@example.com",
+            "created_at": None,
+        }
+
+        result = campaigns._candidate_link_row(row, [activity])
+
+        self.assertEqual(result["stage_note"], "Left voicemail")
+        self.assertEqual(result["activity_events"], [activity])
+
     def test_incremental_campaign_match_scores_only_new_candidates_without_full_delete(self) -> None:
         connection = _FakeConnection(None)
         campaigns.db = lambda: _FakeDb(connection)

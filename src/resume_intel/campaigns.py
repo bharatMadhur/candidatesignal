@@ -352,10 +352,33 @@ def get_campaign(campaign_id: str, tenant_id: str) -> dict[str, Any]:
             """,
             (campaign_id, tenant_id),
         ).fetchall()
+        activity_rows = conn.execute(
+            """
+            select candidate_activity_events.*,
+                   users.email as user_email
+            from candidate_activity_events
+            left join users on users.id = candidate_activity_events.user_id
+            where candidate_activity_events.campaign_id=%s
+              and candidate_activity_events.tenant_id=%s
+              and candidate_activity_events.event_type in ('campaign.stage_changed')
+            order by candidate_activity_events.created_at desc
+            limit 300
+            """,
+            (campaign_id, tenant_id),
+        ).fetchall()
     if not row:
         raise FileNotFoundError(campaign_id)
+    activity_by_candidate: dict[str, list[dict[str, Any]]] = {}
+    for item in activity_rows:
+        candidate_id = str(item.get("document_id") or "")
+        if not candidate_id:
+            continue
+        activity_by_candidate.setdefault(candidate_id, []).append(_activity_event_row(item))
     campaign = _campaign_row(row)
-    campaign["candidates"] = [_campaign_candidate_row(item) for item in candidate_rows]
+    campaign["candidates"] = [
+        _campaign_candidate_row(item, activity_by_candidate.get(str(item.get("candidate_id") or ""), []))
+        for item in candidate_rows
+    ]
     campaign["upload_batches"] = [
         {
             "id": str(item["id"]),
@@ -537,10 +560,11 @@ def set_campaign_candidate_status(campaign_id: str, candidate_id: str, status: s
             ),
         ).fetchone()
         if row:
-            conn.execute(
+            event_row = conn.execute(
                 """
                 insert into candidate_activity_events (tenant_id, document_id, campaign_id, user_id, event_type, title, body, metadata)
                 values (%s, %s, %s, %s, 'campaign.stage_changed', %s, %s, %s)
+                returning *
                 """,
                 (
                     tenant_id,
@@ -551,7 +575,7 @@ def set_campaign_candidate_status(campaign_id: str, candidate_id: str, status: s
                     (note or "").strip() or None,
                     Jsonb({"status": status, "campaign_id": campaign_id}),
                 ),
-            )
+            ).fetchone()
             conn.execute(
                 """
                 insert into audit_logs (tenant_id, user_id, action, entity_type, entity_id, metadata)
@@ -562,7 +586,7 @@ def set_campaign_candidate_status(campaign_id: str, candidate_id: str, status: s
         conn.commit()
     if not row:
         raise FileNotFoundError(candidate_id)
-    return _candidate_link_row(row)
+    return _candidate_link_row(row, [_activity_event_row(event_row)] if event_row else [])
 
 
 def _campaign_match_evidence_payload(match: dict[str, Any]) -> dict[str, Any]:
@@ -715,11 +739,11 @@ def _requirement_exists(requirement_id: str, tenant_id: str) -> None:
         raise FileNotFoundError(requirement_id)
 
 
-def _campaign_candidate_row(row: dict[str, Any]) -> dict[str, Any]:
-    return _candidate_link_row(row) | {"candidate": _candidate_summary(row["record_json"], row.get("candidate_updated_at"))}
+def _campaign_candidate_row(row: dict[str, Any], activity_events: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    return _candidate_link_row(row, activity_events) | {"candidate": _candidate_summary(row["record_json"], row.get("candidate_updated_at"))}
 
 
-def _candidate_link_row(row: dict[str, Any]) -> dict[str, Any]:
+def _candidate_link_row(row: dict[str, Any], activity_events: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     return {
         "id": str(row["id"]),
         "tenant_id": str(row["tenant_id"]),
@@ -734,6 +758,19 @@ def _candidate_link_row(row: dict[str, Any]) -> dict[str, Any]:
         "last_stage_changed_at": row["last_stage_changed_at"].isoformat() if row.get("last_stage_changed_at") else None,
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
         "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
+        "activity_events": activity_events or [],
+    }
+
+
+def _activity_event_row(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": str(row["id"]),
+        "event_type": row["event_type"],
+        "title": row["title"],
+        "body": row.get("body"),
+        "metadata": row.get("metadata") or {},
+        "user_email": row.get("user_email"),
+        "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
     }
 
 
