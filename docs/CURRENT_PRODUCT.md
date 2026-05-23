@@ -21,6 +21,8 @@ This is the current product reference. It replaces the old running-issues docume
 - Search candidates with Copilot using semantic chunks, structured fields, raw CV text, location signals, and recruiter notes.
 - Create campaigns, upload or paste requirements, edit scorecards, run matching, shortlist/reject candidates, and track pipeline stages.
 - View candidate intelligence with facts, AI notes, timeline, evidence, original CV, recruiter notes, and candidate versions.
+- Import candidates from LinkedIn-only profile URLs when no resume is available yet, optionally attaching them to a campaign.
+- Verify a parsed candidate LinkedIn URL from the candidate report and surface changed work history, education, certification, location, and freshness signals for recruiter review.
 
 ## Data And Privacy
 

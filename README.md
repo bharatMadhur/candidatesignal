@@ -465,6 +465,25 @@ PATCH /candidates/{id}/notes/{note_id}
 DELETE /candidates/{id}/notes/{note_id}
 ```
 
+## LinkedIn Import And Verification
+
+Recruiters can create a candidate from a LinkedIn profile URL when they do not have a resume yet. The imported profile becomes a normal tenant-scoped candidate record and can optionally be attached to a campaign.
+
+```text
+POST /candidates/linkedin-imports
+GET /candidates/linkedin-imports
+GET /candidates/linkedin-imports/{import_id}
+```
+
+Recruiters can also verify a candidate's parsed LinkedIn URL from the candidate report. Verification compares profile identity, role history, education, certifications, location, and freshness against the saved candidate record.
+
+```text
+POST /candidates/{id}/linkedin/verify
+GET /candidates/{id}/linkedin/verification
+```
+
+LinkedIn imports and verification require contact-PII permission because fetched profile data can contain names, locations, profile URLs, profile photos, role history, education, and certifications. Raw external profile data is stored tenant-scoped for the customer company; recruiter notes remain separate from external profile data.
+
 ## Verification
 
 ```bash
