@@ -2338,10 +2338,13 @@ function RecruiterCopilot({
   }, [filters, ignoredCandidateIds, latestCandidateMessage?.candidates, latestQuery]);
   const computedQueryInsights = useMemo(() => buildCopilotQueryInsights(latestQuery, latestCandidateMessage?.candidates ?? latestFilteredCandidates, latestQueryIntent), [latestQuery, latestCandidateMessage?.candidates, latestFilteredCandidates, latestQueryIntent]);
   const [queryDraft, setQueryDraft] = useState(computedQueryInsights);
+  const queryDraftResetRef = useRef("");
   const queryDraftResetKey = latestCandidateMessage
     ? `${activeThread?.id ?? "new"}:${latestCandidateMessage.query ?? ""}:${latestCandidateMessage.candidates?.length ?? 0}`
-    : `draft:${input}`;
+    : `draft:${activeThread?.id ?? "new"}`;
   useEffect(() => {
+    if (queryDraftResetRef.current === queryDraftResetKey) return;
+    queryDraftResetRef.current = queryDraftResetKey;
     setQueryDraft(computedQueryInsights);
   }, [queryDraftResetKey, computedQueryInsights]);
   const isSearching = busy && activeTab === "search";
