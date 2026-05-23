@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./styles/base.css";
+import "./styles/primitives.css";
 import "./styles.css";
 import "./styles/public-home.css";
 

@@ -7267,32 +7267,6 @@ button:disabled {
   font-size: 12px;
 }
 
-.progressTrack {
-  position: relative;
-  min-height: 18px;
-  overflow: hidden;
-  border: 1px solid var(--soft-line);
-  background: var(--surface-high);
-}
-
-.progressTrack i {
-  position: absolute;
-  inset: 0 auto 0 0;
-  display: block;
-  background: var(--primary-mid);
-}
-
-.progressTrack span {
-  position: relative;
-  z-index: 1;
-  display: block;
-  padding: 1px 6px;
-  color: var(--ink);
-  font-size: 11px;
-  font-weight: 800;
-  text-align: right;
-}
-
 .settingsTable {
   display: grid;
   border: 1px solid var(--soft-line);
@@ -7788,24 +7762,6 @@ button:disabled {
 .evidenceGrid p {
   margin-top: 8px;
   color: var(--muted);
-}
-
-.designedEmpty {
-  display: grid;
-  gap: 7px;
-  border: 1px dashed var(--line);
-  border-radius: 6px;
-  background: var(--surface-mid);
-  padding: 14px;
-  color: var(--muted);
-}
-
-.designedEmpty strong {
-  color: var(--ink);
-}
-
-.designedEmpty div {
-  margin-top: 4px;
 }
 
 .rawPreviewCard iframe {
@@ -8438,25 +8394,6 @@ button:disabled {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
-}
-
-.metric {
-  border: 1px solid var(--soft-line);
-  background: #fbfbff;
-  padding: 10px;
-}
-
-.metric span {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.metric strong {
-  display: block;
-  margin-top: 3px;
 }
 
 .actions,
