@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .candidate_versions import hidden_version_document_ids
 from .db import db
 
 
@@ -9,10 +10,17 @@ def tenant_workspace_analytics(tenant_id: str, *, limit: int = 15) -> dict[str, 
     """Tenant-scoped, non-PII analytics from normalized candidate tables."""
 
     capped_limit = max(1, min(int(limit or 15), 50))
+    hidden_version_ids = list(hidden_version_document_ids(tenant_id))
     with db() as conn:
         candidate_count = conn.execute(
-            "select count(*) as count from candidates where tenant_id=%s and deleted_at is null",
-            (tenant_id,),
+            """
+            select count(*) as count
+            from candidates
+            where tenant_id=%s
+              and deleted_at is null
+              and not (document_id = any(%s::text[]))
+            """,
+            (tenant_id, hidden_version_ids),
         ).fetchone()
         top_skills = conn.execute(
             """
@@ -22,12 +30,14 @@ def tenant_workspace_analytics(tenant_id: str, *, limit: int = 15) -> dict[str, 
             from candidate_skills
             join candidates on candidates.document_id=candidate_skills.document_id
               and candidates.tenant_id=candidate_skills.tenant_id
-            where candidate_skills.tenant_id=%s and candidates.deleted_at is null
+            where candidate_skills.tenant_id=%s
+              and candidates.deleted_at is null
+              and not (candidates.document_id = any(%s::text[]))
             group by skill, category
             order by candidate_count desc, lower(skill)
             limit %s
             """,
-            (tenant_id, capped_limit),
+            (tenant_id, hidden_version_ids, capped_limit),
         ).fetchall()
         top_domains = conn.execute(
             """
@@ -38,12 +48,14 @@ def tenant_workspace_analytics(tenant_id: str, *, limit: int = 15) -> dict[str, 
             from candidate_domain_years
             join candidates on candidates.document_id=candidate_domain_years.document_id
               and candidates.tenant_id=candidate_domain_years.tenant_id
-            where candidate_domain_years.tenant_id=%s and candidates.deleted_at is null
+            where candidate_domain_years.tenant_id=%s
+              and candidates.deleted_at is null
+              and not (candidates.document_id = any(%s::text[]))
             group by domain
             order by candidate_count desc, average_years desc, domain
             limit %s
             """,
-            (tenant_id, capped_limit),
+            (tenant_id, hidden_version_ids, capped_limit),
         ).fetchall()
         top_companies = conn.execute(
             """
@@ -52,12 +64,15 @@ def tenant_workspace_analytics(tenant_id: str, *, limit: int = 15) -> dict[str, 
             from candidate_experience
             join candidates on candidates.document_id=candidate_experience.document_id
               and candidates.tenant_id=candidate_experience.tenant_id
-            where candidate_experience.tenant_id=%s and candidates.deleted_at is null and nullif(trim(company), '') is not null
+            where candidate_experience.tenant_id=%s
+              and candidates.deleted_at is null
+              and not (candidates.document_id = any(%s::text[]))
+              and nullif(trim(company), '') is not null
             group by company
             order by candidate_count desc, lower(company)
             limit %s
             """,
-            (tenant_id, capped_limit),
+            (tenant_id, hidden_version_ids, capped_limit),
         ).fetchall()
         top_locations = conn.execute(
             """
@@ -68,12 +83,15 @@ def tenant_workspace_analytics(tenant_id: str, *, limit: int = 15) -> dict[str, 
             from candidate_locations
             join candidates on candidates.document_id=candidate_locations.document_id
               and candidates.tenant_id=candidate_locations.tenant_id
-            where candidate_locations.tenant_id=%s and candidates.deleted_at is null and nullif(trim(location), '') is not null
+            where candidate_locations.tenant_id=%s
+              and candidates.deleted_at is null
+              and not (candidates.document_id = any(%s::text[]))
+              and nullif(trim(location), '') is not null
             group by location, country, signal_type
             order by candidate_count desc, lower(location)
             limit %s
             """,
-            (tenant_id, capped_limit),
+            (tenant_id, hidden_version_ids, capped_limit),
         ).fetchall()
         top_countries = conn.execute(
             """
@@ -82,12 +100,15 @@ def tenant_workspace_analytics(tenant_id: str, *, limit: int = 15) -> dict[str, 
             from candidate_locations
             join candidates on candidates.document_id=candidate_locations.document_id
               and candidates.tenant_id=candidate_locations.tenant_id
-            where candidate_locations.tenant_id=%s and candidates.deleted_at is null and nullif(trim(country), '') is not null
+            where candidate_locations.tenant_id=%s
+              and candidates.deleted_at is null
+              and not (candidates.document_id = any(%s::text[]))
+              and nullif(trim(country), '') is not null
             group by country
             order by candidate_count desc, lower(country)
             limit %s
             """,
-            (tenant_id, capped_limit),
+            (tenant_id, hidden_version_ids, capped_limit),
         ).fetchall()
         education = conn.execute(
             """
@@ -96,16 +117,25 @@ def tenant_workspace_analytics(tenant_id: str, *, limit: int = 15) -> dict[str, 
             from candidate_education
             join candidates on candidates.document_id=candidate_education.document_id
               and candidates.tenant_id=candidate_education.tenant_id
-            where candidate_education.tenant_id=%s and candidates.deleted_at is null and nullif(trim(school), '') is not null
+            where candidate_education.tenant_id=%s
+              and candidates.deleted_at is null
+              and not (candidates.document_id = any(%s::text[]))
+              and nullif(trim(school), '') is not null
             group by school
             order by candidate_count desc, lower(school)
             limit %s
             """,
-            (tenant_id, capped_limit),
+            (tenant_id, hidden_version_ids, capped_limit),
         ).fetchall()
         candidate_rows = conn.execute(
-            "select record_json from candidates where tenant_id=%s and deleted_at is null",
-            (tenant_id,),
+            """
+            select record_json
+            from candidates
+            where tenant_id=%s
+              and deleted_at is null
+              and not (document_id = any(%s::text[]))
+            """,
+            (tenant_id, hidden_version_ids),
         ).fetchall()
 
     return {

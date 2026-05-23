@@ -28,7 +28,7 @@ class _AnalyticsConnection:
 
     def execute(self, sql: str, params: tuple = ()):
         self.calls.append((sql, params))
-        if "count(*) as count from candidates" in sql:
+        if "count(*) as count" in sql and "from candidates" in sql:
             return _Result([{"count": 3}])
         if "from candidate_skills" in sql:
             return _Result([{"label": "Databricks", "category": "Data", "candidate_count": 2}])
@@ -42,7 +42,7 @@ class _AnalyticsConnection:
             return _Result([{"label": "United States", "candidate_count": 3}])
         if "from candidate_education" in sql:
             return _Result([{"label": "Ohio State University", "candidate_count": 1}])
-        if "select record_json from candidates" in sql:
+        if "select record_json" in sql and "from candidates" in sql:
             return _Result(
                 [
                     {"record_json": {"derived": {"hr_profile": {"total_years_experience": 2.5}}}},
@@ -68,7 +68,10 @@ class AnalyticsTests(unittest.TestCase):
     def test_workspace_analytics_uses_tenant_scoped_normalized_tables(self) -> None:
         connection = _AnalyticsConnection()
 
-        with patch("resume_intel.analytics.db", return_value=_AnalyticsDb(connection)):
+        with (
+            patch("resume_intel.analytics.db", return_value=_AnalyticsDb(connection)),
+            patch("resume_intel.analytics.hidden_version_document_ids", return_value={"hidden-doc"}),
+        ):
             result = tenant_workspace_analytics("tenant-1", limit=20)
 
         self.assertEqual(result["candidate_count"], 3)
@@ -81,6 +84,7 @@ class AnalyticsTests(unittest.TestCase):
         self.assertTrue(connection.calls)
         for _sql, params in connection.calls:
             self.assertEqual(params[0], "tenant-1")
+            self.assertIn("hidden-doc", params[1])
 
 
 if __name__ == "__main__":
