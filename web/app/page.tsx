@@ -134,6 +134,7 @@ import {
 } from "../lib/api";
 import { authClient, signInWithBetterAuth } from "../lib/auth-client";
 import { BrandMark } from "./components/brand";
+import { EmptyPanel, Metric, ProgressBar } from "./components/primitives";
 import { RECRUITER_COPY, WORKSPACE_NAV_LABELS } from "./components/recruiter-language";
 import { DOCUMENT_FILE_ACCEPT, DOCUMENT_FORMAT_LABEL, resolveLoginIdentifier } from "./lib/login";
 import { copyCurrentUrl, parseWorkspaceRoute, routeHasDeepLink, type CampaignDetailTab, type CandidateDetailTab, type View, type WorkspaceRoute } from "./lib/workspace-route";
@@ -7102,10 +7103,6 @@ function AdminMiniList({ title, count, rows }: { title: string; count: number; r
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return <div className="metric"><span>{label}</span><strong>{value}</strong></div>;
-}
-
 function tenantTier(tenant: Tenant) {
   if (tenant.seat_limit >= 50) return "enterprise";
   if (tenant.seat_limit >= 15) return "growth";
@@ -7121,16 +7118,6 @@ function isPlatformAdminAuditEvent(event: AuditEvent) {
   const action = `${event.action} ${event.entity_type}`.toLowerCase();
   return /tenant|company|member|invite|invitation|role|seat|user|admin|governance/.test(action)
     && !/workspace|candidate|resume|parse|requirement|match|copilot|pii|document|note/.test(action);
-}
-
-function EmptyPanel({ title, body, action }: { title: string; body: string; action?: React.ReactNode }) {
-  return (
-    <div className="designedEmpty">
-      <strong>{title}</strong>
-      <span>{body}</span>
-      {action ? <div>{action}</div> : null}
-    </div>
-  );
 }
 
 type EvidenceRowInput = { label: string; value?: unknown; source: string; query?: string[] };
@@ -7683,16 +7670,6 @@ function latestCandidateReparseBatch(batches: ParseBatch[], sourceName: string) 
     .filter((batch) => !normalizedSource || normalizeComparableText(batch.name).includes(normalizedSource))
     .sort((left, right) => new Date(right.updated_at ?? right.created_at ?? 0).getTime() - new Date(left.updated_at ?? left.created_at ?? 0).getTime());
   return matching[0] ?? null;
-}
-
-function ProgressBar({ value }: { value: number }) {
-  const percent = Math.max(0, Math.min(100, Math.round(value || 0)));
-  return (
-    <div className="progressTrack" aria-label={`Progress ${percent}%`}>
-      <i style={{ width: `${percent}%` }} />
-      <span>{percent}%</span>
-    </div>
-  );
 }
 
 function delay(ms: number) {
