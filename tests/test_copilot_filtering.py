@@ -3,6 +3,7 @@ import unittest
 from resume_intel.matching import (
     apply_copilot_direct_evidence_policy,
     candidate_has_direct_evidence,
+    copilot_structured_evidence,
     copilot_clarifying_questions,
     copilot_query_intent,
     promote_direct_evidence,
@@ -141,6 +142,26 @@ class CopilotFilteringTest(unittest.TestCase):
         questions = copilot_clarifying_questions("find me data engineer from new york")
 
         self.assertFalse(any("countries, locations" in question for question in questions))
+
+    def test_structured_recruiter_note_signals_are_searchable_evidence(self):
+        intent = copilot_query_intent("find opt candidate")
+        evidence = copilot_structured_evidence(
+            {
+                "name": "Visa Candidate",
+                "current_title": "Data Engineer",
+                "note_signals": [
+                    {
+                        "category": "work_authorization",
+                        "label": "opt",
+                        "value": "OPT",
+                        "source_text": "Recruiter note: OPT and available in 2 weeks.",
+                    }
+                ],
+            },
+            intent,
+        )
+
+        self.assertTrue(any(item["chunk_type"] == "recruiter_note_signals" for item in evidence))
 
 
 if __name__ == "__main__":

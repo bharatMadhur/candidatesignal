@@ -8,6 +8,7 @@ from psycopg.types.json import Jsonb
 
 from .db import db
 from .extractors import extract_document
+from .geo import candidate_current_location, countries_for_search
 from .llm import extract_requirement_profile, judge_requirement_candidate_matches
 from .pii import redact_contact_pii_text
 from .settings import Settings, load_settings
@@ -48,7 +49,7 @@ LEXICAL_RECALL_LIMIT = 250
 DETERMINISTIC_SCORE_POOL_LIMIT = 120
 LLM_JUDGE_LIMIT = 15
 LLM_JUDGE_MIN_SCORE = 0.58
-CAMPAIGN_MATCH_VISIBILITY_THRESHOLD = 0.50
+CAMPAIGN_MATCH_VISIBILITY_THRESHOLD = 0.65
 
 MATCH_STOPWORDS = {
     "ability",
@@ -1498,10 +1499,28 @@ def _candidate_summary(candidate: dict[str, Any]) -> dict[str, Any]:
         "name": candidate.get("name"),
         "current_title": hr.get("current_title"),
         "current_company": hr.get("current_company"),
-        "location": candidate.get("contact", {}).get("location"),
+        "location": candidate_current_location(candidate),
+        "countries": countries_for_search(candidate),
+        "note_signals": _candidate_note_signal_items(candidate),
         "total_years_experience": hr.get("total_years_experience"),
         "seniority": hr.get("seniority_level"),
     }
+
+
+def _candidate_note_signal_items(candidate: dict[str, Any]) -> list[dict[str, Any]]:
+    signals = candidate.get("derived", {}).get("recruiter_note_signals") or {}
+    if isinstance(signals.get("signals"), list):
+        return [item for item in signals["signals"] if isinstance(item, dict)][:12]
+    grouped = signals.get("by_category") if isinstance(signals, dict) else {}
+    items: list[dict[str, Any]] = []
+    if isinstance(grouped, dict):
+        for category, values in grouped.items():
+            if not isinstance(values, list):
+                continue
+            for value in values:
+                if isinstance(value, dict):
+                    items.append({"category": category, **value})
+    return items[:12]
 
 
 def _candidate_text(candidate: dict[str, Any], raw_text: str = "") -> str:
@@ -1513,6 +1532,7 @@ def _candidate_text(candidate: dict[str, Any], raw_text: str = "") -> str:
         " ".join(candidate.get("skills") or []),
         " ".join(candidate.get("certifications") or []),
         " ".join(note.get("content", "") for note in candidate.get("notes") or []),
+        _flatten_text(candidate.get("derived", {}).get("recruiter_note_signals")),
         _domain_text(candidate),
         " ".join(item.get("country", "") for item in candidate.get("derived", {}).get("countries_associated") or [] if isinstance(item, dict)),
         _flatten_text(location_intelligence),
@@ -1615,12 +1635,26 @@ def _canonical_domain(value: str) -> str:
 
 
 def _notes_relevance(profile: dict[str, Any], candidate: dict[str, Any]) -> list[str]:
-    terms = [_norm(item) for item in [*_field_list(profile.get("must_have_skills")), *_field_list(profile.get("nice_to_have_skills"))] if item]
+    terms = [
+        _norm(item)
+        for item in [
+            *_field_list(profile.get("must_have_skills")),
+            *_field_list(profile.get("nice_to_have_skills")),
+            *_field_list(profile.get("work_authorization")),
+            *_field_list(profile.get("location_preference")),
+            *_field_list(profile.get("required_locations")),
+            *_field_list(profile.get("required_countries")),
+        ]
+        if item
+    ]
     hits = []
     for note in candidate.get("notes") or []:
         note_text = _norm(note.get("content", ""))
         if any(term in note_text for term in terms):
             hits.append(note.get("name") or "note")
+    signal_text = _norm(_flatten_text(candidate.get("derived", {}).get("recruiter_note_signals")))
+    if signal_text and any(term in signal_text for term in terms):
+        hits.append("structured recruiter note signal")
     return hits
 
 

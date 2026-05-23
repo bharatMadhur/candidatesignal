@@ -333,9 +333,24 @@ def copilot_candidate_text(candidate: dict) -> str:
         candidate.get("source_file"),
         " ".join(candidate.get("countries") or []),
         " ".join(candidate.get("top_domains") or []),
+        _candidate_note_signal_text(candidate),
     ]
     haystacks.extend((item.get("snippet") or "") for item in candidate.get("evidence") or [] if isinstance(item, dict))
     return normalize_copilot_text("\n".join(str(item or "") for item in haystacks))
+
+
+def _candidate_note_signal_text(candidate: dict) -> str:
+    derived = candidate.get("derived") if isinstance(candidate.get("derived"), dict) else {}
+    recruiter_signals = derived.get("recruiter_note_signals") if isinstance(derived.get("recruiter_note_signals"), dict) else {}
+    signals = candidate.get("note_signals") or recruiter_signals.get("signals") or []
+    if not isinstance(signals, list):
+        return ""
+    parts: list[str] = []
+    for signal in signals:
+        if not isinstance(signal, dict):
+            continue
+        parts.extend(str(signal.get(key) or "") for key in ("category", "label", "value", "source_text"))
+    return " ".join(parts)
 
 
 def copilot_structured_evidence(candidate: dict, intent: dict[str, Any]) -> list[dict]:
@@ -343,6 +358,7 @@ def copilot_structured_evidence(candidate: dict, intent: dict[str, Any]) -> list
         ("profile", "Structured profile", " ".join(filter(None, [candidate.get("name"), candidate.get("current_title"), candidate.get("current_company")]))),
         ("locations", "Current location and countries", " ".join(filter(None, [candidate.get("location"), " ".join(candidate.get("countries") or [])]))),
         ("domains", "Parsed domain experience", " ".join(domain.replace("_", " ") for domain in candidate.get("top_domains") or [])),
+        ("recruiter_note_signals", "Structured recruiter notes", _candidate_note_signal_text(candidate)),
     ]
     aliases = [
         *(intent.get("terms") or []),
@@ -401,6 +417,7 @@ def candidate_has_direct_evidence(candidate: dict, terms: list[str]) -> bool:
         candidate.get("location"),
         candidate.get("source_file"),
         " ".join(candidate.get("countries") or []),
+        _candidate_note_signal_text(candidate),
     ]
     haystacks.extend((item.get("snippet") or "") for item in candidate.get("evidence") or [] if isinstance(item, dict))
     text = "\n".join(str(item or "").lower() for item in haystacks)

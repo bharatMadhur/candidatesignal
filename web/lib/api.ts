@@ -37,6 +37,7 @@ export type CandidateSummary = {
   semantic_top_chunks?: string[];
   top_chunks?: string[];
   evidence?: Array<{ chunk_type?: string; source_label?: string; page_number?: number | null; snippet?: string }>;
+  note_signals?: Array<{ category?: string; label?: string; value?: string | null; source_text?: string | null }>;
   coverage?: number | null;
   duplicate_risk_score?: number;
   duplicate_status?: string | null;

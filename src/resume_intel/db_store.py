@@ -228,6 +228,7 @@ def list_candidates_db(tenant_id: str | None = None) -> list[dict[str, Any]]:
         fact_verification = record.get("derived", {}).get("fact_verification") or {}
         location_intelligence = record.get("derived", {}).get("location_intelligence") or {}
         experience_by_domain = record.get("derived", {}).get("experience_by_domain") or {}
+        note_signal_summary = record.get("derived", {}).get("recruiter_note_signals") or {}
         top_domains = sorted(experience_by_domain, key=lambda key: _domain_year_value(experience_by_domain.get(key)), reverse=True)[:5]
         candidates.append(
             {
@@ -249,6 +250,7 @@ def list_candidates_db(tenant_id: str | None = None) -> list[dict[str, Any]]:
                     for item in record.get("derived", {}).get("countries_associated", [])
                     if isinstance(item, dict) and item.get("country")
                 ],
+                "note_signals": note_signal_summary.get("signals") if isinstance(note_signal_summary, dict) else [],
                 "coverage": record.get("primary_key_coverage", {}).get("score"),
                 "reviewed_signals": reviewed_signals.get(row["document_id"], []),
                 **duplicate_risk.get(row["document_id"], {"duplicate_risk_score": 0, "duplicate_status": None}),

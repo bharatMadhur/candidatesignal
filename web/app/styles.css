@@ -3359,6 +3359,11 @@ a:focus {
   font-weight: 800;
 }
 
+.stitchCandidateActions .noteSignalChip {
+  background: #eef6f1;
+  color: #2f6b46;
+}
+
 .stitchCandidateActions button {
   margin-left: auto;
   border: 0;

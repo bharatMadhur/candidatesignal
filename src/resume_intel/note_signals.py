@@ -9,11 +9,18 @@ from psycopg.types.json import Jsonb
 
 VISA_PATTERNS = [
     ("opt", r"\bOPT\b|optional practical training"),
+    ("stem_opt", r"\bSTEM\s+OPT\b"),
     ("cpt", r"\bCPT\b|curricular practical training"),
     ("h1b", r"\bH-?1B\b"),
+    ("h4_ead", r"\bH-?4\s+EAD\b"),
+    ("ead", r"\bEAD\b|employment authorization document"),
     ("green_card", r"green card|\bGC\b|permanent resident"),
-    ("us_citizen", r"u\.?s\.? citizen|citizenship"),
+    ("us_citizen", r"\bUSC\b|u\.?s\.? citizen|citizenship"),
+    ("w2_only", r"\bW-?2\b|w2 only"),
+    ("c2c", r"\bC2C\b|corp(?:oration)?\s+to\s+corp(?:oration)?"),
+    ("contract_1099", r"\b1099\b"),
     ("sponsorship_required", r"need(?:s|ing)? sponsorship|requires sponsorship|visa sponsorship"),
+    ("no_sponsorship_required", r"no sponsorship|does not need sponsorship|without sponsorship"),
 ]
 MOBILITY_PATTERNS = [
     ("open_to_relocate", r"open to relocat|willing to relocat|relocation ok"),
@@ -26,6 +33,25 @@ AVAILABILITY_PATTERNS = [
     ("immediate", r"immediate(?:ly)? available|available now|join immediately"),
     ("two_weeks", r"2 weeks|two weeks|14 days"),
     ("notice_period", r"notice period|available from|start date"),
+]
+RELATIONSHIP_PATTERNS = [
+    ("linkedin_connected", r"connected (?:with|on)\s+linkedin|linkedin connection|1st degree"),
+    ("linkedin_messaged", r"messaged (?:on|via)\s+linkedin|linkedin message|inmail"),
+    ("phone_screened", r"phone screen|screened by phone|called candidate|spoke with"),
+    ("email_sent", r"email(?:ed)? candidate|sent email|emailed"),
+]
+SOURCE_PATTERNS = [
+    ("linkedin_source", r"\blinkedin\b"),
+    ("referral_source", r"\breferral\b|referred by"),
+    ("job_board_source", r"indeed|dice|monster|ziprecruiter|job board"),
+    ("direct_applicant_source", r"direct applicant|applied directly|inbound applicant"),
+    ("agency_source", r"vendor submitted|agency submitted|supplier submitted"),
+]
+PROFILE_STATUS_PATTERNS = [
+    ("linkedin_verified", r"linkedin verified|verified linkedin|profile verified"),
+    ("linkedin_needs_verification", r"verify linkedin|linkedin unclear|linkedin not verified"),
+    ("resume_requested", r"asked for updated resume|requested updated resume|need updated resume"),
+    ("profile_stale", r"stale profile|old resume|outdated resume|resume is old"),
 ]
 CONCERN_PATTERNS = [
     ("concern", r"\bconcern\b|\brisk\b|red flag|verify|unclear|gap"),
@@ -50,6 +76,9 @@ def extract_recruiter_note_signals(name: str | None, content: str | None) -> lis
     signals.extend(_pattern_signals("work_authorization", text, VISA_PATTERNS))
     signals.extend(_pattern_signals("mobility", text, MOBILITY_PATTERNS))
     signals.extend(_pattern_signals("availability", text, AVAILABILITY_PATTERNS))
+    signals.extend(_pattern_signals("relationship", text, RELATIONSHIP_PATTERNS))
+    signals.extend(_pattern_signals("candidate_source", text, SOURCE_PATTERNS))
+    signals.extend(_pattern_signals("profile_status", text, PROFILE_STATUS_PATTERNS))
     signals.extend(_pattern_signals("screening", text, CONCERN_PATTERNS))
     signals.extend(_salary_signals(text))
     signals.extend(_location_preference_signals(text))

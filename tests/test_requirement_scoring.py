@@ -7,10 +7,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from resume_intel.requirements import _apply_structured_answers, _deterministic_match_pool, score_candidate
+from resume_intel.requirements import CAMPAIGN_MATCH_VISIBILITY_THRESHOLD, _apply_structured_answers, _deterministic_match_pool, score_candidate
 
 
 class RequirementScoringTests(unittest.TestCase):
+    def test_campaign_visibility_threshold_matches_recruiter_review_cutoff(self) -> None:
+        self.assertEqual(CAMPAIGN_MATCH_VISIBILITY_THRESHOLD, 0.65)
+
     def test_hard_filter_failures_cap_score(self) -> None:
         profile = {
             "must_have_skills": ["Azure OpenAI", "LangChain"],
@@ -73,6 +76,38 @@ class RequirementScoringTests(unittest.TestCase):
         self.assertGreater(result["total_score"], 0)
         self.assertIn("score_weights", result["evidence"])
         self.assertIn("match_explanation", result["evidence"])
+
+    def test_structured_recruiter_note_signals_affect_notes_relevance(self) -> None:
+        profile = {
+            "must_have_skills": [],
+            "nice_to_have_skills": [],
+            "work_authorization": "OPT",
+            "domains": [],
+            "required_locations": [],
+            "required_countries": [],
+            "dealbreakers": [],
+        }
+        candidate = {
+            "name": "Candidate",
+            "summary": "Data engineer.",
+            "skills": ["Python"],
+            "experience": [{"company": "Example", "title": "Data Engineer", "location": "Ohio", "bullets": ["Built data pipelines"]}],
+            "education": [],
+            "notes": [],
+            "certifications": [],
+            "derived": {
+                "hr_profile": {"total_years_experience": 3},
+                "experience_by_domain": {"data_engineering": 3},
+                "recruiter_note_signals": {
+                    "signals": [{"category": "work_authorization", "label": "opt", "value": "OPT"}],
+                },
+            },
+            "contact": {"location": "Ohio"},
+        }
+
+        result = score_candidate(profile, candidate, "")
+
+        self.assertIn("structured recruiter note signal", result["evidence"]["notes_relevance"])
 
     def test_candidate_with_required_facts_passes_hard_filters(self) -> None:
         profile = {

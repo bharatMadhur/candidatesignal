@@ -23,6 +23,19 @@ class NoteSignalTests(unittest.TestCase):
     def test_ignores_empty_note(self) -> None:
         self.assertEqual(extract_recruiter_note_signals("", " "), [])
 
+    def test_extracts_relationship_source_and_profile_status(self) -> None:
+        signals = extract_recruiter_note_signals(
+            "LinkedIn follow-up",
+            "Connected on LinkedIn. Referral from Priya. LinkedIn verified. H1B transfer, W2 only.",
+        )
+        by_label = {item["label"]: item for item in signals}
+
+        self.assertEqual(by_label["linkedin_connected"]["category"], "relationship")
+        self.assertEqual(by_label["referral_source"]["category"], "candidate_source")
+        self.assertEqual(by_label["linkedin_verified"]["category"], "profile_status")
+        self.assertEqual(by_label["h1b"]["category"], "work_authorization")
+        self.assertEqual(by_label["w2_only"]["category"], "work_authorization")
+
 
 if __name__ == "__main__":
     unittest.main()

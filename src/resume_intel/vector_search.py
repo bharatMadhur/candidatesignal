@@ -439,6 +439,7 @@ def _candidate_summary(row: Any, scores: dict[str, Any]) -> dict[str, Any]:
     hr_profile = record.get("derived", {}).get("hr_profile", {})
     location_intelligence = record.get("derived", {}).get("location_intelligence") or {}
     experience_by_domain = record.get("derived", {}).get("experience_by_domain") or {}
+    note_signal_summary = record.get("derived", {}).get("recruiter_note_signals") or {}
     top_domains = sorted(experience_by_domain, key=lambda key: _domain_year_value(experience_by_domain.get(key)), reverse=True)[:5]
     return {
         "document_id": row["document_id"],
@@ -452,6 +453,7 @@ def _candidate_summary(row: Any, scores: dict[str, Any]) -> dict[str, Any]:
         "top_domains": top_domains,
         "location": candidate_current_location(record),
         "countries": countries_for_search(record),
+        "note_signals": note_signal_summary.get("signals") if isinstance(note_signal_summary, dict) else [],
         "coverage": record.get("primary_key_coverage", {}).get("score"),
         "source_file": record.get("original_filename") or Path(row["source_file"] or "Uploaded CV").name,
         "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,

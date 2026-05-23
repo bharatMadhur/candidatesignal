@@ -2475,6 +2475,7 @@ function RecruiterCopilot({
                 const breakdown = normalizedCopilotScoreBreakdown(candidate);
                 const scoreItems = scoreBreakdownItems(breakdown);
                 const isShortlisted = shortlistedCandidateIds.has(candidate.document_id);
+                const noteSignalTags = candidateNoteSignalLabels(candidate).slice(0, 3);
                 return (
                   <article className="stitchCandidateCard copilotCompactCard" key={candidate.document_id}>
                     <div className="stitchCandidateTop">
@@ -2506,6 +2507,7 @@ function RecruiterCopilot({
                       </details>
                     )}
                     <div className="stitchCandidateActions">
+                      {noteSignalTags.map((signal) => <span className="noteSignalChip" key={signal}>{signal}</span>)}
                       {(candidate.top_domains ?? []).slice(0, 2).map((domain) => <span key={domain}>{domainLabel(domain)}</span>)}
                       {candidateRoleFactsNeedReview(candidate) ? <span className="factReviewAction">Role facts need review</span> : null}
                       <button onClick={() => setIgnoredCandidateIds((ids) => [...ids, candidate.document_id])}>Ignore</button>
@@ -2668,6 +2670,21 @@ function DatabaseView({ candidates, query, setQuery, open }: { candidates: Candi
     candidates.forEach((candidate) => (candidate.countries ?? []).forEach((country) => country && countries.add(country)));
     return Array.from(countries).sort((left, right) => left.localeCompare(right)).slice(0, 6);
   }, [candidates]);
+  const noteSignalFilters = useMemo(() => {
+    const counts = new Map<string, { label: string; count: number }>();
+    candidates.forEach((candidate) => {
+      (candidate.note_signals ?? []).forEach((signal) => {
+        const key = candidateNoteSignalKey(signal);
+        if (!key) return;
+        const existing = counts.get(key);
+        counts.set(key, { label: candidateNoteSignalDisplay(signal), count: (existing?.count ?? 0) + 1 });
+      });
+    });
+    return [...counts.entries()]
+      .sort((left, right) => right[1].count - left[1].count || left[1].label.localeCompare(right[1].label))
+      .slice(0, 5)
+      .map(([key, value]) => ({ id: `note:${key}`, label: value.label }));
+  }, [candidates]);
   const filteredCandidates = applyDatabaseFilters(candidates, filters);
   const filterOptions = [
     { id: "ai", label: "AI / GenAI" },
@@ -2677,6 +2694,7 @@ function DatabaseView({ candidates, query, setQuery, open }: { candidates: Candi
     { id: "duplicate", label: "Version Signal" },
     { id: "coverage", label: "Complete Profiles" },
     { id: "missing_location", label: "Missing Location" },
+    ...noteSignalFilters,
   ];
   function toggleFilter(id: string) {
     setFilters((items) => items.includes(id) ? items.filter((item) => item !== id) : [...items, id]);
@@ -3355,6 +3373,7 @@ function CandidateTable({ candidates, open }: { candidates: CandidateSummary[]; 
       ) : null}
       {sortedCandidates.map((item) => {
         const hazardItems = candidateListHazards(item);
+        const noteSignals = candidateNoteSignalLabels(item).slice(0, 2);
         return (
           <button className="tableRow" key={item.document_id} onClick={() => open(item.document_id)}>
             <span className="truncateCell candidateListNameCell" title={item.name ?? "Unknown"}>
@@ -3370,7 +3389,10 @@ function CandidateTable({ candidates, open }: { candidates: CandidateSummary[]; 
             </span>
             <span className="truncateCell" title={item.current_company ?? "Missing"}>{item.current_company ?? "Missing"}</span>
             <span>{typeof item.total_years_experience === "number" ? `${item.total_years_experience} yrs` : "N/A"}<small>{item.seniority ?? "Unknown seniority"}</small></span>
-            <span className="truncateCell" title={(item.top_domains ?? []).map(domainLabel).join(", ") || "Missing"}>{(item.top_domains ?? []).slice(0, 2).map(domainLabel).join(", ") || "Missing"}</span>
+            <span className="truncateCell" title={(item.top_domains ?? []).map(domainLabel).join(", ") || "Missing"}>
+              {(item.top_domains ?? []).slice(0, 2).map(domainLabel).join(", ") || "Missing"}
+              {noteSignals.length ? <small>{noteSignals.join(" | ")}</small> : null}
+            </span>
             <span className="truncateCell" title={[item.location, ...(item.countries ?? [])].filter(Boolean).join(" / ") || "Missing"}>{[item.location, ...(item.countries ?? [])].filter(Boolean).join(" / ") || "Missing"}</span>
             <span className="coverageCell"><i style={{ width: `${Math.round((item.coverage ?? 0) * 100)}%` }} />{item.coverage ? `${Math.round(item.coverage * 100)}%` : "N/A"}</span>
             <span>{item.duplicate_risk_score ? <b className="riskBadge">{Math.round(item.duplicate_risk_score * 100)}% {versionStatusLabel(item.duplicate_status)}</b> : "Unique"}</span>
@@ -7118,10 +7140,14 @@ function applyDatabaseFilters(candidates: CandidateSummary[], filters: string[])
   const selectedCountries = filters
     .filter((item) => item.startsWith("country:"))
     .map((item) => item.slice("country:".length));
+  const selectedNoteSignals = filters
+    .filter((item) => item.startsWith("note:"))
+    .map((item) => item.slice("note:".length));
   return candidates.filter((candidate) => {
     if (filters.includes("ai") && !(candidate.top_domains ?? []).some((domain) => /ai|gen|llm|conversation/i.test(domain))) return false;
     if (filters.includes("experience") && Number(candidate.total_years_experience ?? 0) < 5) return false;
     if (selectedCountries.length && !selectedCountries.some((country) => (candidate.countries ?? []).includes(country))) return false;
+    if (selectedNoteSignals.length && !selectedNoteSignals.some((key) => (candidate.note_signals ?? []).some((signal) => candidateNoteSignalKey(signal) === key))) return false;
     if (filters.includes("seniority") && !/lead|senior|principal|staff/i.test(candidate.seniority ?? `${candidate.current_title ?? ""}`)) return false;
     if (filters.includes("duplicate") && Number(candidate.duplicate_risk_score ?? 0) < 0.75) return false;
     if (filters.includes("coverage") && Number(candidate.coverage ?? 0) <= 0.8) return false;
@@ -7531,6 +7557,27 @@ function candidateRoleFactsNeedReview(candidate: CandidateSummary) {
     && candidate.current_role_verification_status !== "verified"
     && candidate.current_role_verification_status !== "missing"
   );
+}
+
+function candidateNoteSignalLabels(candidate: CandidateSummary) {
+  return (candidate.note_signals ?? [])
+    .map(candidateNoteSignalDisplay)
+    .filter(Boolean);
+}
+
+function candidateNoteSignalDisplay(signal: { category?: string; label?: string; value?: string | null }) {
+  const label = domainLabel(String(signal.label || signal.value || signal.category || ""));
+  const value = signal.value && String(signal.value).toLowerCase() !== String(signal.label || "").toLowerCase()
+    ? `: ${signal.value}`
+    : "";
+  return `${label}${value}`.trim();
+}
+
+function candidateNoteSignalKey(signal: { category?: string; label?: string; value?: string | null }) {
+  const category = String(signal.category || "").toLowerCase().trim();
+  const label = String(signal.label || signal.value || "").toLowerCase().trim();
+  if (!category && !label) return "";
+  return `${category}:${label}`.replace(/\s+/g, "_");
 }
 
 function candidateListHazards(candidate: CandidateSummary) {
