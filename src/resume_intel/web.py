@@ -290,6 +290,7 @@ class CampaignUpdateRequest(BaseModel):
 
 
 class CampaignDeleteRequest(BaseModel):
+    confirmation: str
     reason: str = "removed_by_recruiter"
 
 
@@ -1171,14 +1172,16 @@ def job_campaign(campaign_id: str, user: dict = Depends(current_user)) -> dict:
 
 
 @app.delete("/campaigns/{campaign_id}")
-def delete_job_campaign(campaign_id: str, request: CampaignDeleteRequest | None = None, user: dict = Depends(current_user)) -> dict:
+def delete_job_campaign(campaign_id: str, request: CampaignDeleteRequest, user: dict = Depends(current_user)) -> dict:
     require_tenant_write(user)
+    if request.confirmation != "delete":
+        raise HTTPException(status_code=400, detail="type delete to confirm campaign deletion")
     try:
         return soft_delete_campaign(
             campaign_id,
             _tenant_id(user),
             user["id"],
-            reason=(request.reason if request else "removed_by_recruiter"),
+            reason=request.reason,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="campaign not found") from exc

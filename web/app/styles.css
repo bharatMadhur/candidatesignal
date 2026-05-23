@@ -3947,6 +3947,19 @@ a:focus {
   white-space: nowrap;
 }
 
+.candidateListNameCell > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.candidateListHazardIcon {
+  flex: 0 0 auto;
+  color: var(--warn);
+}
+
 .tableEmpty {
   min-width: 760px;
   display: grid;
@@ -10445,6 +10458,58 @@ h3 {
   color: var(--muted);
   font-size: 12px;
   line-height: 18px;
+}
+
+.campaignDeleteConfirmPanel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(220px, 0.55fr) auto;
+  gap: 14px;
+  align-items: end;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 14px;
+}
+
+.campaignDeleteConfirmPanel > div:first-child {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.campaignDeleteConfirmPanel svg {
+  color: var(--warn);
+}
+
+.campaignDeleteConfirmPanel strong,
+.campaignDeleteConfirmPanel span,
+.campaignDeleteConfirmPanel label {
+  display: block;
+}
+
+.campaignDeleteConfirmPanel span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.campaignDeleteConfirmPanel label {
+  display: grid;
+  gap: 6px;
+}
+
+.campaignDeleteConfirmPanel input {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-high);
+  padding: 0 10px;
+}
+
+.campaignDeleteConfirmPanel > div:last-child {
+  display: inline-flex;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .campaignEditPanel {

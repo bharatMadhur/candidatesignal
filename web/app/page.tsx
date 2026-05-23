@@ -1099,15 +1099,13 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     setCampaigns((items) => items.map((item) => item.id === result.id ? result : item));
   }
 
-  async function handleDeleteCampaign(id: string) {
+  async function handleDeleteCampaign(id: string, confirmation: string) {
     if (!id || !token) return;
-    const campaignToDelete = campaigns.find((item) => item.id === id) ?? campaign;
-    const typed = window.prompt(`Soft delete "${campaignToDelete?.name ?? "this campaign"}"? Type delete to confirm.`);
-    if (typed !== "delete") {
+    if (confirmation !== "delete") {
       setStatus("Campaign delete cancelled. Type delete exactly to confirm.");
       return;
     }
-    const result = await run("Deleting campaign", () => deleteCampaign(token, id));
+    const result = await run("Deleting campaign", () => deleteCampaign(token, id, confirmation));
     if (!result?.deleted) return;
     const remaining = campaigns.filter((item) => item.id !== id);
     setCampaigns(remaining);
@@ -1119,6 +1117,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
       }
     }
     setStatus("Campaign soft-deleted. History is preserved, but it is removed from the workspace list.");
+    await refresh();
   }
 
   async function handleCreateCampaignRequirement(id: string, text: string) {
@@ -3348,25 +3347,31 @@ function CandidateTable({ candidates, open }: { candidates: CandidateSummary[]; 
           <span>Clear filters, change the search query, or upload resumes to build the database.</span>
         </div>
       ) : null}
-      {sortedCandidates.map((item) => (
-        <button className="tableRow" key={item.document_id} onClick={() => open(item.document_id)}>
-          <span className="truncateCell" title={item.name ?? "Unknown"}>
-            {item.name ?? "Unknown"}
-            <small>{item.email ?? item.phone ?? "No contact ID"}</small>
-          </span>
-          <span className="truncateCell" title={item.current_title ?? "Missing"}>
-            {item.current_title ?? "Missing"}
-            {candidateRoleFactsNeedReview(item) ? <small className="factReviewText">Role facts need review</small> : null}
-          </span>
-          <span className="truncateCell" title={item.current_company ?? "Missing"}>{item.current_company ?? "Missing"}</span>
-          <span>{typeof item.total_years_experience === "number" ? `${item.total_years_experience} yrs` : "N/A"}<small>{item.seniority ?? "Unknown seniority"}</small></span>
-          <span className="truncateCell" title={(item.top_domains ?? []).map(domainLabel).join(", ") || "Missing"}>{(item.top_domains ?? []).slice(0, 2).map(domainLabel).join(", ") || "Missing"}</span>
-          <span className="truncateCell" title={[item.location, ...(item.countries ?? [])].filter(Boolean).join(" / ") || "Missing"}>{[item.location, ...(item.countries ?? [])].filter(Boolean).join(" / ") || "Missing"}</span>
-          <span className="coverageCell"><i style={{ width: `${Math.round((item.coverage ?? 0) * 100)}%` }} />{item.coverage ? `${Math.round(item.coverage * 100)}%` : "N/A"}</span>
-          <span>{item.duplicate_risk_score ? <b className="riskBadge">{Math.round(item.duplicate_risk_score * 100)}% {versionStatusLabel(item.duplicate_status)}</b> : "Unique"}</span>
-          <span>{item.updated_at ? new Date(item.updated_at).toLocaleDateString() : "N/A"}</span>
-        </button>
-      ))}
+      {sortedCandidates.map((item) => {
+        const hazardItems = candidateListHazards(item);
+        return (
+          <button className="tableRow" key={item.document_id} onClick={() => open(item.document_id)}>
+            <span className="truncateCell candidateListNameCell" title={item.name ?? "Unknown"}>
+              <span>
+                {hazardItems.length ? <AlertTriangle className="candidateListHazardIcon" size={15} aria-label={hazardItems.join(", ")} /> : null}
+                {item.name ?? "Unknown"}
+              </span>
+              <small>{hazardItems[0] ?? item.email ?? item.phone ?? "No contact ID"}</small>
+            </span>
+            <span className="truncateCell" title={item.current_title ?? "Missing"}>
+              {item.current_title ?? "Missing"}
+              {candidateRoleFactsNeedReview(item) ? <small className="factReviewText">Role facts need review</small> : null}
+            </span>
+            <span className="truncateCell" title={item.current_company ?? "Missing"}>{item.current_company ?? "Missing"}</span>
+            <span>{typeof item.total_years_experience === "number" ? `${item.total_years_experience} yrs` : "N/A"}<small>{item.seniority ?? "Unknown seniority"}</small></span>
+            <span className="truncateCell" title={(item.top_domains ?? []).map(domainLabel).join(", ") || "Missing"}>{(item.top_domains ?? []).slice(0, 2).map(domainLabel).join(", ") || "Missing"}</span>
+            <span className="truncateCell" title={[item.location, ...(item.countries ?? [])].filter(Boolean).join(" / ") || "Missing"}>{[item.location, ...(item.countries ?? [])].filter(Boolean).join(" / ") || "Missing"}</span>
+            <span className="coverageCell"><i style={{ width: `${Math.round((item.coverage ?? 0) * 100)}%` }} />{item.coverage ? `${Math.round(item.coverage * 100)}%` : "N/A"}</span>
+            <span>{item.duplicate_risk_score ? <b className="riskBadge">{Math.round(item.duplicate_risk_score * 100)}% {versionStatusLabel(item.duplicate_status)}</b> : "Unique"}</span>
+            <span>{item.updated_at ? new Date(item.updated_at).toLocaleDateString() : "N/A"}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -5365,7 +5370,7 @@ function CampaignsView({
   createCampaign: () => void;
   openCampaign: (id: string) => void;
   updateCampaign: (id: string, payload: { name?: string; description?: string; status?: string; requirement_id?: string | null; unlink_requirement?: boolean }) => void;
-  deleteCampaign: (id: string) => void;
+  deleteCampaign: (id: string, confirmation: string) => void;
   createRequirement: (id: string, text: string) => void;
   uploadRequirement: (id: string, file: File) => void;
   saveScorecard: (id: string, scorecard: CampaignScorecard) => void;
@@ -5387,6 +5392,8 @@ function CampaignsView({
   const [stageNote, setStageNote] = useState("");
   const [editingCampaign, setEditingCampaign] = useState(false);
   const [showCampaignCreate, setShowCampaignCreate] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [editForm, setEditForm] = useState({ name: "", description: "", status: "active", requirement_id: "" });
   const [scorecardForm, setScorecardForm] = useState<CampaignScorecardForm>(emptyCampaignScorecardForm());
   const [requirementDraft, setRequirementDraft] = useState("");
@@ -5464,6 +5471,8 @@ function CampaignsView({
 
   useEffect(() => {
     setMatchResultLimit(50);
+    setDeleteConfirmOpen(false);
+    setDeleteConfirmText("");
   }, [activeCampaign?.id, campaignMatchThreshold]);
 
   useEffect(() => {
@@ -5505,6 +5514,13 @@ function CampaignsView({
       : "Reopen this campaign for matching and sourcing?";
     if (!window.confirm(message)) return;
     await updateCampaign(activeCampaign.id, { status });
+  }
+
+  async function confirmCampaignDelete() {
+    if (!activeCampaign || deleteConfirmText !== "delete") return;
+    await deleteCampaign(activeCampaign.id, deleteConfirmText);
+    setDeleteConfirmOpen(false);
+    setDeleteConfirmText("");
   }
 
   async function uploadCurrentRequirement() {
@@ -5599,11 +5615,45 @@ function CampaignsView({
                 ) : (
                   <button className="plain" type="button" onClick={() => setCampaignLifecycle("closed")} disabled={busy}>Finish Campaign</button>
                 )}
-                <button className="plain campaignDeleteAction" type="button" onClick={() => deleteCampaign(activeCampaign.id)} disabled={busy}><AlertTriangle size={14} /> Delete</button>
+                <button
+                  className="plain campaignDeleteAction"
+                  type="button"
+                  onClick={() => setDeleteConfirmOpen(true)}
+                  disabled={busy}
+                >
+                  <AlertTriangle size={14} /> Delete
+                </button>
                 <button className="secondary" onClick={() => setActiveTab("uploads")} disabled={campaignClosed}>Upload Resumes</button>
                 <button className="primary" onClick={() => matchCampaign(activeCampaign.id)} disabled={busy || campaignClosed || !activeCampaign.requirement_id}>{RECRUITER_COPY.matchingButton}</button>
               </div>
             </header>
+
+            {deleteConfirmOpen ? (
+              <section className="campaignDeleteConfirmPanel" aria-label="Confirm campaign deletion">
+                <div>
+                  <AlertTriangle size={18} />
+                  <div>
+                    <strong>Soft delete this campaign?</strong>
+                    <span>{activeCampaign.name} will leave the workspace list. Candidate records, uploads, notes, matches, and audit history stay preserved.</span>
+                  </div>
+                </div>
+                <label>
+                  <span>Type delete to confirm</span>
+                  <input
+                    value={deleteConfirmText}
+                    onChange={(event) => setDeleteConfirmText(event.target.value)}
+                    placeholder="delete"
+                    autoFocus
+                  />
+                </label>
+                <div>
+                  <button className="plain" type="button" onClick={() => { setDeleteConfirmOpen(false); setDeleteConfirmText(""); }}>Cancel</button>
+                  <button className="plain campaignDeleteAction" type="button" disabled={busy || deleteConfirmText !== "delete"} onClick={confirmCampaignDelete}>
+                    <AlertTriangle size={14} /> Soft delete campaign
+                  </button>
+                </div>
+              </section>
+            ) : null}
 
             {campaignClosed ? (
               <section className="campaignClosedBanner">
@@ -7475,6 +7525,24 @@ function candidateRoleFactsNeedReview(candidate: CandidateSummary) {
     && candidate.current_role_verification_status !== "verified"
     && candidate.current_role_verification_status !== "missing"
   );
+}
+
+function candidateListHazards(candidate: CandidateSummary) {
+  const hazards: string[] = [];
+  const coverage = Number(candidate.coverage ?? 0);
+  if (coverage > 0 && coverage < 0.8 && !candidateReviewSignalDone(candidate, "low_coverage")) {
+    hazards.push(coverage < 0.65 ? `Low profile coverage: ${Math.round(coverage * 100)}%` : `Review profile coverage: ${Math.round(coverage * 100)}%`);
+  }
+  if (candidateRoleFactsNeedReview(candidate) && !candidateReviewSignalDone(candidate, "role_fact_review")) {
+    hazards.push("Role facts need review");
+  }
+  if (
+    Number(candidate.duplicate_risk_score ?? 0) >= 0.75
+    && normalizeCandidateVersionStatus(candidate.duplicate_status) === "suggested"
+  ) {
+    hazards.push("Possible repeated candidate upload");
+  }
+  return hazards;
 }
 
 function candidateReviewSignalDone(candidate: CandidateSummary | Candidate, signalKey: CandidateReviewSignal) {
