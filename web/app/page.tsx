@@ -290,6 +290,8 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
       setToken(saved);
       void refresh(saved).catch((error) => handleSessionFailure(error));
     }
+    // Bootstrap must only run once; adding refresh would re-run login recovery.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -315,6 +317,8 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     lastRouteIdentityRef.current = workspaceRouteIdentity(route);
     lastRouteSearchRef.current = window.location.search;
     if (routeHasDeepLink(route)) void applyWorkspaceRoute(route);
+    // Deep-link hydration is intentionally one-shot after auth is loaded.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, currentUser?.id]);
 
   useEffect(() => {
@@ -327,10 +331,12 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
+    // Popstate should bind to the authenticated workspace identity, not every render of route helpers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, currentUser?.id, requirements]);
 
   useEffect(() => {
-    if (!token || !currentUser || routeApplyingRef.current) return;
+    if (!token || !currentUser?.id || routeApplyingRef.current) return;
     const params = new URLSearchParams();
     params.set("view", view);
     if (view === "candidate" && candidate?.document_id) {
@@ -378,6 +384,8 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     if (campaign?.id === copilotCampaignId && Array.isArray(campaign.candidates)) return;
     if (!campaigns.some((item) => item.id === copilotCampaignId)) return;
     void handleSelectCopilotCampaign(copilotCampaignId);
+    // Campaign selection fetch is guarded by ids/status; including the handler would cause redundant reloads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaign?.candidates, campaign?.id, campaigns, copilotCampaignId, token, view]);
 
   async function refresh(activeToken = token, nextWorkspaceMode = workspaceMode) {
@@ -497,17 +505,20 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     return () => window.clearTimeout(timer);
   }, [query, token]);
 
+  const tenantAdminPollingEnabled = isTenantAdmin(currentUser);
+  const selectedBatchActive = Boolean(selectedBatch?.status && isActiveBatchStatus(selectedBatch.status));
+  const selectedBatchId = selectedBatch?.id ?? "";
+
   useEffect(() => {
     if (!token) return;
-    const tenantAdmin = isTenantAdmin(currentUser);
-    const hasActiveBatch = parseBatches.some(isActiveBatch) || Boolean(selectedBatch && isActiveBatch(selectedBatch));
+    const hasActiveBatch = parseBatches.some(isActiveBatch) || selectedBatchActive;
     const hasActiveMaintenanceJob = maintenanceJobs.some(isActiveMaintenanceJob);
     if (!hasActiveBatch && !hasActiveMaintenanceJob) return;
     const timer = window.setInterval(() => {
       listParseBatches(token)
         .then((result) => setParseBatches(result.batches))
         .catch(() => undefined);
-      if (tenantAdmin) {
+      if (tenantAdminPollingEnabled) {
         getWorkerStatus(token)
           .then((result) => setWorkerStatus(result))
           .catch(() => undefined);
@@ -518,8 +529,8 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
           .then((result) => setMaintenanceJobs(result.jobs))
           .catch(() => undefined);
       }
-      if (selectedBatch?.id) {
-        getParseBatch(token, selectedBatch.id)
+      if (selectedBatchId) {
+        getParseBatch(token, selectedBatchId)
           .then((batch) => setSelectedBatch(batch))
           .catch(() => undefined);
       }
@@ -541,7 +552,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
       }
     }, 4000);
     return () => window.clearInterval(timer);
-  }, [token, currentUser?.tenant_role, parseBatches, selectedBatch?.id, selectedBatch?.status, maintenanceJobs, candidate?.document_id, campaign?.id]);
+  }, [token, tenantAdminPollingEnabled, parseBatches, selectedBatchActive, selectedBatchId, maintenanceJobs, candidate?.document_id, campaign?.id]);
 
   function handleSessionFailure(error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
@@ -3585,6 +3596,8 @@ function CandidateDetail({
     setLinkedinUrlDraft(primaryLinkedIn || "");
     setLinkedinVerifyState("idle");
     setLinkedinVerifyError("");
+    // Keep manual correction edits stable during same-candidate refreshes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candidate.document_id]);
 
   useEffect(() => {
@@ -7813,7 +7826,11 @@ function batchProgress(batch: ParseBatch) {
 }
 
 function isActiveBatch(batch: ParseBatch) {
-  return ["created", "queued", "running", "processing", "retrying"].includes(batch.status);
+  return isActiveBatchStatus(batch.status);
+}
+
+function isActiveBatchStatus(status: string) {
+  return ["created", "queued", "running", "processing", "retrying"].includes(status);
 }
 
 function isActiveMaintenanceJob(job: CandidateMaintenanceJob) {
