@@ -906,7 +906,7 @@ export async function updateCampaign(token: string, id: string, payload: { name?
   });
 }
 
-export async function deleteCampaign(token: string, id: string, confirmation: string, reason = "removed_by_recruiter"): Promise<{ id: string; deleted: boolean; already_deleted?: boolean }> {
+export async function archiveCampaign(token: string, id: string, confirmation: string, reason = "removed_by_recruiter"): Promise<{ id: string; deleted: boolean; already_deleted?: boolean }> {
   return request(`/campaigns/${id}`, {
     method: "DELETE",
     token,

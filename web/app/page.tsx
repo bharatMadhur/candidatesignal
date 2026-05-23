@@ -63,6 +63,7 @@ import {
   cancelParseJob,
   chatCopilot,
   archiveCopilotThread,
+  archiveCampaign,
   createCampaign,
   createCampaignRequirement,
   createCandidateRederiveJob,
@@ -71,7 +72,6 @@ import {
   createRequirementFromCopilotThread,
   decideCandidateVersion,
   deleteCandidate,
-  deleteCampaign,
   getTeam,
   getCampaign,
   getCandidateDocumentHtml,
@@ -1116,7 +1116,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
       setStatus("Campaign archive cancelled. Type archive exactly to confirm.");
       return;
     }
-    const result = await run("Archiving campaign", () => deleteCampaign(token, id, confirmation));
+    const result = await run("Archiving campaign", () => archiveCampaign(token, id, confirmation));
     if (!result?.deleted) return;
     const remaining = campaigns.filter((item) => item.id !== id);
     setCampaigns(remaining);
@@ -1874,7 +1874,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               createCampaign={handleCreateCampaign}
               openCampaign={handleOpenCampaign}
               updateCampaign={handleUpdateCampaign}
-              deleteCampaign={handleDeleteCampaign}
+              archiveCampaign={handleDeleteCampaign}
               createRequirement={handleCreateCampaignRequirement}
               uploadRequirement={handleUploadCampaignRequirement}
               saveScorecard={handleSaveCampaignScorecard}
@@ -5364,7 +5364,7 @@ function CampaignsView({
   createCampaign,
   openCampaign,
   updateCampaign,
-  deleteCampaign,
+  archiveCampaign,
   createRequirement,
   uploadRequirement,
   saveScorecard,
@@ -5392,7 +5392,7 @@ function CampaignsView({
   createCampaign: () => void;
   openCampaign: (id: string) => void;
   updateCampaign: (id: string, payload: { name?: string; description?: string; status?: string; requirement_id?: string | null; unlink_requirement?: boolean }) => void;
-  deleteCampaign: (id: string, confirmation: string) => void;
+  archiveCampaign: (id: string, confirmation: string) => void;
   createRequirement: (id: string, text: string) => void;
   uploadRequirement: (id: string, file: File) => void;
   saveScorecard: (id: string, scorecard: CampaignScorecard) => void;
@@ -5540,7 +5540,7 @@ function CampaignsView({
 
   async function confirmCampaignDelete() {
     if (!activeCampaign || deleteConfirmText !== "archive") return;
-    await deleteCampaign(activeCampaign.id, deleteConfirmText);
+    await archiveCampaign(activeCampaign.id, deleteConfirmText);
     setDeleteConfirmOpen(false);
     setDeleteConfirmText("");
   }
