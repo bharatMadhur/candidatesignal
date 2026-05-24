@@ -127,6 +127,7 @@ if [[ -n "${OUTPUT_DIR}" ]]; then
   mkdir -p "${OUTPUT_DIR}"
   chmod 700 "${OUTPUT_DIR}"
   render_env > "${OUTPUT_DIR}/.env"
+  chmod 600 "${OUTPUT_DIR}/.env"
   render_secrets "${OUTPUT_DIR}"
   echo "Rendered VM env bundle at ${OUTPUT_DIR}" >&2
   echo "Copy ${OUTPUT_DIR}/.env, ${OUTPUT_DIR}/secrets, and ${OUTPUT_DIR}/secrets-staging to /opt/candidatesignal on the VM." >&2
