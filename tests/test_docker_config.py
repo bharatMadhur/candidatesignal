@@ -92,6 +92,13 @@ class DockerConfigTests(unittest.TestCase):
         self.assertIn("main", deploy_script)
         self.assertIn("release-*", deploy_script)
 
+    def test_vm_env_renderer_url_encodes_database_credentials(self) -> None:
+        renderer = (ROOT / "deploy" / "gcp" / "06_render_vm_env.sh").read_text()
+
+        self.assertIn("urlencode()", renderer)
+        self.assertIn("database_password_encoded", renderer)
+        self.assertIn("staging_database_password_encoded", renderer)
+
 
 if __name__ == "__main__":
     unittest.main()

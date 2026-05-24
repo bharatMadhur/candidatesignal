@@ -15,6 +15,10 @@ compose_escape_value() {
   printf "%s" "$1" | sed 's/\$/$$/g'
 }
 
+urlencode() {
+  python3 -c 'from urllib.parse import quote; import sys; print(quote(sys.argv[1], safe=""))' "$1"
+}
+
 render_env() {
   local staging_basic_auth_hash
   staging_basic_auth_hash="$(compose_escape_value "${STAGING_BASIC_AUTH_HASH:-$(secret_value staging-basic-auth-password-hash)}")"
@@ -92,14 +96,20 @@ render_secrets() {
   local target_dir="$1"
   local secrets_dir="${target_dir}/secrets"
   local database_password
+  local database_user_encoded
+  local database_password_encoded
+  local database_name_encoded
   database_password="$(secret_value database-password)"
   if [[ -z "${database_password}" ]]; then
     echo "Missing Secret Manager secret: database-password" >&2
     exit 1
   fi
+  database_user_encoded="$(urlencode "${SQL_USER}")"
+  database_password_encoded="$(urlencode "${database_password}")"
+  database_name_encoded="$(urlencode "${SQL_DATABASE}")"
   mkdir -p "${secrets_dir}"
   chmod 700 "${secrets_dir}"
-  printf "postgresql://%s:%s@cloudsql-proxy:5432/%s" "${SQL_USER}" "${database_password}" "${SQL_DATABASE}" > "${secrets_dir}/database-url"
+  printf "postgresql://%s:%s@cloudsql-proxy:5432/%s" "${database_user_encoded}" "${database_password_encoded}" "${database_name_encoded}" > "${secrets_dir}/database-url"
   printf "%s" "$(secret_value better-auth-secret)" > "${secrets_dir}/better-auth-secret"
   printf "%s" "$(secret_value resume-intel-bootstrap-token)" > "${secrets_dir}/bootstrap-token"
   printf "%s" "$(secret_value litellm-api-key)" > "${secrets_dir}/litellm-api-key"
@@ -111,14 +121,20 @@ render_secrets() {
 
   local staging_secrets_dir="${target_dir}/secrets-staging"
   local staging_database_password
+  local staging_database_user_encoded
+  local staging_database_password_encoded
+  local staging_database_name_encoded
   staging_database_password="$(secret_value staging-database-password)"
   if [[ -z "${staging_database_password}" ]]; then
     echo "Missing Secret Manager secret: staging-database-password. Run deploy/gcp/09_create_staging_resources.sh first." >&2
     exit 1
   fi
+  staging_database_user_encoded="$(urlencode "${STAGING_SQL_USER}")"
+  staging_database_password_encoded="$(urlencode "${staging_database_password}")"
+  staging_database_name_encoded="$(urlencode "${STAGING_SQL_DATABASE}")"
   mkdir -p "${staging_secrets_dir}"
   chmod 700 "${staging_secrets_dir}"
-  printf "postgresql://%s:%s@cloudsql-proxy:5432/%s" "${STAGING_SQL_USER}" "${staging_database_password}" "${STAGING_SQL_DATABASE}" > "${staging_secrets_dir}/database-url"
+  printf "postgresql://%s:%s@cloudsql-proxy:5432/%s" "${staging_database_user_encoded}" "${staging_database_password_encoded}" "${staging_database_name_encoded}" > "${staging_secrets_dir}/database-url"
   printf "%s" "$(secret_value staging-better-auth-secret)" > "${staging_secrets_dir}/better-auth-secret"
   printf "%s" "$(secret_value staging-resume-intel-bootstrap-token)" > "${staging_secrets_dir}/bootstrap-token"
   printf "%s" "$(secret_value_first staging-litellm-api-key litellm-api-key)" > "${staging_secrets_dir}/litellm-api-key"
