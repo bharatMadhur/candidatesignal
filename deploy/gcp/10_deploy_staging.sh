@@ -22,8 +22,7 @@ else
   git checkout --detach FETCH_HEAD
 fi
 docker compose -f docker-compose.gcp.yml --env-file .env --profile staging up -d --build api-staging worker-staging ui-staging
-docker compose -f docker-compose.gcp.yml --env-file .env up -d caddy
-docker compose -f docker-compose.gcp.yml --env-file .env restart caddy
+docker compose -f docker-compose.gcp.yml --env-file .env up -d --no-deps --force-recreate caddy
 docker compose -f docker-compose.gcp.yml --env-file .env exec -T api-staging python scripts/migrate_db.py
 docker compose -f docker-compose.gcp.yml --env-file .env ps api-staging worker-staging ui-staging caddy
 "

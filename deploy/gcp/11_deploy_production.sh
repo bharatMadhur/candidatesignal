@@ -30,8 +30,7 @@ else
   git checkout --detach FETCH_HEAD
 fi
 docker compose -f docker-compose.gcp.yml --env-file .env up -d --build api worker ui
-docker compose -f docker-compose.gcp.yml --env-file .env up -d caddy
-docker compose -f docker-compose.gcp.yml --env-file .env restart caddy
+docker compose -f docker-compose.gcp.yml --env-file .env up -d --no-deps --force-recreate caddy
 docker compose -f docker-compose.gcp.yml --env-file .env exec -T api python scripts/migrate_db.py
 docker compose -f docker-compose.gcp.yml --env-file .env ps api worker ui caddy
 "
