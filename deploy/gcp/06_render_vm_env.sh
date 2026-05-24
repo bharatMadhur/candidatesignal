@@ -152,7 +152,8 @@ if [[ -n "${OUTPUT_DIR}" ]]; then
   chmod 600 "${OUTPUT_DIR}/.env"
   render_secrets "${OUTPUT_DIR}"
   echo "Rendered VM env bundle at ${OUTPUT_DIR}" >&2
-  echo "Copy ${OUTPUT_DIR}/.env, ${OUTPUT_DIR}/secrets, and ${OUTPUT_DIR}/secrets-staging to /opt/candidatesignal on the VM." >&2
+  echo "Copy ${OUTPUT_DIR}/.env to /opt/candidatesignal/.env on the VM." >&2
+  echo "Copy ${OUTPUT_DIR}/secrets/* to /opt/candidatesignal/secrets/ and ${OUTPUT_DIR}/secrets-staging/* to /opt/candidatesignal/secrets-staging/." >&2
 else
   render_env
   echo "Rendered non-secret .env only. Set RENDER_VM_ENV_OUTPUT_DIR to also create the required ./secrets files." >&2

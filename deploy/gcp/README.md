@@ -165,8 +165,8 @@ Render and copy both production and staging runtime files:
 ```bash
 RENDER_VM_ENV_OUTPUT_DIR=/tmp/candidatesignal-vm deploy/gcp/06_render_vm_env.sh
 gcloud compute scp /tmp/candidatesignal-vm/.env candidatesignal-app-1:/opt/candidatesignal/.env --zone=us-central1-a
-gcloud compute scp --recurse /tmp/candidatesignal-vm/secrets candidatesignal-app-1:/opt/candidatesignal/secrets --zone=us-central1-a
-gcloud compute scp --recurse /tmp/candidatesignal-vm/secrets-staging candidatesignal-app-1:/opt/candidatesignal/secrets-staging --zone=us-central1-a
+gcloud compute scp /tmp/candidatesignal-vm/secrets/* candidatesignal-app-1:/opt/candidatesignal/secrets/ --zone=us-central1-a
+gcloud compute scp /tmp/candidatesignal-vm/secrets-staging/* candidatesignal-app-1:/opt/candidatesignal/secrets-staging/ --zone=us-central1-a
 ```
 
 Deploy staging from Git:
@@ -273,8 +273,8 @@ Copy it to the VM:
 
 ```bash
 gcloud compute scp /tmp/candidatesignal-vm/.env candidatesignal-app-1:/opt/candidatesignal/.env --zone=us-central1-a
-gcloud compute scp --recurse /tmp/candidatesignal-vm/secrets candidatesignal-app-1:/opt/candidatesignal/secrets --zone=us-central1-a
-gcloud compute scp --recurse /tmp/candidatesignal-vm/secrets-staging candidatesignal-app-1:/opt/candidatesignal/secrets-staging --zone=us-central1-a
+gcloud compute scp /tmp/candidatesignal-vm/secrets/* candidatesignal-app-1:/opt/candidatesignal/secrets/ --zone=us-central1-a
+gcloud compute scp /tmp/candidatesignal-vm/secrets-staging/* candidatesignal-app-1:/opt/candidatesignal/secrets-staging/ --zone=us-central1-a
 ```
 
 On the VM:
