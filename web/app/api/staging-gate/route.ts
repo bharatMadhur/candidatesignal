@@ -9,20 +9,20 @@ const DEFAULT_MAX_AGE_SECONDS = 60 * 60 * 12;
 
 export async function POST(request: NextRequest) {
   if (!stagingGateEnabled(request)) {
-    return NextResponse.redirect(new URL("/", request.url), 303);
+    return NextResponse.redirect(publicUrl("/", request), 303);
   }
 
   const form = await request.formData();
   const password = String(form.get("password") ?? "");
   const next = safeNextPath(String(form.get("next") ?? "/"));
   if (!verifyPassword(password)) {
-    const url = new URL("/staging-gate", request.url);
+    const url = publicUrl("/staging-gate", request);
     url.searchParams.set("error", "1");
     url.searchParams.set("next", next);
     return NextResponse.redirect(url, 303);
   }
 
-  const response = NextResponse.redirect(new URL(next, request.url), 303);
+  const response = NextResponse.redirect(publicUrl(next, request), 303);
   response.cookies.set(cookieName(), cookieValue(), {
     httpOnly: true,
     secure: request.nextUrl.protocol === "https:",
@@ -64,6 +64,29 @@ function safeNextPath(value: string) {
   if (!value || !value.startsWith("/") || value.startsWith("//")) return "/";
   if (value.startsWith("/api/staging-gate")) return "/";
   return value;
+}
+
+function publicUrl(path: string, request: NextRequest) {
+  return new URL(path, publicOrigin(request));
+}
+
+function publicOrigin(request: NextRequest) {
+  const forwardedHost = firstHeaderValue(request.headers.get("x-forwarded-host"));
+  if (forwardedHost) {
+    const forwardedProto = firstHeaderValue(request.headers.get("x-forwarded-proto")) || "https";
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+
+  const configuredOrigin = process.env.BETTER_AUTH_URL || process.env.RESUME_INTEL_APP_BASE_URL;
+  if (configuredOrigin?.startsWith("http://") || configuredOrigin?.startsWith("https://")) {
+    return configuredOrigin;
+  }
+
+  return request.nextUrl.origin;
+}
+
+function firstHeaderValue(value: string | null) {
+  return value?.split(",")[0]?.trim() || "";
 }
 
 function sha256(value: string) {
