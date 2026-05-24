@@ -48,3 +48,62 @@
 
 	reverse_proxy ui:3001
 }
+
+{$STAGING_DOMAIN:staging-disabled.invalid} {
+	encode zstd gzip
+
+	header {
+		X-Robots-Tag "noindex, nofollow, noarchive"
+	}
+
+	basicauth {
+		{$STAGING_BASIC_AUTH_USER} {$STAGING_BASIC_AUTH_HASH}
+	}
+
+	handle /robots.txt {
+		respond "User-agent: *\nDisallow: /\n" 200
+	}
+
+	handle /api/auth/me {
+		uri strip_prefix /api
+		reverse_proxy api-staging:8010
+	}
+
+	handle /api/auth/logout {
+		uri strip_prefix /api
+		reverse_proxy api-staging:8010
+	}
+
+	handle /api/auth/bootstrap {
+		uri strip_prefix /api
+		reverse_proxy api-staging:8010
+	}
+
+	handle /api/auth/company-signup {
+		uri strip_prefix /api
+		reverse_proxy api-staging:8010
+	}
+
+	handle /api/auth/platform/* {
+		uri strip_prefix /api
+		reverse_proxy api-staging:8010
+	}
+
+	handle /api/auth/* {
+		reverse_proxy ui-staging:3001
+	}
+
+	handle /api/backend/* {
+		reverse_proxy ui-staging:3001
+	}
+
+	handle_path /api/* {
+		reverse_proxy api-staging:8010
+	}
+
+	handle /healthz* {
+		reverse_proxy api-staging:8010
+	}
+
+	reverse_proxy ui-staging:3001
+}

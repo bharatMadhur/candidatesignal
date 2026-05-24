@@ -67,6 +67,31 @@ class DockerConfigTests(unittest.TestCase):
         self.assertIn("uri strip_prefix /api", signup_block)
         self.assertIn("reverse_proxy api:8010", signup_block)
 
+    def test_staging_stack_is_protected_and_data_isolated(self) -> None:
+        compose = (ROOT / "docker-compose.gcp.yml").read_text()
+        caddyfile = (ROOT / "deploy" / "caddy" / "Caddyfile").read_text()
+
+        self.assertIn("STAGING_DOMAIN", caddyfile)
+        self.assertIn("basicauth", caddyfile)
+        self.assertIn("X-Robots-Tag \"noindex, nofollow, noarchive\"", caddyfile)
+        self.assertIn("reverse_proxy api-staging:8010", caddyfile)
+        self.assertIn("reverse_proxy ui-staging:3001", caddyfile)
+        self.assertIn("api-staging:", compose)
+        self.assertIn("ui-staging:", compose)
+        self.assertIn("worker-staging:", compose)
+        self.assertIn("profiles: [\"staging\"]", compose)
+        self.assertIn("secrets-staging:/run/candidatesignal-staging-secrets:ro", compose)
+        self.assertIn("STAGING_RESUME_INTEL_GCS_BUCKET", compose)
+
+    def test_production_deploy_script_refuses_random_feature_refs(self) -> None:
+        deploy_script = (ROOT / "deploy" / "gcp" / "11_deploy_production.sh").read_text()
+
+        self.assertIn("PRODUCTION_GIT_REF", deploy_script)
+        self.assertIn("ALLOW_NON_PRODUCTION_REF", deploy_script)
+        self.assertIn("Refusing production deploy", deploy_script)
+        self.assertIn("main", deploy_script)
+        self.assertIn("release-*", deploy_script)
+
 
 if __name__ == "__main__":
     unittest.main()

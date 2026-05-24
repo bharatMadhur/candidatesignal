@@ -27,6 +27,29 @@
   box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
 }
 
+.environmentBanner {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 6px 18px;
+  border-bottom: 1px solid #d7e5ea;
+  background: #edf7f6;
+  color: #115e59;
+  font-size: 12px;
+  line-height: 18px;
+  letter-spacing: 0.02em;
+}
+
+.environmentBanner strong {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
 .workspaceTopNav .topNavLink,
 .shellUploadButton,
 .settingsSummary {

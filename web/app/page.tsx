@@ -203,6 +203,9 @@ type HomeAppProps = {
   showPublicHome?: boolean;
 };
 
+const DEPLOY_ENV = (process.env.NEXT_PUBLIC_DEPLOY_ENV ?? "production").toLowerCase();
+const IS_STAGING_ENV = DEPLOY_ENV === "staging";
+
 export default function Home() {
   return <HomeApp showPublicHome />;
 }
@@ -1663,6 +1666,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     if (showMergedHome) {
       return (
         <main className="stitchPublicHome">
+          <EnvironmentBanner />
           <header className="stitchPublicNav">
             <a className="publicBrand stitchPublicBrand" href="/">
               <BrandMark />
@@ -1859,6 +1863,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
 
     return (
       <main className="loginShell">
+        <EnvironmentBanner />
         <section className="landingIntro loginIntroCompact">
           <span className="eyebrow">candidateSignal.ai</span>
           <h1>{inviteMode ? "Accept company invite." : isAdminLogin ? "Platform admin login." : "Company workspace login."}</h1>
@@ -1886,6 +1891,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   if (token && !currentUser) {
     return (
       <main className="loginShell">
+        <EnvironmentBanner />
         <section className="landingIntro loginIntroCompact">
           <span className="eyebrow">candidateSignal.ai</span>
           <h1>Checking session.</h1>
@@ -1911,6 +1917,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
 
   return (
     <main className="appShell topNavShell">
+      <EnvironmentBanner />
       <section className="appMain">
         {useWorkspaceTopNav ? <WorkspaceTopNav view={view} setView={setView} user={currentUser} status={status} busy={busy} logout={handleLogout} /> : null}
         {!useWorkspaceTopNav && useAdminTopBar ? <AdminShellTopBar user={currentUser} status={status} busy={busy} logout={handleLogout} /> : null}
@@ -2151,6 +2158,16 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
         </section>
       </section>
     </main>
+  );
+}
+
+function EnvironmentBanner() {
+  if (!IS_STAGING_ENV) return null;
+  return (
+    <aside className="environmentBanner" role="note" aria-label="Staging environment">
+      <strong>Staging Environment</strong>
+      <span>Test data only. Do not upload production resumes or customer information.</span>
+    </aside>
   );
 }
 

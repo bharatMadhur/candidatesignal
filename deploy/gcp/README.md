@@ -57,6 +57,7 @@ Default domain routing:
 APEX_DOMAIN=candidatesignal.ai
 WWW_DOMAIN=www.candidatesignal.ai
 APP_DOMAIN=app.candidatesignal.ai
+STAGING_DOMAIN=staging.candidatesignal.ai
 ```
 
 The app is served at `https://app.candidatesignal.ai`; `https://candidatesignal.ai` and
@@ -133,6 +134,89 @@ CONFIRM_CREATE_RESOURCES=1 deploy/gcp/03_deploy_ocr_cloud_run.sh
 CONFIRM_CREATE_RESOURCES=1 deploy/gcp/05_create_vm.sh
 ```
 
+## Protected Staging
+
+Staging is designed as a cheap but safe test ground on the same VM:
+
+- `https://staging.candidatesignal.ai`
+- Caddy Basic Auth before the app is visible.
+- `X-Robots-Tag: noindex, nofollow, noarchive`.
+- Separate Cloud SQL database and database user.
+- Separate GCS document bucket.
+- Separate Better Auth secret and bootstrap token.
+- Separate `secrets-staging/` mount.
+- Visible `Staging Environment` banner in the UI.
+
+Create staging resources after production foundation/Cloud SQL exists:
+
+```bash
+CONFIRM_CREATE_RESOURCES=1 deploy/gcp/09_create_staging_resources.sh
+```
+
+The script stores the Basic Auth password in Secret Manager as
+`staging-basic-auth-password`. Retrieve it only when needed:
+
+```bash
+gcloud secrets versions access latest --secret=staging-basic-auth-password
+```
+
+Render and copy both production and staging runtime files:
+
+```bash
+RENDER_VM_ENV_OUTPUT_DIR=/tmp/candidatesignal-vm deploy/gcp/06_render_vm_env.sh
+gcloud compute scp /tmp/candidatesignal-vm/.env candidatesignal-app-1:/opt/candidatesignal/.env --zone=us-central1-a
+gcloud compute scp --recurse /tmp/candidatesignal-vm/secrets candidatesignal-app-1:/opt/candidatesignal/secrets --zone=us-central1-a
+gcloud compute scp --recurse /tmp/candidatesignal-vm/secrets-staging candidatesignal-app-1:/opt/candidatesignal/secrets-staging --zone=us-central1-a
+```
+
+Deploy staging from Git:
+
+```bash
+git push origin HEAD:staging
+STAGING_GIT_REF=staging deploy/gcp/10_deploy_staging.sh
+```
+
+Use staging for feature work and QA. Do not copy production resumes into staging
+unless they are anonymized or explicitly approved test samples.
+
+## Release Flow
+
+Do not deploy production directly from local working tree state. The intended
+flow is:
+
+```text
+feature/codex branch -> staging branch -> staging deploy -> main or release tag -> production deploy
+```
+
+Deploy staging from the shared staging branch:
+
+```bash
+git push origin HEAD:staging
+STAGING_GIT_REF=staging deploy/gcp/10_deploy_staging.sh
+```
+
+Promote only after staging QA passes:
+
+```bash
+git checkout main
+git pull --ff-only origin main
+git merge --ff-only staging
+git push origin main
+PRODUCTION_GIT_REF=main deploy/gcp/11_deploy_production.sh
+```
+
+For a tagged release instead:
+
+```bash
+git tag release-YYYYMMDD
+git push origin release-YYYYMMDD
+PRODUCTION_GIT_REF=release-YYYYMMDD deploy/gcp/11_deploy_production.sh
+```
+
+`deploy/gcp/11_deploy_production.sh` refuses production deploys from arbitrary
+feature branches unless `ALLOW_NON_PRODUCTION_REF=1` is set deliberately. That
+escape hatch is for emergency rollback or hotfix only.
+
 ## Cheap Data Protection Defaults
 
 The deployment keeps the database zonal and small, but enables the minimum
@@ -190,6 +274,7 @@ Copy it to the VM:
 ```bash
 gcloud compute scp /tmp/candidatesignal-vm/.env candidatesignal-app-1:/opt/candidatesignal/.env --zone=us-central1-a
 gcloud compute scp --recurse /tmp/candidatesignal-vm/secrets candidatesignal-app-1:/opt/candidatesignal/secrets --zone=us-central1-a
+gcloud compute scp --recurse /tmp/candidatesignal-vm/secrets-staging candidatesignal-app-1:/opt/candidatesignal/secrets-staging --zone=us-central1-a
 ```
 
 On the VM:
@@ -261,5 +346,9 @@ Value: <VM_PUBLIC_IP>
 
 Type: A
 Name: app
+Value: <VM_PUBLIC_IP>
+
+Type: A
+Name: staging
 Value: <VM_PUBLIC_IP>
 ```
