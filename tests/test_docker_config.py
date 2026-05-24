@@ -67,15 +67,16 @@ class DockerConfigTests(unittest.TestCase):
         self.assertIn("uri strip_prefix /api", signup_block)
         self.assertIn("reverse_proxy api:8010", signup_block)
 
-    def test_staging_stack_is_protected_and_data_isolated(self) -> None:
+    def test_staging_stack_uses_cookie_gate_and_data_isolated(self) -> None:
         compose = (ROOT / "docker-compose.gcp.yml").read_text()
         caddyfile = (ROOT / "deploy" / "caddy" / "Caddyfile").read_text()
 
         self.assertIn("STAGING_DOMAIN", caddyfile)
-        self.assertIn("basicauth", caddyfile)
+        self.assertNotIn("basicauth", caddyfile)
         self.assertIn("X-Robots-Tag \"noindex, nofollow, noarchive\"", caddyfile)
         self.assertIn("reverse_proxy api-staging:8010", caddyfile)
         self.assertIn("reverse_proxy ui-staging:3001", caddyfile)
+        self.assertIn("STAGING_GATE_PASSWORD_HASH", compose)
         self.assertIn("api-staging:", compose)
         self.assertIn("ui-staging:", compose)
         self.assertIn("worker-staging:", compose)

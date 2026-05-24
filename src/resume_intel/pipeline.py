@@ -54,6 +54,8 @@ def parse_file(path: Path, output_dir: Path, work_dir: Path, settings: Settings,
         "total_months_unique"
     ]
     normalize_domain_years(result, extracted.text)
+    deep_parse_status = "succeeded"
+    deep_parse_error: str | None = None
     try:
         deep_intelligence = run_deep_resume_intelligence(
             document_id=extracted.document_id,
@@ -66,6 +68,8 @@ def parse_file(path: Path, output_dir: Path, work_dir: Path, settings: Settings,
             initial_usage=[factual_usage],
         )
     except Exception as exc:
+        deep_parse_status = "failed"
+        deep_parse_error = str(exc)
         deep_intelligence = {
             "error": str(exc),
             "status": "failed",
@@ -85,11 +89,25 @@ def parse_file(path: Path, output_dir: Path, work_dir: Path, settings: Settings,
     result["llm_usage"] = deep_intelligence.get("llm_usage", [])
     result["llm_usage_totals"] = deep_intelligence.get("llm_usage_totals", {})
     result["primary_key_coverage"] = primary_key_coverage(result)
+    parse_quality = {
+        "deep_parse_status": deep_parse_status,
+        "deep_parse_error": deep_parse_error,
+        "coverage_status": result["primary_key_coverage"].get("status"),
+        "coverage_score": result["primary_key_coverage"].get("score"),
+        "extraction_method": extracted.method,
+        "quality_flags": sorted({
+            flag
+            for page in extracted.pages or []
+            for flag in page.get("quality_flags", [])
+            if flag
+        }),
+    }
     result["_metadata"] = {
         "extraction_method": extracted.method,
         "page_count": extracted.page_count,
         "pages": extracted.pages or [],
         "links": extracted.links or [],
+        "parse_quality": parse_quality,
         "model_path": str(model_path),
         "hr_model_path": str(hr_model_path),
         "raw_text_path": str(raw_text_path),

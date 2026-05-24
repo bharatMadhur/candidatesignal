@@ -139,7 +139,7 @@ CONFIRM_CREATE_RESOURCES=1 deploy/gcp/05_create_vm.sh
 Staging is designed as a cheap but safe test ground on the same VM:
 
 - `https://staging.candidatesignal.ai`
-- Caddy Basic Auth before the app is visible.
+- Cookie-based staging gate before the app is visible.
 - `X-Robots-Tag: noindex, nofollow, noarchive`.
 - Separate Cloud SQL database and database user.
 - Separate GCS document bucket.
@@ -153,8 +153,9 @@ Create staging resources after production foundation/Cloud SQL exists:
 CONFIRM_CREATE_RESOURCES=1 deploy/gcp/09_create_staging_resources.sh
 ```
 
-The script stores the Basic Auth password in Secret Manager as
-`staging-basic-auth-password`. Retrieve it only when needed:
+The script stores the staging gate password in Secret Manager as
+`staging-basic-auth-password` and renders a one-way hash into the VM env. Retrieve
+the password only when needed:
 
 ```bash
 gcloud secrets versions access latest --secret=staging-basic-auth-password

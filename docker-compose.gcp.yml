@@ -6,8 +6,6 @@ services:
       WWW_DOMAIN: ${WWW_DOMAIN:-www.candidatesignal.ai}
       APP_DOMAIN: ${APP_DOMAIN:-app.candidatesignal.ai}
       STAGING_DOMAIN: ${STAGING_DOMAIN:-staging-disabled.invalid}
-      STAGING_BASIC_AUTH_USER: ${STAGING_BASIC_AUTH_USER:-staging}
-      STAGING_BASIC_AUTH_HASH: ${STAGING_BASIC_AUTH_HASH:-$$2a$$14$$4GFECT9OPnHmH.mzWSXNQuw/4FGFeEyZieoOzMwzEl10LBgBCLEGy}
     ports:
       - "80:80"
       - "443:443"
@@ -228,6 +226,9 @@ services:
       BETTER_AUTH_SECRET_FILE: /run/candidatesignal-staging-secrets/better-auth-secret
       BETTER_AUTH_URL: ${STAGING_BETTER_AUTH_URL:-https://staging.candidatesignal.ai}
       BETTER_AUTH_TRUSTED_ORIGINS: ${STAGING_BETTER_AUTH_TRUSTED_ORIGINS:-https://staging.candidatesignal.ai}
+      STAGING_GATE_PASSWORD_HASH: ${STAGING_GATE_PASSWORD_HASH:-}
+      STAGING_GATE_COOKIE_NAME: ${STAGING_GATE_COOKIE_NAME:-candidate_signal_staging_gate}
+      STAGING_GATE_MAX_AGE_SECONDS: ${STAGING_GATE_MAX_AGE_SECONDS:-43200}
     ports:
       - "127.0.0.1:${STAGING_UI_PORT:-3101}:3001"
     depends_on:

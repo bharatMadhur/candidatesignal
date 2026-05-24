@@ -81,6 +81,7 @@ import {
   getTeam,
   getCampaign,
   getCandidateDocumentHtml,
+  getCampaignMatchJob,
   getLinkedInVerification,
   getLinkedInImport,
   getCopilotThread,
@@ -382,8 +383,10 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     const nextRoute = parseWorkspaceRoute(nextSearch);
     const nextIdentity = workspaceRouteIdentity(nextRoute);
     if (window.location.search !== nextSearch) {
-      const currentIdentity = lastRouteIdentityRef.current || workspaceRouteIdentity(parseWorkspaceRoute(window.location.search));
-      const historyMethod = !lastRouteSearchRef.current || currentIdentity === nextIdentity ? "replaceState" : "pushState";
+      const currentRoute = parseWorkspaceRoute(window.location.search);
+      const currentIdentity = workspaceRouteIdentity(currentRoute);
+      const shouldPush = routeHasDeepLink(currentRoute) && currentIdentity !== nextIdentity;
+      const historyMethod = shouldPush ? "pushState" : "replaceState";
       if (historyMethod === "pushState") {
         window.history.pushState(null, "", `${window.location.pathname}${nextSearch}`);
       } else {
@@ -1268,8 +1271,37 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     if (!id || !token) return;
     const result = await run("Finding campaign matches", () => matchCampaign(token, id));
     if (!result) return;
-    setCampaign(result);
-    setCampaigns((items) => items.map((item) => item.id === result.id ? result : item));
+    if (result.campaign) {
+      const nextCampaign = result.campaign;
+      setCampaign(nextCampaign);
+      setCampaigns((items) => items.map((item) => item.id === nextCampaign.id ? nextCampaign : item));
+    }
+    setStatus(`Campaign match queued (${domainLabel(result.job.status)}). Worker will update this campaign when complete.`);
+    void pollCampaignMatchJob(id, result.job.id);
+  }
+
+  async function pollCampaignMatchJob(campaignId: string, jobId: string) {
+    if (!token) return;
+    for (let attempt = 0; attempt < 45; attempt += 1) {
+      await delay(2000);
+      try {
+        const result = await getCampaignMatchJob(token, campaignId, jobId);
+        if (result.campaign) {
+          const nextCampaign = result.campaign;
+          setCampaign(nextCampaign);
+          setCampaigns((items) => items.map((item) => item.id === nextCampaign.id ? nextCampaign : item));
+        }
+        if (["succeeded", "failed", "cancelled"].includes(result.job.status)) {
+          setStatus(result.job.status === "succeeded" ? "Campaign matching completed." : `Campaign matching ${result.job.status}: ${result.job.error_message || "No details"}`);
+          return;
+        }
+        setStatus(`Campaign matching ${domainLabel(result.job.status)}: ${domainLabel(result.job.stage)}`);
+      } catch (error) {
+        setStatus(readableError(error));
+        return;
+      }
+    }
+    setStatus("Campaign matching is still running. You can leave this page and come back later.");
   }
 
   async function handleUploadCampaignResumes() {
@@ -3947,6 +3979,8 @@ function CandidateDetail({
   const versionSummary = candidateVersionSummary(versionLinks);
   const reparseStatusBatch = latestCandidateReparseBatch(reparseBatches, sourceName);
   const reparseProgress = reparseStatusBatch ? Number(reparseStatusBatch.progress_percent ?? batchProgress(reparseStatusBatch)) : 0;
+  const parseQuality = candidate._metadata?.parse_quality ?? {};
+  const deepParseFailed = parseQuality.deep_parse_status === "failed" || intelligence?.status === "failed";
   const recruiterEvidenceRows = buildRecruiterEvidenceRows(verifiedFactRows, aiFitRows, evidenceMap, rawText);
   const coverageReasons = coverageGapReasons(coverage);
   const structuredNoteSignals = noteSignalItems(recruiterNoteSignals);
@@ -4058,6 +4092,16 @@ function CandidateDetail({
           <button className="primary" type="button" onClick={match}>Match to Role</button>
         </section>
       </header>
+      {deepParseFailed ? (
+        <article className="candidateParseQualityBanner">
+          <AlertTriangle size={18} />
+          <div>
+            <strong>Deep AI analysis did not complete</strong>
+            <span>{parseQuality.deep_parse_error || intelligence?.error || "The factual extraction is available, but the richer HR intelligence needs a retry."}</span>
+          </div>
+          {canReparse ? <button className="secondary" type="button" onClick={() => reparseCandidate(candidate.document_id)}>Retry deep parse</button> : null}
+        </article>
+      ) : null}
       {needsUploadReview ? (
         <article className="candidateBadUploadBanner">
           <AlertTriangle size={18} />

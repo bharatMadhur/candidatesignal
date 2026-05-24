@@ -6,6 +6,7 @@ import time
 import uuid
 
 from resume_intel.db import migrate
+from resume_intel.match_jobs import run_next_match_job
 from resume_intel.parse_jobs import record_worker_heartbeat, run_next_job
 
 
@@ -25,11 +26,18 @@ def main() -> int:
         job = run_next_job(args.tenant_id, worker_id=worker_id)
         if job:
             print(f"processed {job['id']} status={job['status']} stage={job['stage']}")
-        elif args.once:
+        else:
+            record_worker_heartbeat(worker_id, status="campaign_match_polling", tenant_id=args.tenant_id)
+            match_job = run_next_match_job(args.tenant_id)
+            if match_job:
+                print(f"processed campaign_match_job {match_job['id']} status={match_job['status']} stage={match_job['stage']}")
+                record_worker_heartbeat(worker_id, status="idle", tenant_id=args.tenant_id, processed_delta=1)
+                job = match_job
+        if not job and args.once:
             print("no queued jobs")
             record_worker_heartbeat(worker_id, status="stopped", tenant_id=args.tenant_id)
             return 0
-        else:
+        elif not job:
             time.sleep(args.sleep)
         if args.once:
             return 0

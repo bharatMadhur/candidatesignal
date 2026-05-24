@@ -8,7 +8,8 @@
     "lint": "eslint app lib tests --no-error-on-unmatched-pattern",
     "start": "next start",
     "smoke": "node tests/smoke.mjs",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "e2e:auth-required": "node tests/require-auth-e2e-env.mjs && playwright test"
   },
   "dependencies": {
     "better-auth": "^1.6.9",

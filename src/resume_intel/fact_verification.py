@@ -68,6 +68,7 @@ def _verify_experience_item(item: dict[str, Any], index: int, normalized_text: s
         flags.append("missing_company")
     if not title:
         flags.append("missing_title")
+    suggested_title = _nearby_title_candidate(lines, company) if company and company_hit and title and not title_hit else None
     status = "verified" if not flags else "needs_review"
     return {
         "index": index,
@@ -83,6 +84,7 @@ def _verify_experience_item(item: dict[str, Any], index: int, normalized_text: s
             "start_date_supported": start_hit,
             "end_date_supported": end_hit,
         },
+        "suggested_title": suggested_title,
         "evidence_lines": _evidence_lines(lines, [company, title], limit=4),
     }
 
@@ -148,3 +150,32 @@ def _clean_lines(text: str) -> list[str]:
 def _clean(value: Any) -> str | None:
     text = str(value or "").strip()
     return text or None
+
+
+def _nearby_title_candidate(lines: list[str], company: str | None) -> str | None:
+    if not company:
+        return None
+    normalized_company = _normalize_text(company)
+    for index, line in enumerate(lines):
+        if normalized_company not in _normalize_text(line):
+            continue
+        for offset in (1, -1, 2):
+            candidate_index = index + offset
+            if candidate_index < 0 or candidate_index >= len(lines):
+                continue
+            candidate = lines[candidate_index].strip()
+            if _looks_like_role_title(candidate):
+                return candidate
+    return None
+
+
+def _looks_like_role_title(value: str) -> bool:
+    normalized = _normalize_text(value)
+    if not normalized or len(value) > 80:
+        return False
+    if re.search(r"\b(19|20)\d{2}\b", normalized):
+        return False
+    if "@" in value or "http" in normalized:
+        return False
+    role_terms = {"engineer", "developer", "architect", "analyst", "manager", "lead", "consultant", "scientist", "designer"}
+    return any(re.search(rf"\b{term}\b", normalized) for term in role_terms)

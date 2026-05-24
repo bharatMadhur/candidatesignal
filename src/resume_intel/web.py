@@ -31,7 +31,6 @@ from .campaigns import (
     create_campaign_requirement_from_text,
     get_campaign,
     list_campaigns,
-    run_campaign_match,
     set_campaign_candidate_status,
     soft_delete_campaign,
     update_campaign,
@@ -110,6 +109,13 @@ from .maintenance_jobs import (
     list_candidate_maintenance_jobs,
     retry_candidate_maintenance_job,
     run_candidate_rederive_job,
+)
+from .match_jobs import (
+    cancel_campaign_match_job,
+    create_campaign_match_job,
+    get_campaign_match_job,
+    list_campaign_match_jobs,
+    retry_campaign_match_job,
 )
 from .parse_jobs import cancel_batch, cancel_job, create_parse_batch, create_reparse_job_for_candidate, get_parse_batch, get_parse_job, get_worker_status, list_parse_batches, retry_job, run_job, run_next_job
 from .pii import redact_contact_pii_text
@@ -1547,19 +1553,69 @@ def save_campaign_scorecard(campaign_id: str, request: CampaignScorecardRequest,
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@app.post("/campaigns/{campaign_id}/match")
+@app.post("/campaigns/{campaign_id}/match", status_code=202)
 def match_job_campaign(campaign_id: str, request: CampaignMatchRequest | None = None, user: dict = Depends(current_user)) -> dict:
     require_tenant_write(user)
     try:
         request = request or CampaignMatchRequest()
-        campaign = run_campaign_match(campaign_id, _tenant_id(user), user["id"], mode=request.mode, candidate_ids=request.candidate_ids)
+        job = create_campaign_match_job(campaign_id, _tenant_id(user), user["id"], mode=request.mode, candidate_ids=request.candidate_ids)
+        campaign = get_campaign(campaign_id, _tenant_id(user))
         if not _can_view_pii(user):
             campaign = _redact_campaign_pii(campaign)
-        return campaign
+        return {"job": job, "campaign": campaign}
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="campaign not found") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/campaigns/{campaign_id}/match-jobs")
+def campaign_match_jobs(campaign_id: str, user: dict = Depends(current_user)) -> dict:
+    try:
+        get_campaign(campaign_id, _tenant_id(user))
+        return {"jobs": list_campaign_match_jobs(campaign_id, _tenant_id(user))}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="campaign not found") from exc
+
+
+@app.get("/campaigns/{campaign_id}/match-jobs/{job_id}")
+def campaign_match_job(campaign_id: str, job_id: str, user: dict = Depends(current_user)) -> dict:
+    try:
+        job = get_campaign_match_job(job_id, _tenant_id(user))
+        if job["campaign_id"] != campaign_id:
+            raise FileNotFoundError(job_id)
+        campaign = get_campaign(campaign_id, _tenant_id(user))
+        if not _can_view_pii(user):
+            campaign = _redact_campaign_pii(campaign)
+        return {"job": job, "campaign": campaign}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="campaign match job not found") from exc
+
+
+@app.post("/campaigns/{campaign_id}/match-jobs/{job_id}/retry")
+def retry_campaign_match(campaign_id: str, job_id: str, user: dict = Depends(current_user)) -> dict:
+    require_tenant_write(user)
+    try:
+        existing = get_campaign_match_job(job_id, _tenant_id(user))
+        if existing["campaign_id"] != campaign_id:
+            raise FileNotFoundError(job_id)
+        job = retry_campaign_match_job(job_id, _tenant_id(user))
+        return {"job": job}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="campaign match job not found") from exc
+
+
+@app.post("/campaigns/{campaign_id}/match-jobs/{job_id}/cancel")
+def cancel_campaign_match(campaign_id: str, job_id: str, user: dict = Depends(current_user)) -> dict:
+    require_tenant_write(user)
+    try:
+        existing = get_campaign_match_job(job_id, _tenant_id(user))
+        if existing["campaign_id"] != campaign_id:
+            raise FileNotFoundError(job_id)
+        job = cancel_campaign_match_job(job_id, _tenant_id(user))
+        return {"job": job}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="campaign match job not found") from exc
 
 
 @app.post("/campaigns/{campaign_id}/resumes", status_code=202)

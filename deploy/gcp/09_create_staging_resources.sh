@@ -33,17 +33,9 @@ random_secret() {
   openssl rand -base64 "${1:-32}"
 }
 
-hash_staging_password() {
+sha256_staging_password() {
   local password="$1"
-  if [[ -n "${STAGING_BASIC_AUTH_HASH:-}" ]]; then
-    printf "%s" "${STAGING_BASIC_AUTH_HASH}"
-    return 0
-  fi
-  if ! command -v docker >/dev/null 2>&1; then
-    echo "Docker is required to hash STAGING_BASIC_AUTH_PASSWORD, or set STAGING_BASIC_AUTH_HASH yourself." >&2
-    exit 1
-  fi
-  docker run --rm caddy:2.8-alpine caddy hash-password --plaintext "${password}"
+  python3 -c 'import hashlib, sys; print(hashlib.sha256(sys.argv[1].encode("utf-8")).hexdigest())' "${password}"
 }
 
 if [[ -z "${STAGING_DATABASE_PASSWORD:-}" ]]; then
@@ -70,15 +62,15 @@ if [[ -z "${STAGING_BOOTSTRAP_TOKEN:-}" ]]; then
   fi
 fi
 
-if [[ -z "${STAGING_BASIC_AUTH_PASSWORD:-}" ]]; then
+if [[ -z "${STAGING_GATE_PASSWORD:-}" ]]; then
   if secret_exists "staging-basic-auth-password"; then
-    STAGING_BASIC_AUTH_PASSWORD="$(read_secret "staging-basic-auth-password")"
+    STAGING_GATE_PASSWORD="$(read_secret "staging-basic-auth-password")"
   else
-    STAGING_BASIC_AUTH_PASSWORD="$(random_secret 18)"
+    STAGING_GATE_PASSWORD="$(random_secret 18)"
   fi
 fi
 
-STAGING_BASIC_AUTH_HASH_VALUE="$(hash_staging_password "${STAGING_BASIC_AUTH_PASSWORD}")"
+STAGING_GATE_PASSWORD_HASH_VALUE="${STAGING_GATE_PASSWORD_HASH:-$(sha256_staging_password "${STAGING_GATE_PASSWORD}")}"
 
 gsutil ls -b "gs://${STAGING_DOCUMENT_BUCKET}" >/dev/null 2>&1 \
   || gsutil mb -p "${PROJECT_ID}" -l "${REGION}" -b on "gs://${STAGING_DOCUMENT_BUCKET}"
@@ -96,15 +88,15 @@ gcloud sql users set-password "${STAGING_SQL_USER}" --instance="${SQL_INSTANCE}"
 upsert_secret "staging-database-password" "${STAGING_DATABASE_PASSWORD}"
 upsert_secret "staging-better-auth-secret" "${STAGING_BETTER_AUTH_SECRET}"
 upsert_secret "staging-resume-intel-bootstrap-token" "${STAGING_BOOTSTRAP_TOKEN}"
-upsert_secret "staging-basic-auth-password" "${STAGING_BASIC_AUTH_PASSWORD}"
-upsert_secret "staging-basic-auth-password-hash" "${STAGING_BASIC_AUTH_HASH_VALUE}"
+upsert_secret "staging-basic-auth-password" "${STAGING_GATE_PASSWORD}"
+upsert_secret "staging-gate-password-hash" "${STAGING_GATE_PASSWORD_HASH_VALUE}"
 
 for secret in \
   staging-database-password \
   staging-better-auth-secret \
   staging-resume-intel-bootstrap-token \
   staging-basic-auth-password \
-  staging-basic-auth-password-hash; do
+  staging-gate-password-hash; do
   gcloud secrets add-iam-policy-binding "${secret}" \
     --member="serviceAccount:$(service_account_email "${VM_SERVICE_ACCOUNT}")" \
     --role="roles/secretmanager.secretAccessor" >/dev/null
@@ -115,5 +107,4 @@ echo "Domain: https://${STAGING_DOMAIN}"
 echo "Database: ${STAGING_SQL_DATABASE}"
 echo "Database user: ${STAGING_SQL_USER}"
 echo "Document bucket: gs://${STAGING_DOCUMENT_BUCKET}"
-echo "Basic Auth username: ${STAGING_BASIC_AUTH_USER}"
-echo "Basic Auth password stored in Secret Manager: staging-basic-auth-password"
+echo "Staging gate password stored in Secret Manager: staging-basic-auth-password"

@@ -634,6 +634,31 @@ export type JobCampaign = {
   deleted_at?: string | null;
 };
 
+export type CampaignMatchJob = {
+  id: string;
+  tenant_id: string;
+  campaign_id: string;
+  requirement_id?: string | null;
+  created_by_user_id?: string | null;
+  mode: "full" | "incremental" | string;
+  candidate_ids: string[];
+  status: "queued" | "running" | "succeeded" | "failed" | "retrying" | "cancelled" | string;
+  stage: string;
+  attempt_count: number;
+  max_attempts: number;
+  result?: Record<string, any>;
+  error_message?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type CampaignMatchJobResponse = {
+  job: CampaignMatchJob;
+  campaign?: JobCampaign;
+};
+
 export type CampaignScorecard = {
   title?: string | null;
   role_intent?: string | null;
@@ -1049,12 +1074,16 @@ export async function updateCampaignScorecard(token: string, campaignId: string,
   });
 }
 
-export async function matchCampaign(token: string, id: string, mode: "full" | "incremental" = "full", candidateIds: string[] = []): Promise<JobCampaign> {
+export async function matchCampaign(token: string, id: string, mode: "full" | "incremental" = "full", candidateIds: string[] = []): Promise<CampaignMatchJobResponse> {
   return request(`/campaigns/${id}/match`, {
     method: "POST",
     token,
     body: JSON.stringify({ mode, candidate_ids: candidateIds }),
   });
+}
+
+export async function getCampaignMatchJob(token: string, campaignId: string, jobId: string): Promise<CampaignMatchJobResponse> {
+  return request(`/campaigns/${campaignId}/match-jobs/${jobId}`, { token });
 }
 
 export async function uploadCampaignResumes(token: string, campaignId: string, files: File[], contextNote = "", batchName = ""): Promise<{ campaign: JobCampaign; batch: ParseBatch }> {
@@ -1376,17 +1405,69 @@ export async function disableMember(token: string, membershipId: string): Promis
   return request(`/team/members/${membershipId}/disable`, { method: "POST", token });
 }
 
+export class ApiRequestError extends Error {
+  status: number;
+  code?: string;
+  retryable: boolean;
+  requestId?: string | null;
+  detail?: unknown;
+
+  constructor(message: string, options: { status: number; code?: string; retryable?: boolean; requestId?: string | null; detail?: unknown }) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = options.status;
+    this.code = options.code;
+    this.retryable = Boolean(options.retryable);
+    this.requestId = options.requestId;
+    this.detail = options.detail;
+  }
+}
+
 async function request(path: string, options: { method?: string; token?: string; body?: BodyInit; form?: boolean } = {}) {
   const headers: Record<string, string> = {};
   if (!options.form) headers["Content-Type"] = "application/json";
   if (options.token) headers.Authorization = `Bearer ${options.token}`;
-  const response = await fetch(`${apiBase()}${path}`, {
-    method: options.method ?? "GET",
-    headers,
-    body: options.body,
-  });
-  if (!response.ok) throw new Error(await response.text());
+  let response: Response;
+  try {
+    response = await fetch(`${apiBase()}${path}`, {
+      method: options.method ?? "GET",
+      headers,
+      body: options.body,
+    });
+  } catch (error) {
+    throw new ApiRequestError("Cannot reach the backend. Check that the API service is running and reachable.", {
+      status: 0,
+      code: "network_error",
+      retryable: true,
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  }
+  if (!response.ok) throw await apiErrorFromResponse(response);
   return response.json();
+}
+
+async function apiErrorFromResponse(response: Response) {
+  const requestId = response.headers.get("x-request-id");
+  const text = await response.text();
+  let parsed: { detail?: unknown; message?: unknown; error?: unknown; code?: string; retryable?: boolean } | null = null;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+    parsed = null;
+  }
+  const detail = parsed?.detail ?? parsed?.message ?? parsed?.error ?? text;
+  const message = typeof detail === "string"
+    ? detail
+    : Array.isArray(detail)
+      ? detail.map((item) => item?.msg ?? JSON.stringify(item)).join("; ")
+      : response.statusText || "Request failed";
+  return new ApiRequestError(message, {
+    status: response.status,
+    code: parsed?.code,
+    retryable: parsed?.retryable ?? (response.status >= 500 || response.status === 408 || response.status === 429),
+    requestId,
+    detail,
+  });
 }
 
 function apiBase() {

@@ -8,6 +8,9 @@ def factual_current_title(record: dict[str, Any]) -> str | None:
 
     hr_profile = (record.get("derived") or {}).get("hr_profile") or {}
     if _current_role_needs_review(record):
+        suggested = _current_role_suggested_title(record)
+        if suggested:
+            return suggested
         verified = _first_verified_role_check(record)
         if verified:
             title = _clean_text(verified.get("title"))
@@ -65,3 +68,11 @@ def _first_verified_role_check(record: dict[str, Any]) -> dict[str, Any] | None:
         if isinstance(item, dict) and item.get("status") == "verified":
             return item
     return None
+
+
+def _current_role_suggested_title(record: dict[str, Any]) -> str | None:
+    verification = ((record.get("derived") or {}).get("fact_verification") or {})
+    role_checks = verification.get("role_checks") or []
+    if not role_checks or not isinstance(role_checks[0], dict):
+        return None
+    return _clean_text(role_checks[0].get("suggested_title"))
