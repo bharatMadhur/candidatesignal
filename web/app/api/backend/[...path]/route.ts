@@ -19,6 +19,15 @@ const HOP_BY_HOP_HEADERS = new Set([
   "upgrade",
 ]);
 
+const FORWARDED_HEADER_ALLOWLIST = new Set([
+  "accept",
+  "accept-language",
+  "authorization",
+  "content-type",
+  "user-agent",
+  "x-request-id",
+]);
+
 export async function GET(request: NextRequest, context: RouteContext) {
   return proxyToBackend(request, context);
 }
@@ -47,8 +56,13 @@ async function proxyToBackend(request: NextRequest, context: RouteContext) {
   const requestId = request.headers.get("x-request-id") || crypto.randomUUID();
   const headers = new Headers();
   request.headers.forEach((value, key) => {
-    if (!HOP_BY_HOP_HEADERS.has(key.toLowerCase())) headers.set(key, value);
+    const normalized = key.toLowerCase();
+    if (!HOP_BY_HOP_HEADERS.has(normalized) && FORWARDED_HEADER_ALLOWLIST.has(normalized)) headers.set(key, value);
   });
+  if (!headers.has("authorization")) {
+    const sessionToken = betterAuthSessionToken(request);
+    if (sessionToken) headers.set("authorization", `Bearer ${sessionToken}`);
+  }
   headers.set("x-request-id", requestId);
   const body = ["GET", "HEAD"].includes(request.method) ? undefined : await request.arrayBuffer();
   const controller = new AbortController();
@@ -87,6 +101,15 @@ async function proxyToBackend(request: NextRequest, context: RouteContext) {
     statusText: response.statusText,
     headers: responseHeaders,
   });
+}
+
+function betterAuthSessionToken(request: NextRequest) {
+  const exact = request.cookies.get("better-auth.session_token")?.value || request.cookies.get("better-auth-session_token")?.value;
+  if (exact) return exact;
+  for (const cookie of request.cookies.getAll()) {
+    if (cookie.name.endsWith("session_token") && cookie.name.includes("better-auth")) return cookie.value;
+  }
+  return "";
 }
 
 function backendBase() {

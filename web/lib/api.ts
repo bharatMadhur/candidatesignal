@@ -1,4 +1,5 @@
-export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api";
+export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api/backend";
+export const COOKIE_SESSION_TOKEN = "__cookie_session__";
 
 export type Session = {
   token: string;
@@ -940,7 +941,8 @@ export async function markCandidateReviewSignal(token: string, id: string, signa
 
 export async function getCandidateSource(token: string, id: string): Promise<Blob> {
   const response = await fetch(`${apiBase()}/candidates/${id}/document-preview`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authHeaders(token),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await response.text());
   return response.blob();
@@ -948,7 +950,8 @@ export async function getCandidateSource(token: string, id: string): Promise<Blo
 
 export async function getCandidateRawText(token: string, id: string): Promise<string> {
   const response = await fetch(`${apiBase()}/candidates/${id}/raw-text`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authHeaders(token),
+    credentials: "include",
   });
   if (!response.ok) throw new Error(await response.text());
   return response.text();
@@ -1426,13 +1429,14 @@ export class ApiRequestError extends Error {
 async function request(path: string, options: { method?: string; token?: string; body?: BodyInit; form?: boolean } = {}) {
   const headers: Record<string, string> = {};
   if (!options.form) headers["Content-Type"] = "application/json";
-  if (options.token) headers.Authorization = `Bearer ${options.token}`;
+  Object.assign(headers, authHeaders(options.token));
   let response: Response;
   try {
     response = await fetch(`${apiBase()}${path}`, {
       method: options.method ?? "GET",
       headers,
       body: options.body,
+      credentials: "include",
     });
   } catch (error) {
     throw new ApiRequestError("Cannot reach the backend. Check that the API service is running and reachable.", {
@@ -1444,6 +1448,11 @@ async function request(path: string, options: { method?: string; token?: string;
   }
   if (!response.ok) throw await apiErrorFromResponse(response);
   return response.json();
+}
+
+function authHeaders(token?: string): Record<string, string> {
+  if (!token || token === COOKIE_SESSION_TOKEN) return {};
+  return { Authorization: `Bearer ${token}` };
 }
 
 async function apiErrorFromResponse(response: Response) {

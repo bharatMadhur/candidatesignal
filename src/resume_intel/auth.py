@@ -121,7 +121,7 @@ def logout(token: str) -> None:
 def select_platform_tenant_workspace(token: str, tenant_id: str) -> dict[str, Any]:
     raise HTTPException(
         status_code=403,
-        detail="platform admins do not enter recruiter workspaces; invite a company user instead",
+        detail="platform admins do not enter recruiter workspaces; invite a recruiter instead",
     )
 
 

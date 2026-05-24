@@ -222,7 +222,7 @@ def _assert_self_signup_email_available(conn: Any, normalized_email: str) -> Non
         (normalized_email,),
     ).fetchone()
     if existing_user and _is_platform_role(existing_user["role"]):
-        raise HTTPException(status_code=409, detail="platform admin accounts cannot create company workspaces")
+        raise HTTPException(status_code=409, detail="platform admin accounts cannot create recruiter workspaces")
     if existing_user and existing_user.get("tenant_name"):
         raise HTTPException(status_code=409, detail=f"user already belongs to company {existing_user['tenant_name']}")
     if existing_user:
@@ -262,7 +262,7 @@ def _assert_invitee_available(conn: Any, normalized_email: str) -> None:
     if existing_member and _is_platform_role(existing_member["role"]):
         raise HTTPException(
             status_code=409,
-            detail="platform admin accounts cannot be invited into company workspaces",
+            detail="platform admin accounts cannot be invited into recruiter workspaces",
         )
     if existing_member and existing_member["tenant_name"]:
         raise HTTPException(

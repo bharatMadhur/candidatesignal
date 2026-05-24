@@ -78,7 +78,7 @@ Every company is a tenant. Every business row is tenant-scoped:
 
 V1 assumes one company per user. Recruiters see the full tenant candidate database.
 
-Companies can now self-register from the public homepage. The signup flow creates an active tenant, a tenant-owner user, and a Better Auth credential account in one transaction, then the UI signs the owner into the company workspace. Set `RESUME_INTEL_SELF_SIGNUP_ENABLED=0` if onboarding should return to invite-only.
+Companies can now self-register from the public homepage. The signup flow creates an active tenant, a tenant-owner user, and a Better Auth credential account in one transaction, then the UI signs the owner into the recruiter workspace. Set `RESUME_INTEL_SELF_SIGNUP_ENABLED=0` if onboarding should return to invite-only.
 
 Platform admins can still create tenants through `/admin/tenants`. Tenant admins manage members through `/team`.
 
@@ -140,16 +140,16 @@ Login split:
 ```text
 /              Single public homepage with embedded login.
 /?login=admin  Platform admin mode for company/seat management only.
-/?login=company Company workspace mode for recruiter workflows.
+/?login=company Recruiter workspace mode for recruiter workflows.
 ```
 
-There are no standalone `/login` or `/admin/login` pages. Admin and company users share the homepage entry surface, then route to separate post-login workspaces by role.
+There are no standalone `/login` or `/admin/login` pages. Admins and recruiters share the homepage entry surface, then route to separate post-login workspaces by role.
 
 Local dev credentials are seeded only for localhost/non-production runs:
 
 ```text
 Admin:     admin@example.com / resume-intel
-Company:   recruiter@example.com / resume-intel
+Recruiter: recruiter@example.com / resume-intel
 ```
 
 ## Governance
@@ -280,7 +280,7 @@ RESUME_INTEL_ALLOW_UNSIGNED_BETTER_AUTH_BEARER=0
 
 Security model:
 
-- Company users belong to exactly one tenant through `tenant_memberships`.
+- Recruiters belong to exactly one tenant through `tenant_memberships`.
 - Platform admins can create/manage companies, seats, invites, and tenant status.
 - Platform admins are blocked from recruiter candidate APIs and cannot view tenant candidate data.
 - Recruiter APIs always derive `tenant_id` from the authenticated session, never from a client-provided tenant id.

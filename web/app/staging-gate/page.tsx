@@ -17,7 +17,7 @@ export default async function StagingGatePage({ searchParams }: StagingGatePageP
           <p className="eyebrow">Private staging workspace</p>
           <h1>Enter the staging password</h1>
           <p>
-            This gate is separate from company login. You should only enter it
+            This gate is separate from recruiter login. You should only enter it
             once per browser session, then use your normal workspace account.
           </p>
         </div>

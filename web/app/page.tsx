@@ -143,6 +143,7 @@ import {
   deleteNote,
   disableTenant,
   disableMember,
+  COOKIE_SESSION_TOKEN,
 } from "../lib/api";
 import { authClient, signInWithBetterAuth } from "../lib/auth-client";
 import { BrandMark } from "./components/brand";
@@ -313,11 +314,9 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
       setSignupMode(false);
       setApplicantLoginSelected(false);
     }
-    const saved = window.localStorage.getItem("resume-intel-token");
-    if (saved) {
-      setToken(saved);
-      void refresh(saved).catch((error) => handleSessionFailure(error));
-    }
+    void refresh(COOKIE_SESSION_TOKEN, workspaceMode)
+      .then(() => setToken(COOKIE_SESSION_TOKEN))
+      .catch(() => undefined);
     // Bootstrap must only run once; adding refresh would re-run login recovery.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -424,7 +423,6 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     const user = meResult.user;
     const isPlatform = isPlatformAdmin(user);
     if (lockedLoginMode && initialLoginMode === "company" && isPlatform) {
-      window.localStorage.removeItem("resume-intel-token");
       setToken("");
       setCurrentUser(null);
       setWorkspaceMode("tenant");
@@ -433,12 +431,11 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
       return;
     }
     if (lockedLoginMode && initialLoginMode === "admin" && !isPlatform) {
-      window.localStorage.removeItem("resume-intel-token");
       setToken("");
       setCurrentUser(null);
       setWorkspaceMode("admin");
       setView("admin");
-      setStatus("Company session found. Use Company Login.");
+      setStatus("Recruiter session found. Use Recruiter Login.");
       return;
     }
     setCurrentUser(user);
@@ -591,26 +588,6 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     return () => window.clearInterval(timer);
   }, [token, tenantAdminPollingEnabled, parseBatches, selectedBatchActive, selectedBatchId, maintenanceJobs, candidate?.document_id, campaign?.id]);
 
-  function handleSessionFailure(error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (
-      message.includes("invalid or expired session") ||
-      message.includes("missing bearer token") ||
-      message.includes("unsigned bearer token rejected") ||
-      message.includes("invalid Better Auth bearer signature")
-    ) {
-      window.localStorage.removeItem("resume-intel-token");
-      setToken("");
-      setCurrentUser(null);
-      setStatus("Session expired. Please log in again.");
-      setLoginError("Your session expired. Please log in again.");
-      return;
-    }
-    const readable = readableError(message || "Could not load workspace");
-    setStatus(readable);
-    setLoginError(readable);
-  }
-
   async function run<T>(label: string, fn: () => Promise<T>) {
     setBusy(true);
     setStatus(label);
@@ -681,24 +658,17 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     setStatus("Signing in with Better Auth...");
     setLoginError("");
     try {
-      window.localStorage.removeItem("resume-intel-token");
       const loginEmail = resolveLoginIdentifier(email, loginMode);
       const result = await signInWithBetterAuth(loginEmail, password);
-      const tokenFromHeader = window.localStorage.getItem("resume-intel-token") || "";
-      const tokenFromResponse = result.token || "";
-      const nextToken = tokenFromHeader || tokenFromResponse;
-      if (!nextToken) throw new Error("Login did not return a bearer token");
+      const nextToken = result.token || COOKIE_SESSION_TOKEN;
       const current = await me(nextToken) as { user: CurrentUser };
       const platform = isPlatformAdmin(current.user);
       if (loginMode === "admin" && !platform) {
-        window.localStorage.removeItem("resume-intel-token");
-        throw new Error("This account belongs to a company workspace. Use Company Login.");
+        throw new Error("This account belongs to a recruiter workspace. Use Recruiter Login.");
       }
       if (loginMode === "company" && platform) {
-        window.localStorage.removeItem("resume-intel-token");
         throw new Error("This account is a platform admin. Open /admin to use the platform admin system.");
       }
-      window.localStorage.setItem("resume-intel-token", nextToken);
       const session = { token: nextToken, user: current.user };
       setToken(session.token);
       setCurrentUser(session.user);
@@ -708,7 +678,6 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
       await refresh(session.token, platform ? "admin" : "tenant");
     } catch (error) {
       const message = readableError(error);
-      window.localStorage.removeItem("resume-intel-token");
       setToken("");
       setCurrentUser(null);
       setLoginError(message);
@@ -735,31 +704,27 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
 
   async function handleCompanySignup() {
     setBusy(true);
-    setStatus("Creating company workspace...");
+    setStatus("Creating recruiter workspace...");
     setLoginError("");
     try {
       const normalizedEmail = signupEmail.trim().toLowerCase();
       await companySignup(signupCompanyName, signupOwnerName, normalizedEmail, signupPassword);
       setStatus("Workspace created. Signing in...");
       const result = await signInWithBetterAuth(normalizedEmail, signupPassword);
-      const nextToken = window.localStorage.getItem("resume-intel-token") || result.token || "";
-      if (!nextToken) throw new Error("Login did not return a bearer token");
+      const nextToken = result.token || COOKIE_SESSION_TOKEN;
       const current = await me(nextToken) as { user: CurrentUser };
       if (isPlatformAdmin(current.user)) {
-        window.localStorage.removeItem("resume-intel-token");
         throw new Error("Self-service signup created an invalid admin session.");
       }
-      window.localStorage.setItem("resume-intel-token", nextToken);
       setToken(nextToken);
       setCurrentUser(current.user);
       setWorkspaceMode("tenant");
       setSignupMode(false);
       setView("dashboard");
-      setStatus("Company workspace created");
+      setStatus("Recruiter workspace created");
       await refresh(nextToken, "tenant");
     } catch (error) {
       const message = readableError(error);
-      window.localStorage.removeItem("resume-intel-token");
       setToken("");
       setCurrentUser(null);
       setLoginError(message);
@@ -805,7 +770,6 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
 
   function handleLogout() {
     void authClient.signOut().catch(() => undefined);
-    window.localStorage.removeItem("resume-intel-token");
     initialRouteAppliedRef.current = false;
     routeApplyingRef.current = false;
     lastRouteIdentityRef.current = "";
@@ -1459,7 +1423,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   }
 
   async function handleDisableMember(membershipId: string) {
-    if (!window.confirm("Disable this team member? They should lose access to this company workspace.")) return;
+    if (!window.confirm("Disable this team member? They should lose access to this recruiter workspace.")) return;
     await run("Disabling member", () => disableMember(token, membershipId));
     const team = await getTeam(token);
     setTeamMembers(team.members);
@@ -1512,8 +1476,8 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
           <ShieldCheck size={28} />
           {inviteMode ? (
             <>
-              <h1>Accept Company Invite</h1>
-              <p>Create your account for the company workspace.</p>
+              <h1>Accept Recruiter Invite</h1>
+              <p>Create your account for the recruiter workspace.</p>
               <input value={inviteToken} onChange={(event) => setInviteToken(event.target.value)} placeholder="Invite token" />
               <input value={inviteName} onChange={(event) => setInviteName(event.target.value)} placeholder="Your name" />
               <input value={invitePassword} onChange={(event) => setInvitePassword(event.target.value)} placeholder="Create password" type="password" />
@@ -1524,15 +1488,15 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
             </>
           ) : (
             <>
-              <h1>{showCompanySignup ? "Create Company Workspace" : showApplicantComingSoon ? "Applicant Login" : isAdminLogin ? "Admin Login" : "Company Login"}</h1>
+              <h1>{showCompanySignup ? "Create Recruiter Workspace" : showApplicantComingSoon ? "Applicant Login" : isAdminLogin ? "Admin Login" : "Recruiter Login"}</h1>
               <p>
                 {showCompanySignup
-                  ? "Register your company workspace and become the tenant owner. No platform-admin approval is required."
+                  ? "Register your recruiter workspace for your company and become the tenant owner. No platform-admin approval is required."
                   : showApplicantComingSoon
                   ? "Applicant and student access is coming soon."
                   : isAdminLogin
                     ? "Platform owners only. This opens the admin system, not the recruiter app."
-                    : "Company users only. This opens the recruiter workspace for one tenant."}
+                    : "Recruiters only. This opens the recruiter workspace for one tenant."}
               </p>
               {canShowPublicLoginTabs ? (
                 <div className="loginModeTabs" role="tablist" aria-label="Choose login type">
@@ -1549,7 +1513,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                     }}
                     disabled={busy}
                   >
-                    <strong>Company Access</strong>
+                    <strong>Recruiter Access</strong>
                     <span>Recruiters, candidates, campaigns, matching.</span>
                   </button>
                   <button
@@ -1571,7 +1535,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                 </div>
               ) : (
                 <div className="loginModeLocked">
-                  <strong>{isAdminLogin ? "Admin System" : "Company Workspace"}</strong>
+                  <strong>{isAdminLogin ? "Admin System" : "Recruiter Workspace"}</strong>
                   <span>{isAdminLogin ? "Create companies, allocate seats, invite company owners." : "Upload resumes, search candidates, run campaigns and matching."}</span>
                 </div>
               )}
@@ -1627,18 +1591,18 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                     <Rocket size={16} /> {busy ? "Creating..." : "Create Free Workspace"}
                   </button>
                   <div className="loginHelpBox">
-                    <strong>Private company workspace</strong>
+                    <strong>Private recruiter workspace</strong>
                     <span>Your data is tenant-isolated. Platform admins manage billing and company setup, not candidate databases.</span>
                   </div>
                   {loginError ? <div className="loginError">{loginError}</div> : null}
-                  <button className="plain" type="button" onClick={() => setSignupMode(false)} disabled={busy}>Back to company login</button>
+                  <button className="plain" type="button" onClick={() => setSignupMode(false)} disabled={busy}>Back to recruiter login</button>
                 </>
               ) : showApplicantComingSoon ? (
                 <div className="applicantComingSoonCard">
                   <Users size={26} />
                   <strong>Applicant portal is coming soon</strong>
-                  <span>Applicants will eventually review their resume signal and application fit here. Company recruiters should continue with Company Access.</span>
-                  <button className="primary" type="button" onClick={() => setApplicantLoginSelected(false)}>Use Company Login</button>
+                  <span>Applicants will eventually review their resume signal and application fit here. Recruiters should continue with Recruiter Access.</span>
+                  <button className="primary" type="button" onClick={() => setApplicantLoginSelected(false)}>Use Recruiter Login</button>
                 </div>
               ) : (
                 <>
@@ -1650,7 +1614,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                     }}
                     onKeyDown={handleLoginKeyDown}
                     placeholder={loginEmailPlaceholder}
-                    aria-label={isAdminLogin ? "Admin email or username" : "Company email or username"}
+                    aria-label={isAdminLogin ? "Admin email or username" : "Recruiter email or username"}
                     autoComplete="username"
                   />
                   <input
@@ -1666,7 +1630,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                     autoComplete="current-password"
                   />
                   <button className="primary" onClick={handleLogin} disabled={busy || !email.trim() || !password.trim()}>
-                    <LogIn size={16} /> {busy ? "Signing in..." : isAdminLogin ? "Enter Admin System" : "Enter Company Workspace"}
+                    <LogIn size={16} /> {busy ? "Signing in..." : isAdminLogin ? "Enter Admin System" : "Enter Recruiter Workspace"}
                   </button>
                   {loginError ? <div className="loginError">{loginError}</div> : null}
                   {showLocalDevHelp ? <div className="loginHelpBox">
@@ -1675,7 +1639,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                   </div> : null}
                   {lockedLoginMode ? (
                     <a className="plain actionLink" href={isAdminLogin ? "/" : "/admin"}>
-                      {isAdminLogin ? "Go to Company Login" : "Go to Admin Login"}
+                      {isAdminLogin ? "Go to Recruiter Login" : "Go to Admin Login"}
                     </a>
                   ) : null}
                   {isAdminLogin && showBootstrap ? <button className="plain" onClick={handleBootstrap} disabled={busy || !email.trim() || !password.trim()}>
@@ -1685,7 +1649,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                     Accept invite
                   </button> : null}
                   {!isAdminLogin ? <button className="plain" onClick={openCompanySignupPanel} disabled={busy}>
-                    Create a company workspace
+                    Create a recruiter workspace
                   </button> : null}
                 </>
               )}
@@ -1712,7 +1676,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
             </nav>
             <div className="stitchNavActions">
               <button className="plain" type="button" onClick={() => { setSignupMode(false); setApplicantLoginSelected(true); }}>Applicant Login</button>
-              <button className="primary" type="button" onClick={() => { setSignupMode(false); setApplicantLoginSelected(false); }}>Company Login</button>
+              <button className="primary" type="button" onClick={() => { setSignupMode(false); setApplicantLoginSelected(false); }}>Recruiter Login</button>
             </div>
           </header>
 
@@ -1771,14 +1735,14 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               <div className="pricingCompactIntro">
                 <span className="pricingKicker">Simple pricing</span>
                 <h2>Start free while we onboard early companies.</h2>
-                <p>Use the company workspace now for resume parsing, search, campaigns, notes, and evidence-backed matching. Paid access is coming soon.</p>
+                <p>Use the recruiter workspace now for resume parsing, search, campaigns, notes, and evidence-backed matching. Paid access is coming soon.</p>
               </div>
               <div className="pricingCompactPlans">
                 <article className="pricingCompactPlan active">
                   <div>
                     <span>Available till June end</span>
                     <h3>Free Workspace</h3>
-                    <p>Private company workspace for evaluating the product.</p>
+                    <p>Private recruiter workspace for evaluating the product.</p>
                   </div>
                   <strong>$0 <small>/ month</small></strong>
                   <ul>
@@ -1791,7 +1755,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                   <div>
                     <span>Coming soon</span>
                     <h3>After that</h3>
-                    <p>For continued company workspace access after the free period.</p>
+                    <p>For continued recruiter workspace access after the free period.</p>
                   </div>
                   <strong>$29.99 <small>initial</small></strong>
                   <p className="pricingSubline">Then $9.99 per user / month.</p>
@@ -1849,7 +1813,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               <article>
                 <div className="roleIcon primaryRole"><Rocket size={26} /></div>
                 <h3>For Recruiters & Hiring Teams</h3>
-                <p>The company workspace for resume upload, search, matching, campaigns, notes, and evidence-backed shortlists.</p>
+                <p>The recruiter workspace for resume upload, search, matching, campaigns, notes, and evidence-backed shortlists.</p>
                 <ul>
                   <li>Defensible candidate decisions with exact CV evidence.</li>
                   <li>Bulk parsing and campaign-specific uploads.</li>
@@ -1871,7 +1835,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
 
           <section className="stitchFinalCta">
             <h2>Ready to hire with evidence?</h2>
-            <p>Start with company access, upload resumes, and turn candidate data into recruiter-ready decisions.</p>
+            <p>Start with recruiter access, upload resumes, and turn candidate data into recruiter-ready decisions.</p>
             <button className="primary" type="button" onClick={openCompanySignupPanel}>Create Free Workspace</button>
           </section>
 
@@ -1898,7 +1862,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
         <EnvironmentBanner />
         <section className="landingIntro loginIntroCompact">
           <span className="eyebrow">candidateSignal.ai</span>
-          <h1>{inviteMode ? "Accept company invite." : isAdminLogin ? "Platform admin login." : "Company workspace login."}</h1>
+          <h1>{inviteMode ? "Accept recruiter invite." : isAdminLogin ? "Platform admin login." : "Recruiter workspace login."}</h1>
           <p>
             {inviteMode
               ? "Use the invite token from your company admin to create a tenant-scoped account."
@@ -1907,7 +1871,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                 : "Use this for resumes, candidates, campaigns, requirements, matching, and Team Settings."}
           </p>
           <div className="loginBoundaryCard">
-            <strong>{isAdminLogin ? "Admin system" : "Company workspace"}</strong>
+            <strong>{isAdminLogin ? "Admin system" : "Recruiter workspace"}</strong>
             <span>
               {isAdminLogin
                 ? "No candidate database access from this side."
@@ -2326,7 +2290,7 @@ function AccountSettingsMenu({
           </div>
         ) : null}
         <div className="accountMenuActions">
-          <button type="button" onClick={() => switchLogin("/")}><LogIn size={16} /> Company Login</button>
+          <button type="button" onClick={() => switchLogin("/")}><LogIn size={16} /> Recruiter Login</button>
           <button type="button" onClick={() => switchLogin("/admin")}><ShieldCheck size={16} /> Admin Login</button>
         </div>
         <button className="logoutButton" type="button" onClick={logout}><LogOut size={16} /> Logout</button>
@@ -2839,7 +2803,7 @@ function RecruiterCopilot({
                 <h3>Upload requirement</h3>
                 <label className="fileDrop compact">
                   <FileSearch size={22} />
-                  <span>{requirementFile ? requirementFile.name : "Choose PDF, DOCX, TXT, or MD"}</span>
+                  <span>{requirementFile ? requirementFile.name : `Choose ${DOCUMENT_FORMAT_LABEL}`}</span>
                   <input type="file" accept={DOCUMENT_FILE_ACCEPT} onChange={(event) => setRequirementFile(event.target.files?.[0] ?? null)} />
                 </label>
               </section>
@@ -2940,7 +2904,7 @@ function RecruiterCopilot({
                     <button className="plain tiny danger" onClick={() => archiveThread(thread.id)}>Archive</button>
                   </div>
                 </article>
-              )) : <EmptyPanel title="No saved threads" body="Ask a Copilot question and the thread will be saved for the company workspace." />}
+              )) : <EmptyPanel title="No saved threads" body="Ask a Copilot question and the thread will be saved for the recruiter workspace." />}
             </div>
           </section>
           <h3>Quick Refinements</h3>
@@ -3265,7 +3229,7 @@ function UploadResumeView(props: {
             <label className="campaignRequirementDrop large">
               <FileSearch size={22} />
               <strong>{campaignRequirementFile ? campaignRequirementFile.name : "Upload requirement file"}</strong>
-              <span>PDF, DOCX, TXT, or MD</span>
+              <span>{DOCUMENT_FORMAT_LABEL}</span>
               <input type="file" accept={DOCUMENT_FILE_ACCEPT} onChange={(event) => setCampaignRequirementFile(event.target.files?.[0] ?? null)} />
             </label>
             <button className="secondary" disabled={!requirementCampaignReady || !campaignRequirementFile || props.busy} onClick={submitRequirementFile}>Extract file</button>
@@ -7188,7 +7152,7 @@ function TeamSettings({
             <>
               <div className="privacySettingsTitle">
                 <h2>Team Members</h2>
-                <p>Invite company users and manage roles without exposing this workspace to platform admins.</p>
+                <p>Invite recruiters and manage roles without exposing this workspace to platform admins.</p>
               </div>
               <section className="panel notePanel settingsInviteCard">
                 <h3>Invite Member</h3>
@@ -7378,7 +7342,7 @@ function AdminSettings({
       <div className="pageTitle adminOverviewTitle">
         <div>
           <h2>Companies Overview</h2>
-          <p>Monitor company health, seat utilization, pending invites, and workspace access. Candidate data stays inside each company workspace.</p>
+          <p>Monitor company health, seat utilization, pending invites, and workspace access. Candidate data stays inside each recruiter workspace.</p>
         </div>
         <div className="adminHeaderActions">
           <button className="plain" type="button" onClick={() => window.print()}>Export View</button>
@@ -7514,7 +7478,7 @@ function TenantDrilldown({ detail }: { detail: TenantAdminDetail }) {
       <div className="pageTitle compact">
         <div>
           <h2>{detail.tenant.name}</h2>
-          <p>Platform-admin governance view. Recruiter workspace access belongs only to invited company users.</p>
+          <p>Platform-admin governance view. Recruiter workspace access belongs only to invited recruiters.</p>
         </div>
         <span className="jobActions">
           <span className="statusPill">{detail.tenant.status}</span>
@@ -7545,7 +7509,7 @@ function TenantDrilldown({ detail }: { detail: TenantAdminDetail }) {
         <AdminMiniList
           title="Privacy Boundary"
           count={detail.tenant.candidate_count ?? 0}
-          rows={[[`${detail.tenant.candidate_count ?? 0} candidate records`, "Profile details hidden", "Company users access recruiter records"]]}
+          rows={[[`${detail.tenant.candidate_count ?? 0} candidate records`, "Profile details hidden", "Recruiters access candidate records"]]}
         />
         <AdminMiniList
           title="Seat Governance"
@@ -8043,7 +8007,7 @@ function readableError(error: unknown) {
     // Fall through to normalized raw text.
   }
   if (raw === "Failed to fetch") return "Cannot reach the backend. Check that the API is running on 127.0.0.1:8010.";
-  if (raw.includes("Login did not return a bearer token")) return "Login succeeded but Better Auth did not return a session token. Refresh the page and try again.";
+  if (raw.includes("Login did not return a session")) return "Login succeeded but the session could not be restored. Refresh the page and try again.";
   return raw;
 }
 

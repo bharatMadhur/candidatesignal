@@ -37,7 +37,7 @@ COPILOT_STOPWORDS = {
 def build_copilot_answer(message: str, results: list[dict]) -> str:
     if not results:
         return (
-            "I did not find a strong candidate match in this company workspace. "
+            "I did not find a strong candidate match in this recruiter workspace. "
             "Try adding required skills, target years, location, seniority, or a domain phrase from the job requirement."
         )
     top = results[:3]

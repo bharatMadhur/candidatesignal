@@ -20,6 +20,25 @@ TECH_DOMAIN_FALSE_POSITIVES = {
     "dot.net",
     "entityframework.net",
 }
+PII_FIELD_KEYS = {
+    "email",
+    "emails",
+    "phone",
+    "phones",
+    "linkedin",
+    "linkedin_url",
+    "linkedin_urls",
+    "github",
+    "github_url",
+    "github_urls",
+    "portfolio",
+    "portfolio_url",
+    "portfolio_websites",
+    "all_urls",
+    "links",
+    "url",
+    "urls",
+}
 
 
 def enrich_record_pii(record: dict[str, Any], raw_text: str | None = None) -> dict[str, Any]:
@@ -107,6 +126,28 @@ def redact_contact_pii_text(text: str | None, *, names: list[str] | None = None)
             continue
         redacted = re.sub(re.escape(clean), "[redacted-name]", redacted, flags=re.I)
     return redacted
+
+
+def redact_contact_pii_payload(value: Any) -> Any:
+    """Recursively remove direct contact data from nested API payloads."""
+
+    if isinstance(value, str):
+        return redact_contact_pii_text(value)
+    if isinstance(value, list):
+        return [redact_contact_pii_payload(item) for item in value]
+    if isinstance(value, dict):
+        redacted: dict[str, Any] = {}
+        for key, item in value.items():
+            normalized = str(key).lower()
+            if normalized in PII_FIELD_KEYS or normalized.endswith("_url") or normalized.endswith("_urls"):
+                if normalized in {"email", "phone"}:
+                    redacted[key] = "[redacted]" if item else item
+                else:
+                    redacted[key] = [] if isinstance(item, list) else None
+            else:
+                redacted[key] = redact_contact_pii_payload(item)
+        return redacted
+    return value
 
 
 def _structured_contact_text(record: dict[str, Any]) -> str:

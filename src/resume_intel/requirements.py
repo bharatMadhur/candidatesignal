@@ -357,30 +357,7 @@ def match_requirement(
                 (tenant_id, recall_ids),
             ).fetchall()
         else:
-            if hidden_version_ids:
-                candidates = conn.execute(
-                    """
-                    select document_id, record_json, raw_text
-                    from candidates
-                    where tenant_id=%s
-                      and deleted_at is null
-                      and not (document_id = any(%s::text[]))
-                    order by updated_at desc
-                    limit %s
-                    """,
-                    (tenant_id, list(hidden_version_ids), RECALL_LIMIT),
-                ).fetchall()
-            else:
-                candidates = conn.execute(
-                    """
-                    select document_id, record_json, raw_text
-                    from candidates
-                    where tenant_id=%s and deleted_at is null
-                    order by updated_at desc
-                    limit %s
-                    """,
-                    (tenant_id, RECALL_LIMIT),
-                ).fetchall()
+            candidates = []
     matches = []
     for row in candidates:
         candidate = row["record_json"]
@@ -415,7 +392,7 @@ def match_requirement(
     visible_threshold = max(MATCH_VISIBILITY_THRESHOLD, min(0.95, float(minimum_score)))
     visible_matches = [item for item in matches if float(item.get("total_score") or 0) >= visible_threshold]
     _persist_matches(requirement_id, visible_matches, tenant_id, replace_all=not candidate_ids_only, candidate_scope_ids=recall_ids if candidate_ids_only else None)
-    _persist_match_run(requirement_id, profile, visible_matches, tenant_id)
+    _persist_match_run(requirement_id, profile, matches, tenant_id)
     with db() as conn:
         conn.execute(
             "update requirements set status='matched', updated_at=now() where id=%s and (%s::uuid is null or tenant_id=%s)",

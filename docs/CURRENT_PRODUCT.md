@@ -6,11 +6,11 @@ This is the current product reference. It replaces the old running-issues docume
 
 - Homepage contains the public value proposition and the login surface.
 - Platform admins use admin mode from `/?login=admin`.
-- Company users use company mode from `/?login=company`.
+- Recruiters use recruiter mode from `/?login=company`.
 - There are no standalone `/login` or `/admin/login` pages.
 - Platform admins manage companies, seats, invitations, audit summaries, and tenant status.
 - Platform admins do not enter the recruiter workspace.
-- Company users work inside one tenant/company workspace.
+- Recruiters work inside one tenant-scoped recruiter workspace.
 
 ## Recruiter Workflows
 

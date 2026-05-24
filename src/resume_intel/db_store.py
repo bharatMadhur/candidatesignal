@@ -15,7 +15,7 @@ from .derive import normalize_domain_years
 from .fact_verification import enrich_fact_verification
 from .geo import candidate_current_location, enrich_record_locations
 from .note_signals import candidate_note_signal_summary, delete_note_signals, replace_note_signals
-from .pii import enrich_record_pii
+from .pii import enrich_record_pii, redact_contact_pii_payload
 from .profile_freshness import enrich_profile_freshness
 from .profile_verification import enrich_profile_verification
 from .timeline import build_timeline_profile
@@ -146,6 +146,7 @@ def public_candidate_record(record: dict[str, Any], *, allow_pii: bool = True) -
 
 
 def _redact_record_pii(record: dict[str, Any]) -> None:
+    record.update(redact_contact_pii_payload(record))
     if record.get("email"):
         record["email"] = "[redacted]"
     if record.get("phone"):
@@ -823,6 +824,7 @@ def candidate_document_metadata(document_id: str, tenant_id: str) -> dict[str, A
     if not row:
         record = load_candidate_db(document_id, tenant_id)
         return {
+            "tenant_id": tenant_id,
             "storage_backend": record.get("storage_backend") or "local",
             "storage_key": record.get("storage_key"),
             "original_filename": record.get("original_filename") or (record.get("source_file") or "").split("/")[-1],
@@ -831,6 +833,7 @@ def candidate_document_metadata(document_id: str, tenant_id: str) -> dict[str, A
         }
     return {
         "id": str(row["id"]),
+        "tenant_id": str(row["tenant_id"]),
         "storage_backend": row["storage_backend"],
         "storage_key": row["storage_key"],
         "original_filename": row["original_filename"],

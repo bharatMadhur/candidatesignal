@@ -230,7 +230,9 @@ class DatabaseDocumentStorage(DocumentStorage):
 
     def _cache_path(self, key: str) -> Path:
         safe_key = Path(key).as_posix().replace("../", "").lstrip("/")
-        return (self.cache_root / safe_key).resolve()
+        path = (self.cache_root / safe_key).resolve()
+        path.relative_to(self.cache_root)
+        return path
 
 
 class GcsDocumentStorage(DocumentStorage):
@@ -331,7 +333,9 @@ class GcsDocumentStorage(DocumentStorage):
 
     def _cache_path(self, key: str) -> Path:
         safe_key = Path(key).as_posix().replace("../", "").lstrip("/")
-        return (self.cache_root / safe_key).resolve()
+        path = (self.cache_root / safe_key).resolve()
+        path.relative_to(self.cache_root)
+        return path
 
 
 def document_storage(backend: str | None = None) -> DocumentStorage:
@@ -343,6 +347,13 @@ def document_storage(backend: str | None = None) -> DocumentStorage:
     if backend == "database":
         return DatabaseDocumentStorage()
     return LocalDocumentStorage()
+
+
+def validate_tenant_storage_key(key: str, tenant_id: str) -> None:
+    normalized_key = Path(str(key or "")).as_posix().lstrip("/")
+    normalized_tenant = str(tenant_id or "").strip("/")
+    if not normalized_key or not normalized_tenant or not normalized_key.startswith(f"{normalized_tenant}/"):
+        raise PermissionError("document storage key is outside the tenant namespace")
 
 
 def _sha256_file(path: Path) -> str:

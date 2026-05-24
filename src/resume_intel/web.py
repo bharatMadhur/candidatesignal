@@ -118,7 +118,7 @@ from .match_jobs import (
     retry_campaign_match_job,
 )
 from .parse_jobs import cancel_batch, cancel_job, create_parse_batch, create_reparse_job_for_candidate, get_parse_batch, get_parse_job, get_worker_status, list_parse_batches, retry_job, run_job, run_next_job
-from .pii import redact_contact_pii_text
+from .pii import redact_contact_pii_payload, redact_contact_pii_text
 from .pipeline import SUPPORTED_EXTENSIONS
 from .requirements import (
     clarify_requirement,
@@ -159,7 +159,7 @@ from .tenancy import (
     update_member_role,
     validate_tenant_creation_request,
 )
-from .storage import document_storage
+from .storage import document_storage, validate_tenant_storage_key
 from .vector_search import candidate_search as hybrid_candidate_search, semantic_candidate_scores, semantic_candidate_search
 
 
@@ -2091,7 +2091,7 @@ def _visible_notes_for_user(notes: Any, user: dict) -> list[dict]:
 
 
 def _redact_summary_pii(item: dict) -> dict:
-    redacted = dict(item)
+    redacted = redact_contact_pii_payload(dict(item))
     candidate_name = str(redacted.get("name") or "").strip()
     if redacted.get("email"):
         redacted["email"] = "[redacted]"
@@ -2226,6 +2226,7 @@ def _tenant_dirs(tenant_id: str) -> tuple[Path, Path, Path]:
 def _resolve_candidate_source_path(metadata: dict) -> Path:
     storage_key = metadata.get("storage_key")
     if storage_key:
+        validate_tenant_storage_key(storage_key, metadata.get("tenant_id"))
         return document_storage(metadata.get("storage_backend") or "local").open_for_preview(storage_key).resolve()
     source_file = metadata.get("source_file")
     if not source_file:

@@ -20,9 +20,13 @@ RAW_CHUNK_OVERLAP = 250
 
 def candidate_search(query_text: str, limit: int = 25, tenant_id: str | None = None) -> list[dict[str, Any]]:
     exact_results = exact_candidate_search(query_text, limit, tenant_id)
-    if exact_results:
-        return exact_results[:limit]
-    return semantic_candidate_search(query_text, limit, tenant_id)
+    try:
+        semantic_results = semantic_candidate_search(query_text, limit, tenant_id)
+    except RuntimeError:
+        if exact_results:
+            return exact_results[:limit]
+        raise
+    return _merge_candidate_search_results(exact_results, semantic_results, limit)
 
 
 def embed_text(text: str) -> list[float]:
@@ -477,6 +481,31 @@ def _collapse_scores_to_canonical_versions(scores: dict[str, dict[str, Any]], te
         existing["evidence"] = [*(existing.get("evidence") or []), *(score.get("evidence") or [])][:5]
     ordered = sorted(collapsed.items(), key=lambda item: float(item[1].get("semantic_score") or 0), reverse=True)
     return dict(ordered[:limit])
+
+
+def _merge_candidate_search_results(exact_results: list[dict[str, Any]], semantic_results: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+    merged: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    for item in exact_results:
+        document_id = str(item.get("document_id") or "")
+        if not document_id:
+            continue
+        merged[document_id] = dict(item) | {"search_match_type": item.get("search_match_type") or "exact"}
+        order.append(document_id)
+    for item in semantic_results:
+        document_id = str(item.get("document_id") or "")
+        if not document_id:
+            continue
+        if document_id in merged:
+            existing = merged[document_id]
+            existing["semantic_score"] = max(float(existing.get("semantic_score") or 0), float(item.get("semantic_score") or 0))
+            existing["top_chunks"] = list(dict.fromkeys([*(existing.get("top_chunks") or []), *(item.get("top_chunks") or [])]))[:5]
+            existing["evidence"] = [*(existing.get("evidence") or []), *(item.get("evidence") or [])][:5]
+            existing["search_match_type"] = "hybrid"
+            continue
+        merged[document_id] = dict(item) | {"search_match_type": item.get("search_match_type") or "semantic"}
+        order.append(document_id)
+    return [merged[document_id] for document_id in order[:limit] if document_id in merged]
 
 
 def _candidate_summary(row: Any, scores: dict[str, Any]) -> dict[str, Any]:

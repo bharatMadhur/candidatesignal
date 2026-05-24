@@ -9,10 +9,10 @@ test("public entry keeps login on the homepage and removes legacy login pages", 
   await page.goto("/");
   const loginPanel = page.locator(".loginPanel");
   await expect(page.getByText(/candidateSignal\.ai/i).first()).toBeVisible();
-  await expect(page.getByText(/company login|company workspace/i).first()).toBeVisible();
+  await expect(page.getByText(/recruiter login|recruiter workspace/i).first()).toBeVisible();
   await expect(page.getByText(/applicant login|applicant portal/i).first()).toBeVisible();
-  await page.getByRole("button", { name: /create a company workspace/i }).click();
-  await expect(page.getByRole("heading", { name: /create company workspace/i })).toBeVisible();
+  await page.getByRole("button", { name: /create a recruiter workspace/i }).click();
+  await expect(page.getByRole("heading", { name: /create recruiter workspace/i })).toBeVisible();
   await expect(loginPanel.getByLabel(/company name/i)).toBeVisible();
   await expect(loginPanel.getByLabel(/your name|owner name/i)).toBeVisible();
   await expect(loginPanel.getByLabel(/work email/i)).toBeVisible();
@@ -75,7 +75,7 @@ async function login(page: Page) {
   const loginPanel = page.locator(".loginPanel");
   await loginPanel.getByLabel(/email/i).fill(email!);
   await loginPanel.getByLabel(/password/i).fill(password!);
-  await loginPanel.getByRole("button", { name: /enter company workspace|company login|sign in/i }).click();
+  await loginPanel.getByRole("button", { name: /enter recruiter workspace|recruiter login|sign in/i }).click();
   await expect(navButton(page, "Candidates")).toBeVisible();
 }
 

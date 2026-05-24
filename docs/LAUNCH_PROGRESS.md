@@ -3,6 +3,7 @@
 Updated: 2026-05-24
 
 ## Done
+- Renamed visible company-login language to recruiter-login/recruiter-workspace language while keeping tenant/company backend boundaries intact.
 - Replaced staging HTTP Basic Auth plan with an app-level cookie gate implementation.
 - Added staging gate page and route handler.
 - Routed staging `/api/*` through the UI so the staging cookie gate and app auth do not conflict.
@@ -27,7 +28,7 @@ Updated: 2026-05-24
 - Configure `.com` staging only if `staging.candidatesignal.com` is required; canonical staging remains `.ai`.
 
 ## Verified
-- Python unit discovery: 168 tests passed.
+- Python unit discovery: 170 tests passed.
 - Frontend lint passed.
 - Next.js production build passed.
 - Playwright public smoke passed.

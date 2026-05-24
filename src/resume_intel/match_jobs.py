@@ -10,6 +10,8 @@ from .db import db
 
 ACTIVE_MATCH_JOB_STATUSES = {"queued", "retrying", "running"}
 TERMINAL_MATCH_JOB_STATUSES = {"succeeded", "failed", "cancelled"}
+MATCH_RETRY_BACKOFF_SECONDS = 60
+STALE_RUNNING_MINUTES = 60
 
 
 def create_campaign_match_job(
@@ -110,6 +112,7 @@ def cancel_campaign_match_job(job_id: str, tenant_id: str) -> dict[str, Any]:
 
 
 def run_next_match_job(tenant_id: str | None = None) -> dict[str, Any] | None:
+    reconcile_campaign_match_jobs(tenant_id=tenant_id)
     with db() as conn:
         row = conn.execute(
             """
@@ -117,11 +120,12 @@ def run_next_match_job(tenant_id: str | None = None) -> dict[str, Any] | None:
             from campaign_match_jobs
             where status in ('queued', 'retrying')
               and (%s::uuid is null or tenant_id=%s)
+              and (status <> 'retrying' or updated_at <= now() - (%s * interval '1 second'))
             order by created_at
             for update skip locked
             limit 1
             """,
-            (tenant_id, tenant_id),
+            (tenant_id, tenant_id, MATCH_RETRY_BACKOFF_SECONDS),
         ).fetchone()
         if not row:
             return None
@@ -143,6 +147,7 @@ def run_campaign_match_job(job_id: str, tenant_id: str) -> dict[str, Any]:
     if job["status"] == "cancelled":
         return job
     try:
+        _set_match_stage(job_id, tenant_id, "running", "retrieving_candidates")
         campaign = run_campaign_match(
             job["campaign_id"],
             tenant_id,
@@ -152,13 +157,16 @@ def run_campaign_match_job(job_id: str, tenant_id: str) -> dict[str, Any]:
         )
     except Exception as exc:
         return _mark_failed_or_retrying(job, exc)
+    current = get_campaign_match_job(job_id, tenant_id)
+    if current["status"] == "cancelled":
+        return current
     with db() as conn:
         row = conn.execute(
             """
             update campaign_match_jobs
             set status='succeeded', stage='succeeded', result=%s, error_message=null,
                 completed_at=now(), updated_at=now()
-            where id=%s and tenant_id=%s
+            where id=%s and tenant_id=%s and status <> 'cancelled'
             returning *
             """,
             (
@@ -172,7 +180,33 @@ def run_campaign_match_job(job_id: str, tenant_id: str) -> dict[str, Any]:
             ),
         ).fetchone()
         conn.commit()
+    if not row:
+        return get_campaign_match_job(job_id, tenant_id)
     return match_job_row(row)
+
+
+def reconcile_campaign_match_jobs(*, tenant_id: str | None = None, stale_after_minutes: int = STALE_RUNNING_MINUTES) -> dict[str, int]:
+    with db() as conn:
+        rows = conn.execute(
+            """
+            update campaign_match_jobs
+            set status=case when attempt_count < max_attempts then 'retrying' else 'failed' end,
+                stage=case when attempt_count < max_attempts then 'retrying' else 'failed' end,
+                error_message='Worker heartbeat/stage timeout while matching campaign.',
+                completed_at=case when attempt_count >= max_attempts then now() else completed_at end,
+                updated_at=now()
+            where status='running'
+              and updated_at <= now() - (%s * interval '1 minute')
+              and (%s::uuid is null or tenant_id=%s)
+            returning status
+            """,
+            (stale_after_minutes, tenant_id, tenant_id),
+        ).fetchall()
+        conn.commit()
+    return {
+        "retrying": sum(1 for row in rows if row["status"] == "retrying"),
+        "failed": sum(1 for row in rows if row["status"] == "failed"),
+    }
 
 
 def match_job_row(row: Any) -> dict[str, Any]:
@@ -206,13 +240,26 @@ def _mark_failed_or_retrying(job: dict[str, Any], exc: Exception) -> dict[str, A
             set status=%s, stage=%s, error_message=%s,
                 completed_at=case when %s='failed' then now() else completed_at end,
                 updated_at=now()
-            where id=%s and tenant_id=%s
+            where id=%s and tenant_id=%s and status <> 'cancelled'
             returning *
             """,
             (next_status, next_status, str(exc), next_status, job["id"], job["tenant_id"]),
         ).fetchone()
         conn.commit()
-    return match_job_row(row)
+    return match_job_row(row) if row else get_campaign_match_job(job["id"], job["tenant_id"])
+
+
+def _set_match_stage(job_id: str, tenant_id: str, status: str, stage: str) -> None:
+    with db() as conn:
+        conn.execute(
+            """
+            update campaign_match_jobs
+            set status=%s, stage=%s, updated_at=now()
+            where id=%s and tenant_id=%s and status <> 'cancelled'
+            """,
+            (status, stage, job_id, tenant_id),
+        )
+        conn.commit()
 
 
 def _dedupe_ids(values: list[str]) -> list[str]:

@@ -30,9 +30,9 @@ class _SearchDb:
         return None
 
 
-def test_candidate_search_returns_exact_name_matches_without_semantic_noise(monkeypatch):
+def test_candidate_search_merges_exact_and_semantic_results(monkeypatch):
     exact = [{"document_id": "shubh-1", "name": "Shubh Almal", "search_match_type": "exact"}]
-    semantic_called = False
+    semantic = [{"document_id": "spark-1", "name": "Spark Engineer", "semantic_score": 0.82}]
 
     def fake_exact_candidate_search(query_text, limit=25, tenant_id=None):
         assert query_text == "shubh"
@@ -40,15 +40,14 @@ def test_candidate_search_returns_exact_name_matches_without_semantic_noise(monk
         return exact
 
     def fake_semantic_candidate_search(query_text, limit=25, tenant_id=None):
-        nonlocal semantic_called
-        semantic_called = True
-        return [{"document_id": "noise-1", "name": "Unrelated Candidate"}]
+        return semantic
 
     monkeypatch.setattr(vector_search, "exact_candidate_search", fake_exact_candidate_search)
     monkeypatch.setattr(vector_search, "semantic_candidate_search", fake_semantic_candidate_search)
 
-    assert vector_search.candidate_search("shubh", tenant_id="tenant-1") == exact
-    assert semantic_called is False
+    result = vector_search.candidate_search("shubh", tenant_id="tenant-1")
+
+    assert [item["document_id"] for item in result] == ["shubh-1", "spark-1"]
 
 
 def test_candidate_search_falls_back_to_semantic_when_no_exact_match(monkeypatch):

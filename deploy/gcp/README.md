@@ -62,7 +62,7 @@ STAGING_DOMAIN=staging.candidatesignal.ai
 
 The app is served at `https://app.candidatesignal.ai`; `https://candidatesignal.ai` and
 `https://www.candidatesignal.ai` redirect to the app until a separate marketing site exists.
-The browser calls FastAPI through `https://app.candidatesignal.ai/api`.
+The browser calls FastAPI through the Next.js backend proxy at `https://app.candidatesignal.ai/api/backend`.
 
 The scripts that create resources require:
 

@@ -11,7 +11,7 @@ from .db_store import add_note_db, llm_usage_cost_for_document, save_candidate_d
 from .candidate_versions import find_matches_for_record, persist_matches
 from .pipeline import SUPPORTED_EXTENSIONS, parse_file
 from .settings import load_settings
-from .storage import document_storage
+from .storage import document_storage, validate_tenant_storage_key
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -19,6 +19,7 @@ TENANT_DATA_DIR = ROOT / "data" / "tenants"
 
 TERMINAL_JOB_STATUSES = {"succeeded", "completed", "failed", "cancelled"}
 TERMINAL_CAMPAIGN_STATUSES = {"shortlisted", "contacted", "replied", "screened", "submitted", "interviewing", "offer", "placed", "rejected", "archived"}
+PARSE_RETRY_BACKOFF_SECONDS = 60
 STAGE_PROGRESS = {
     "queued": (5, "Queued"),
     "extracting_text": (15, "Extracting text / OCR"),
@@ -35,6 +36,10 @@ STAGE_PROGRESS = {
 }
 
 
+class JobCancelled(RuntimeError):
+    pass
+
+
 def create_parse_batch(
     tenant_id: str,
     user_id: str,
@@ -48,30 +53,59 @@ def create_parse_batch(
     if not files:
         raise ValueError("no files provided")
     batch_name = name or "Bulk resume upload"
-    with db() as conn:
-        batch = conn.execute(
-            """
-            insert into parse_batches (tenant_id, campaign_id, created_by_user_id, name, source_type, total_files, queued_count, status, context_note)
-            values (%s, %s, %s, %s, %s, %s, %s, 'queued', %s)
-            returning *
-            """,
-            (tenant_id, campaign_id, user_id, batch_name, "campaign_upload" if campaign_id else "bulk_upload", len(files), len(files), (context_note or "").strip() or None),
-        ).fetchone()
-        conn.commit()
-
+    stored_files = []
     jobs = []
-    for filename, file_obj in files:
-        jobs.append(
-            _create_job_for_file(
-                str(batch["id"]),
-                tenant_id,
-                user_id,
-                filename,
-                file_obj,
-                initial_note_name,
-                initial_note_content,
-                campaign_id,
-            )
+    with db() as conn:
+        try:
+            batch = conn.execute(
+                """
+                insert into parse_batches (tenant_id, campaign_id, created_by_user_id, name, source_type, total_files, queued_count, status, context_note)
+                values (%s, %s, %s, %s, %s, %s, %s, 'queued', %s)
+                returning *
+                """,
+                (tenant_id, campaign_id, user_id, batch_name, "campaign_upload" if campaign_id else "bulk_upload", len(files), len(files), (context_note or "").strip() or None),
+            ).fetchone()
+            for filename, file_obj in files:
+                stored, duplicate_warning = _store_upload_for_job(tenant_id, f"resumes/{batch['id']}", filename, file_obj)
+                stored_files.append((stored, duplicate_warning))
+                jobs.append(
+                    _insert_job_for_stored_file(
+                        conn,
+                        str(batch["id"]),
+                        tenant_id,
+                        user_id,
+                        stored,
+                        duplicate_warning,
+                        initial_note_name,
+                        initial_note_content,
+                        campaign_id,
+                    ).fetchone()
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            for stored, _warning in stored_files:
+                try:
+                    document_storage(stored.backend).delete(stored.key)
+                except Exception:
+                    pass
+            raise
+    for job in jobs:
+        _record_job_event(
+            job["id"],
+            tenant_id,
+            "queued",
+            "queued",
+            "queued",
+            f"Queued {job['original_filename']} for deep parsing.",
+            batch_id=str(batch["id"]),
+            metadata={
+                "original_filename": job["original_filename"],
+                "size_bytes": job.get("size_bytes"),
+                "storage_backend": job.get("storage_backend"),
+                "duplicate_warning": job.get("warning_message"),
+                "campaign_id": campaign_id,
+            },
         )
     return get_parse_batch(str(batch["id"]), tenant_id) | {"jobs": jobs}
 
@@ -149,44 +183,18 @@ def _create_job_for_file(
     initial_note_content: str | None = None,
     campaign_id: str | None = None,
 ) -> dict[str, Any]:
-    suffix = Path(filename or "resume.pdf").suffix.lower()
-    if suffix not in SUPPORTED_EXTENSIONS:
-        raise ValueError(f"unsupported file type: {suffix}")
-    safe_name = Path(filename or f"resume{suffix}").name
-    stored = document_storage().save_upload(
-        tenant_id=tenant_id,
-        namespace=f"resumes/{batch_id}",
-        filename=safe_name,
-        file_obj=file_obj,
-    )
-    duplicate_warning = _duplicate_upload_warning(tenant_id, stored.sha256)
+    stored, duplicate_warning = _store_upload_for_job(tenant_id, f"resumes/{batch_id}", filename, file_obj)
     with db() as conn:
-        row = conn.execute(
-            """
-            insert into parse_jobs (
-              tenant_id, batch_id, campaign_id, created_by_user_id, source_file, storage_backend, storage_key,
-              source_hash, original_filename, mime_type, size_bytes, warning_message,
-              initial_note_name, initial_note_content, status, stage
-            )
-            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'queued', 'queued')
-            returning *
-            """,
-            (
-                tenant_id,
-                batch_id,
-                campaign_id,
-                user_id,
-                str(stored.local_path),
-                stored.backend,
-                stored.key,
-                stored.sha256,
-                stored.original_filename,
-                stored.content_type,
-                stored.size_bytes,
-                duplicate_warning,
-                (initial_note_name or "").strip() or None,
-                (initial_note_content or "").strip() or None,
-            ),
+        row = _insert_job_for_stored_file(
+            conn,
+            batch_id,
+            tenant_id,
+            user_id,
+            stored,
+            duplicate_warning,
+            initial_note_name,
+            initial_note_content,
+            campaign_id,
         ).fetchone()
         conn.commit()
     _record_job_event(
@@ -206,6 +214,65 @@ def _create_job_for_file(
             },
     )
     return _job_row(row)
+
+
+def _store_upload_for_job(
+    tenant_id: str,
+    namespace: str,
+    filename: str,
+    file_obj: BinaryIO,
+):
+    suffix = Path(filename or "resume.pdf").suffix.lower()
+    if suffix not in SUPPORTED_EXTENSIONS:
+        raise ValueError(f"unsupported file type: {suffix}")
+    safe_name = Path(filename or f"resume{suffix}").name
+    stored = document_storage().save_upload(
+        tenant_id=tenant_id,
+        namespace=namespace or "resumes/pending",
+        filename=safe_name,
+        file_obj=file_obj,
+    )
+    return stored, _duplicate_upload_warning(tenant_id, stored.sha256)
+
+
+def _insert_job_for_stored_file(
+    conn: Any,
+    batch_id: str,
+    tenant_id: str,
+    user_id: str,
+    stored: Any,
+    duplicate_warning: str | None,
+    initial_note_name: str | None,
+    initial_note_content: str | None,
+    campaign_id: str | None,
+) -> Any:
+    return conn.execute(
+        """
+        insert into parse_jobs (
+          tenant_id, batch_id, campaign_id, created_by_user_id, source_file, storage_backend, storage_key,
+          source_hash, original_filename, mime_type, size_bytes, warning_message,
+          initial_note_name, initial_note_content, status, stage
+        )
+        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'queued', 'queued')
+        returning *
+        """,
+        (
+            tenant_id,
+            batch_id,
+            campaign_id,
+            user_id,
+            str(stored.local_path),
+            stored.backend,
+            stored.key,
+            stored.sha256,
+            stored.original_filename,
+            stored.content_type,
+            stored.size_bytes,
+            duplicate_warning,
+            (initial_note_name or "").strip() or None,
+            (initial_note_content or "").strip() or None,
+        ),
+    )
 
 
 def list_parse_batches(tenant_id: str) -> list[dict[str, Any]]:
@@ -421,13 +488,14 @@ def run_next_job(tenant_id: str | None = None, worker_id: str | None = None) -> 
               select id from parse_jobs
               where status in ('queued', 'retrying')
                 and (%s::uuid is null or tenant_id=%s)
+                and (status <> 'retrying' or updated_at <= now() - (%s * interval '1 second'))
               order by created_at
               for update skip locked
               limit 1
             )
             returning *
             """,
-            (tenant_id, tenant_id),
+            (tenant_id, tenant_id, PARSE_RETRY_BACKOFF_SECONDS),
         ).fetchone()
         conn.commit()
     if not row:
@@ -454,6 +522,7 @@ def run_job(job_id: str, tenant_id: str, worker_id: str | None = None) -> dict[s
     if job["status"] == "cancelled":
         return job
     try:
+        _raise_if_cancelled(job_id, tenant_id)
         _set_job_stage(job_id, tenant_id, "running", "llm_factual_pass")
         if worker_id:
             record_worker_heartbeat(worker_id, status="running", tenant_id=tenant_id, current_job_id=job_id)
@@ -470,6 +539,7 @@ def run_job(job_id: str, tenant_id: str, worker_id: str | None = None) -> dict[s
             "sha256": job.get("source_hash"),
         }
         record = parse_file(source_path, output_dir, work_dir, load_settings(), storage_metadata=storage_metadata)
+        _raise_if_cancelled(job_id, tenant_id)
         record["tenant_id"] = tenant_id
         raw_text = Path(record["_metadata"]["raw_text_path"]).read_text() if record.get("_metadata") else None
         _set_job_stage(job_id, tenant_id, "running", "saving")
@@ -484,6 +554,7 @@ def run_job(job_id: str, tenant_id: str, worker_id: str | None = None) -> dict[s
                 job["initial_note_content"],
                 tenant_id,
             )
+        _raise_if_cancelled(job_id, tenant_id)
         if job.get("campaign_id"):
             _attach_campaign_candidate(
                 tenant_id,
@@ -499,6 +570,7 @@ def run_job(job_id: str, tenant_id: str, worker_id: str | None = None) -> dict[s
             record_worker_heartbeat(worker_id, status="candidate_versions", tenant_id=tenant_id, current_job_id=job_id)
         matches = find_matches_for_record(record, tenant_id=tenant_id)
         persist_matches(record, matches, tenant_id)
+        _raise_if_cancelled(job_id, tenant_id)
         totals = record.get("llm_usage_totals") or {}
         _complete_job(
             job_id,
@@ -513,6 +585,11 @@ def run_job(job_id: str, tenant_id: str, worker_id: str | None = None) -> dict[s
         _maybe_run_completed_campaign_batch_match(job["batch_id"], tenant_id, job["created_by_user_id"])
         if worker_id:
             record_worker_heartbeat(worker_id, status="idle", tenant_id=tenant_id, processed_delta=1)
+        return get_parse_job(job_id, tenant_id)
+    except JobCancelled:
+        _refresh_batch_counts(job["batch_id"], tenant_id)
+        if worker_id:
+            record_worker_heartbeat(worker_id, status="idle", tenant_id=tenant_id)
         return get_parse_job(job_id, tenant_id)
     except Exception as exc:
         _fail_job(job_id, tenant_id, str(exc))
@@ -714,10 +791,17 @@ def _get_dead_letter(dead_letter_id: str, tenant_id: str) -> dict[str, Any]:
 def _set_job_stage(job_id: str, tenant_id: str, status: str, stage: str) -> None:
     with db() as conn:
         row = conn.execute(
-            "update parse_jobs set status=%s, stage=%s, updated_at=now() where id=%s and tenant_id=%s returning batch_id",
+            """
+            update parse_jobs
+            set status=%s, stage=%s, updated_at=now()
+            where id=%s and tenant_id=%s and status <> 'cancelled'
+            returning batch_id
+            """,
             (status, stage, job_id, tenant_id),
         ).fetchone()
         conn.commit()
+    if not row:
+        raise JobCancelled(job_id)
     _record_job_event(
         job_id,
         tenant_id,
@@ -741,18 +825,21 @@ def _complete_job(
 ) -> None:
     with db() as conn:
         estimated_cost = llm_usage_cost_for_document(document_id, tenant_id)
-        conn.execute(
+        row = conn.execute(
             """
             update parse_jobs
             set status='succeeded', stage='succeeded', document_id=%s, ocr_used=%s,
                 input_tokens=%s, output_tokens=%s, total_tokens=%s,
                 estimated_cost=%s,
                 completed_at=now(), updated_at=now()
-            where id=%s and tenant_id=%s
+            where id=%s and tenant_id=%s and status <> 'cancelled'
+            returning batch_id
             """,
             (document_id, ocr_used, input_tokens, output_tokens, total_tokens, estimated_cost, job_id, tenant_id),
-        )
+        ).fetchone()
         conn.commit()
+    if not row:
+        raise JobCancelled(job_id)
     _record_job_event(
         job_id,
         tenant_id,
@@ -771,6 +858,13 @@ def _complete_job(
     )
 
 
+def _raise_if_cancelled(job_id: str, tenant_id: str) -> None:
+    with db() as conn:
+        row = conn.execute("select status from parse_jobs where id=%s and tenant_id=%s", (job_id, tenant_id)).fetchone()
+    if row and row["status"] == "cancelled":
+        raise JobCancelled(job_id)
+
+
 def _fail_job(job_id: str, tenant_id: str, error_message: str) -> None:
     with db() as conn:
         row = conn.execute(
@@ -782,7 +876,7 @@ def _fail_job(job_id: str, tenant_id: str, error_message: str) -> None:
             """
             update parse_jobs
             set status=%s, stage=%s, error_message=%s, updated_at=now()
-            where id=%s and tenant_id=%s
+            where id=%s and tenant_id=%s and status <> 'cancelled'
             returning batch_id, attempt_count
             """,
             ("retrying" if retry else "failed", "retrying" if retry else "failed", error_message[:4000], job_id, tenant_id),
@@ -803,6 +897,8 @@ def _fail_job(job_id: str, tenant_id: str, error_message: str) -> None:
                 (tenant_id, updated["batch_id"], job_id, error_message[:4000], int(updated["attempt_count"] or 0)),
             )
         conn.commit()
+    if not updated:
+        return
     _record_job_event(
         job_id,
         tenant_id,
@@ -1180,6 +1276,7 @@ def _job_source_path(job: dict[str, Any]) -> Path:
     backend = job.get("storage_backend")
     key = job.get("storage_key")
     if backend and key:
+        validate_tenant_storage_key(key, job["tenant_id"])
         return document_storage(backend).open_for_processing(key)
     return Path(job["source_file"])
 
@@ -1211,6 +1308,7 @@ def _candidate_reparse_source(document_id: str, tenant_id: str) -> dict[str, Any
     storage_key = row.get("storage_key")
     if not storage_key:
         raise FileNotFoundError(f"candidate {document_id} has no stored source document")
+    validate_tenant_storage_key(storage_key, tenant_id)
     return {
         "storage_backend": storage_backend,
         "storage_key": storage_key,

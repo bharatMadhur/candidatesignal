@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from resume_intel.pii import enrich_record_pii
+from resume_intel.pii import enrich_record_pii, redact_contact_pii_payload
 from resume_intel.db_store import public_candidate_record
 
 
@@ -108,6 +108,18 @@ class PiiExtractionTests(unittest.TestCase):
         self.assertEqual(pii["phones"], [])
         self.assertEqual(pii["linkedin_urls"], [])
         self.assertEqual(pii["portfolio_websites"], [])
+
+    def test_recursive_redaction_removes_pii_from_nested_ai_text(self) -> None:
+        redacted = redact_contact_pii_payload({
+            "summary": "Reach person@example.com or https://linkedin.com/in/person",
+            "nested": {"evidence": "Phone 555-111-2222 and portfolio.example.com"},
+            "links": ["https://linkedin.com/in/person"],
+        })
+
+        self.assertNotIn("person@example.com", redacted["summary"])
+        self.assertNotIn("linkedin.com", redacted["summary"])
+        self.assertNotIn("555-111-2222", redacted["nested"]["evidence"])
+        self.assertEqual(redacted["links"], [])
 
 
 if __name__ == "__main__":

@@ -2,19 +2,7 @@ import { createAuthClient } from "better-auth/react";
 
 export const authClient = createAuthClient({
   fetchOptions: {
-    onSuccess: (ctx) => {
-      const authToken = ctx.response.headers.get("set-auth-token");
-      if (authToken && typeof window !== "undefined") {
-        window.localStorage.setItem("resume-intel-token", authToken);
-      }
-    },
-    auth: {
-      type: "Bearer",
-      token: () => {
-        if (typeof window === "undefined") return "";
-        return window.localStorage.getItem("resume-intel-token") || "";
-      },
-    },
+    credentials: "include",
   },
 });
 
@@ -30,12 +18,6 @@ export async function signInWithBetterAuth(email: string, password: string): Pro
     const message = typeof data?.error === "string" ? data.error : data?.error?.message ?? data?.message ?? "Better Auth login failed";
     throw new Error(message);
   }
-  const authToken = response.headers.get("set-auth-token");
-  if (!authToken) {
-    throw new Error("Better Auth did not return a signed bearer token");
-  }
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem("resume-intel-token", authToken);
-  }
+  const authToken = response.headers.get("set-auth-token") || "";
   return { token: authToken, user: data?.user };
 }
