@@ -115,7 +115,7 @@
 }
 
 .publicNav nav a {
-  color: var(--muted);
+  color: #475569;
   font-size: 22px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -127,7 +127,7 @@
 
 .adminNavLink,
 .adminHeroLink {
-  color: var(--muted);
+  color: #475569;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -199,7 +199,7 @@
 .homeHero p {
   max-width: 1050px;
   margin-top: 52px;
-  color: var(--muted);
+  color: #475569;
   font-size: 34px;
   line-height: 52px;
 }
@@ -213,8 +213,8 @@
 .adminHeroLink {
   display: inline-flex;
   margin-top: 22px;
-  border-bottom: 2px solid var(--muted);
-  color: var(--muted);
+  border-bottom: 2px solid #475569;
+  color: #475569;
   font-size: 20px;
 }
 
@@ -242,11 +242,11 @@
 }
 
 .homeFeatureGrid article:nth-child(2) svg {
-  color: var(--success);
+  color: #10b981;
 }
 
 .homeFeatureGrid article:nth-child(3) svg {
-  color: var(--warn);
+  color: #bc4800;
 }
 
 .homeFeatureGrid strong {
@@ -258,7 +258,7 @@
 }
 
 .homeFeatureGrid span {
-  color: var(--muted);
+  color: #475569;
   font-size: 27px;
   line-height: 42px;
 }
@@ -304,9 +304,9 @@
 .matchCallout {
   align-self: end;
   margin-top: 84px;
-  border: 1px solid #d9e3ec;
-  background: #f3f7fa;
-  color: var(--primary);
+  border: 1px solid #bae6fd;
+  background: #eff8ff;
+  color: #0ea5e9;
   padding: 18px;
   font-size: 24px;
   line-height: 34px;
@@ -330,13 +330,13 @@
 
 .publicFooter strong,
 .publicFooter a {
-  color: var(--muted);
+  color: #475569;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .publicFooter span {
-  color: var(--muted);
+  color: #475569;
   font-size: 24px;
 }
 

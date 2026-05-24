@@ -22,7 +22,7 @@
 }
 
 .workspaceTopNav {
-  border-bottom: 1px solid var(--soft-line);
+  border-bottom: 1px solid #e7edf1;
   background: rgba(255, 255, 255, 0.98);
   box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
 }
@@ -37,9 +37,9 @@
   gap: 10px;
   min-height: 34px;
   padding: 6px 18px;
-  border-bottom: 1px solid #d8e1ea;
-  background: #f3f7fa;
-  color: var(--secondary);
+  border-bottom: 1px solid #d7e5ea;
+  background: #edf7f6;
+  color: #115e59;
   font-size: 12px;
   line-height: 18px;
   letter-spacing: 0.02em;
@@ -60,9 +60,9 @@
 .workspaceTopNav .topNavLink.active,
 .shellUploadButton.active,
 .settingsSummary.active {
-  border-color: var(--line);
-  background: var(--secondary-soft);
-  color: var(--secondary);
+  border-color: #d8e2ea;
+  background: #f4f7f8;
+  color: #24384a;
 }
 
 .snapshotAside,
@@ -111,7 +111,7 @@
 .profilesHeader h2,
 .campaignCleanHeader h2,
 .candidateCleanIdentity h2 {
-  color: var(--ink);
+  color: #182230;
   letter-spacing: -0.045em;
 }
 
@@ -134,7 +134,7 @@
 }
 
 .copilotGuideHeader h3 {
-  color: var(--secondary);
+  color: #24384a;
   font-size: 19px;
   line-height: 26px;
 }
@@ -611,9 +611,9 @@ h3 {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 14px;
-  border: 1px solid rgba(61, 90, 115, 0.35);
+  border: 1px solid #0f3c85;
   border-radius: 18px;
-  background: linear-gradient(135deg, #111827 0%, #1d2a3a 48%, #24384a 100%);
+  background: #00174b;
   padding: 18px;
   color: white;
 }
@@ -628,7 +628,7 @@ h3 {
 }
 
 .stitchParserPreview .eyebrow {
-  color: #c7d3df;
+  color: #b4c5ff;
 }
 
 .stitchParserPreview p,
@@ -1187,9 +1187,9 @@ h3 {
 .stitchSignalPreview {
   display: grid;
   gap: 34px;
-  border: 1px solid rgba(61, 90, 115, 0.35);
+  border: 1px solid #003ea8;
   border-radius: 28px;
-  background: linear-gradient(135deg, #111827 0%, #1d2a3a 48%, #24384a 100%);
+  background: #00174b;
   color: white;
   padding: 48px;
 }
@@ -1207,7 +1207,7 @@ h3 {
 }
 
 .stitchSignalHeader p {
-  color: #c7d3df;
+  color: #b4c5ff;
 }
 
 .stitchSignalGrid {
@@ -1228,9 +1228,9 @@ h3 {
 }
 
 .rawSignalCard {
-  border: 1px solid rgba(199, 211, 223, 0.22);
-  background: rgba(15, 23, 42, 0.72);
-  color: #dbe5ef;
+  border: 1px solid #004ac6;
+  background: #002b75;
+  color: #dbeafe;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
@@ -1238,7 +1238,7 @@ h3 {
   display: flex;
   align-items: center;
   gap: 7px;
-  border-bottom: 1px solid rgba(199, 211, 223, 0.22);
+  border-bottom: 1px solid rgba(180, 197, 255, 0.22);
   padding-bottom: 12px;
 }
 
@@ -1246,18 +1246,18 @@ h3 {
   width: 9px;
   height: 9px;
   border-radius: 999px;
-  background: rgba(199, 211, 223, 0.65);
+  background: rgba(180, 197, 255, 0.65);
 }
 
 .rawSignalCard b {
   margin-left: 8px;
-  color: #c7d3df;
+  color: #b4c5ff;
   font-size: 12px;
 }
 
 .rawSignalCard mark {
-  background: rgba(37, 99, 235, 0.2);
-  color: #dbe5ef;
+  background: rgba(0, 74, 198, 0.45);
+  color: #bfdbfe;
   padding: 6px;
 }
 
@@ -1955,7 +1955,7 @@ a:focus {
 
 .stitchHeader p {
   margin-top: 12px;
-  color: var(--muted);
+  color: #475569;
   font-size: 18px;
   line-height: 28px;
 }
@@ -1995,7 +1995,7 @@ a:focus {
 }
 
 .stitchMetricCard span {
-  color: var(--muted);
+  color: #475569;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -3043,7 +3043,7 @@ a:focus {
   border: 1px solid #cbd9e4;
   border-radius: 12px;
   background: #f4f8fa;
-  color: var(--secondary);
+  color: #22364a;
   padding: 12px 14px;
 }
 
@@ -3069,7 +3069,7 @@ a:focus {
   position: absolute;
   inset: auto 0 0;
   height: 3px;
-  background: linear-gradient(90deg, transparent, var(--primary), transparent);
+  background: linear-gradient(90deg, transparent, #355c7d, transparent);
   animation: copilotLoadingSlide 1.2s ease-in-out infinite;
 }
 
@@ -3416,7 +3416,7 @@ a:focus {
 .stitchEvidenceExtract {
   display: grid;
   gap: 8px;
-  border: 1px solid #c9e5e1;
+  border: 1px solid #bae6fd;
   border-radius: 8px;
   background: var(--evidence);
   padding: 12px;
@@ -3437,7 +3437,7 @@ a:focus {
 }
 
 .stitchEvidenceExtract strong {
-  color: var(--primary);
+  color: #0ea5e9;
   font-weight: 900;
 }
 
@@ -3711,7 +3711,7 @@ a:focus {
 .editableQueryAnalysis .queryAnalysisSummary strong {
   display: -webkit-box;
   overflow: hidden;
-  color: var(--secondary);
+  color: #22364a;
   font-size: 14px;
   line-height: 20px;
   -webkit-box-orient: vertical;
@@ -3729,8 +3729,8 @@ a:focus {
 }
 
 .editableQueryAnalysis label input:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  border-color: #355c7d;
+  box-shadow: 0 0 0 3px rgba(53, 92, 125, 0.11);
   outline: none;
 }
 
@@ -3743,7 +3743,7 @@ a:focus {
   grid-row: span 2;
   min-width: 42px;
   border-radius: 999px;
-  background: var(--primary-dark);
+  background: #22364a;
   color: #fff;
   padding: 8px 10px;
   text-align: center;
@@ -5593,7 +5593,7 @@ button:disabled {
   display: grid;
   place-items: center;
   border-radius: 16px;
-  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  background: #2563eb;
   color: white;
   font-family: Manrope, Inter, sans-serif;
   font-size: 26px;
@@ -6338,7 +6338,7 @@ button:disabled {
   align-content: start;
   gap: 22px;
   border-left: 1px solid var(--line);
-  background: var(--evidence);
+  background: #eff8ff;
   padding: 32px;
 }
 
@@ -6451,7 +6451,7 @@ button:disabled {
   min-height: 24px;
   border: 0;
   border-radius: 999px;
-  background: var(--primary-dark);
+  background: #22364a;
   color: #fff;
   padding: 0 9px;
   font-size: 11px;
@@ -6746,7 +6746,7 @@ button:disabled {
 
 .privacySettingsNav p {
   margin-top: 18px;
-  color: var(--muted);
+  color: #475569;
   font-size: 20px;
   line-height: 30px;
 }
@@ -6759,7 +6759,7 @@ button:disabled {
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--muted);
+  color: #475569;
   padding: 0 16px;
   cursor: pointer;
   font-size: 18px;
@@ -6767,7 +6767,7 @@ button:disabled {
 }
 
 .privacySettingsNav button.active {
-  background: var(--primary-soft);
+  background: #f0f1ff;
   color: var(--primary);
 }
 
@@ -6789,7 +6789,7 @@ button:disabled {
 .privacySettingsTitle p {
   max-width: 1280px;
   margin-top: 18px;
-  color: var(--muted);
+  color: #475569;
   font-size: 24px;
   line-height: 36px;
 }
@@ -6845,7 +6845,7 @@ button:disabled {
 }
 
 .policySwitchRow small {
-  color: var(--muted);
+  color: #475569;
   font-size: 18px;
   line-height: 28px;
 }
@@ -6876,7 +6876,7 @@ button:disabled {
 
 .auditTag {
   display: inline-flex;
-  background: var(--evidence);
+  background: #eff8ff;
   color: var(--primary);
   padding: 4px 8px;
   font-weight: 900;
@@ -7316,8 +7316,8 @@ button:disabled {
   gap: 18px;
   align-items: center;
   border: 1px solid #cbd5e1;
-  border-left: 5px solid var(--warn);
-  background: #f8ead2;
+  border-left: 5px solid #bc4800;
+  background: #f5f3ff;
   color: #181b25;
   padding: 18px 26px;
 }
@@ -7325,7 +7325,7 @@ button:disabled {
 .privacyBoundary span {
   display: block;
   margin-top: 4px;
-  color: var(--muted);
+  color: #475569;
   font-size: 16px;
   line-height: 24px;
 }
@@ -7350,7 +7350,7 @@ button:disabled {
 }
 
 .adminPage .metric span {
-  color: var(--muted);
+  color: #475569;
   font-size: 13px;
   font-weight: 900;
   letter-spacing: 0.08em;
@@ -9717,34 +9717,25 @@ button:disabled {
    saturation, and heavy spacing across the public and workspace surfaces. */
 :root {
   --background: #ffffff;
-  --page-tint: #f7f9fb;
-  --card: #ffffff;
   --surface: #ffffff;
-  --surface-low: #f7f9fb;
-  --surface-mid: #eef2f6;
-  --surface-high: #e1e7ef;
-  --ink: #151a22;
-  --text: #151a22;
-  --muted: #667085;
-  --outline: #8b99aa;
-  --line: #e1e7ef;
-  --soft-line: #edf1f5;
-  --border: #e1e7ef;
-  --primary: #1d2a3a;
-  --primary-dark: #111827;
-  --primary-soft: #eef2f6;
-  --primary-mid: #2b3b4f;
-  --secondary: #3d5a73;
-  --secondary-soft: #edf3f8;
-  --accent: #2563eb;
-  --accent-soft: #e8f0ff;
-  --danger: #b42318;
-  --danger-soft: #fce8e6;
-  --warn: #b7791f;
-  --warn-soft: #f8ead2;
-  --ok: #15803d;
-  --success: #15803d;
-  --evidence: #f3f7fa;
+  --surface-low: #f8fafc;
+  --surface-mid: #f1f5f9;
+  --surface-high: #e2e8f0;
+  --ink: #202833;
+  --muted: #66727f;
+  --outline: #94a3b8;
+  --line: #e2e8f0;
+  --soft-line: #edf2f7;
+  --primary: #40566f;
+  --primary-soft: #e7edf3;
+  --primary-mid: #60758c;
+  --danger: #9b2c2c;
+  --danger-soft: #f4dddd;
+  --warn: #875019;
+  --warn-soft: #f4e4d6;
+  --ok: #426b45;
+  --success: #527f5b;
+  --evidence: #f2f6f8;
 }
 
 body {
@@ -10519,9 +10510,9 @@ h3 {
 
 .campaignRailNewButton {
   min-height: 34px;
-  border: 1px solid var(--line);
+  border: 1px solid #d8e2ea;
   border-radius: 999px;
-  background: var(--primary-dark);
+  background: #22364a;
   color: #ffffff;
   cursor: pointer;
   padding: 0 14px;
@@ -10561,9 +10552,9 @@ h3 {
 }
 
 .campaignRailList button.active {
-  border-color: var(--primary);
-  background: var(--primary-soft);
-  box-shadow: inset 4px 0 0 var(--primary);
+  border-color: #22364a;
+  background: #eef3f5;
+  box-shadow: inset 4px 0 0 #22364a;
 }
 
 .campaignRailList button.loading {
@@ -10578,7 +10569,7 @@ h3 {
   height: 6px;
   margin-left: 8px;
   border-radius: 999px;
-  background: var(--primary);
+  background: #22364a;
   animation: pulseDot 900ms ease-in-out infinite;
   vertical-align: middle;
 }
@@ -10691,7 +10682,7 @@ h3 {
   border: 1px solid #d8e2ea;
   border-radius: 10px;
   background: #f8faf9;
-  color: var(--secondary);
+  color: #22364a;
   padding: 12px 14px;
 }
 
@@ -11057,9 +11048,9 @@ h3 {
 }
 
 .pipelineThresholdButtons button.active {
-  border-color: var(--primary);
-  background: var(--primary-soft);
-  color: var(--primary-dark);
+  border-color: #22364a;
+  background: #eef3f5;
+  color: #22364a;
 }
 
 .campaignStageStrip {
@@ -11086,9 +11077,9 @@ h3 {
 }
 
 .campaignStageStrip button.active {
-  border-color: var(--primary);
-  background: var(--primary-soft);
-  color: var(--primary-dark);
+  border-color: #22364a;
+  background: #eef3f5;
+  color: #22364a;
 }
 
 .campaignStageStrip button.empty {
@@ -11173,8 +11164,8 @@ h3 {
 }
 
 .campaignStageCandidate.active {
-  border-color: var(--primary);
-  box-shadow: inset 4px 0 0 var(--primary);
+  border-color: #22364a;
+  box-shadow: inset 4px 0 0 #22364a;
 }
 
 .campaignStageScore {
@@ -11184,7 +11175,7 @@ h3 {
 }
 
 .campaignStageScore strong {
-  color: var(--primary-dark);
+  color: #22364a;
   font-size: 22px;
   letter-spacing: -0.04em;
 }
@@ -11293,7 +11284,7 @@ h3 {
 }
 
 .campaignCandidateWorkflowHead strong {
-  color: var(--primary-dark);
+  color: #22364a;
   font-size: 17px;
 }
 
@@ -11360,18 +11351,18 @@ h3 {
 
 .campaignStageProgress button.done::before,
 .campaignStageProgress button.done i {
-  border-color: var(--primary);
-  background: var(--primary);
+  border-color: #355c7d;
+  background: #355c7d;
 }
 
 .campaignStageProgress button.active {
-  color: var(--primary-dark);
+  color: #22364a;
 }
 
 .campaignStageProgress button.active i {
-  border-color: var(--primary-dark);
+  border-color: #22364a;
   background: #fff;
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+  box-shadow: 0 0 0 4px rgba(53, 92, 125, 0.14);
 }
 
 .campaignStageMoveControls,
@@ -11447,7 +11438,7 @@ h3 {
 }
 
 .campaignCandidateHistory article strong {
-  color: var(--primary-dark);
+  color: #22364a;
   font-size: 12px;
 }
 
@@ -11557,9 +11548,9 @@ h3 {
 }
 
 .uploadModeTabs button.active {
-  background: var(--primary-dark);
+  background: #22364a;
   color: #fff;
-  box-shadow: 0 8px 18px rgba(29, 42, 58, 0.16);
+  box-shadow: 0 8px 18px rgba(34, 54, 74, 0.16);
 }
 
 .uploadLandingGrid {
@@ -11850,9 +11841,9 @@ h3 {
 }
 
 .matchGaugeBuckets button.active {
-  border-color: var(--primary);
-  background: var(--primary-soft);
-  color: var(--primary-dark);
+  border-color: #22364a;
+  background: #eef3f5;
+  color: #22364a;
 }
 
 .matchGaugeBuckets span {
@@ -11878,7 +11869,7 @@ h3 {
   bottom: 0;
   height: 4px;
   border-radius: 999px;
-  background: var(--primary);
+  background: #355c7d;
 }
 
 @media (max-width: 1180px) {
@@ -12188,7 +12179,7 @@ h3 {
 
 .workspaceTopNav {
   min-height: 62px;
-  border-bottom: 1px solid var(--soft-line);
+  border-bottom: 1px solid #e7edf1;
   background: rgba(255, 255, 255, 0.98);
   box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
 }
@@ -12203,9 +12194,9 @@ h3 {
 .workspaceTopNav .topNavLink.active,
 .shellUploadButton.active,
 .settingsSummary.active {
-  border-color: var(--line);
-  background: var(--secondary-soft);
-  color: var(--secondary);
+  border-color: #d8e2ea;
+  background: #f4f7f8;
+  color: #24384a;
 }
 
 .stitchMetricCard,
