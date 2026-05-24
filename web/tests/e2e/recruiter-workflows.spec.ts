@@ -15,6 +15,12 @@ test("public entry keeps login on the homepage and removes legacy login pages", 
   await expect(loginPanel.getByLabel(/your name|owner name/i)).toBeVisible();
   await expect(loginPanel.getByLabel(/work email/i)).toBeVisible();
   await expect(loginPanel.getByRole("button", { name: /create free workspace/i })).toBeVisible();
+  await page.locator(".stitchFinalCta").getByRole("button", { name: /create free workspace/i }).scrollIntoViewIfNeeded();
+  await page.locator(".stitchFinalCta").getByRole("button", { name: /create free workspace/i }).click();
+  await expect.poll(async () => loginPanel.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return rect.top > -40 && rect.top < window.innerHeight - 120;
+  })).toBe(true);
   const loginResponse = await page.goto("/login");
   expect(loginResponse?.status()).toBe(404);
   const adminLoginResponse = await page.goto("/admin/login");

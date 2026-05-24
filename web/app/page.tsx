@@ -291,6 +291,8 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   const lastRouteSearchRef = useRef("");
   const campaignLoadSeqRef = useRef(0);
   const selectedCampaignIdRef = useRef("");
+  const publicAuthPanelRef = useRef<HTMLElement | null>(null);
+  const signupCompanyInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     selectedCampaignIdRef.current = campaign?.id ?? "";
@@ -708,6 +710,21 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     } finally {
       setBusy(false);
     }
+  }
+
+  function openCompanySignupPanel() {
+    setLoginMode("company");
+    setInviteMode(false);
+    setApplicantLoginSelected(false);
+    setSignupMode(true);
+    setLoginError("");
+    setStatus("Ready");
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        publicAuthPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        window.setTimeout(() => signupCompanyInputRef.current?.focus({ preventScroll: true }), 250);
+      });
+    });
   }
 
   async function handleCompanySignup() {
@@ -1456,7 +1473,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     const loginEmailPlaceholder = showLocalDevHelp ? (isAdminLogin ? "admin@example.com" : "recruiter@example.com") : (isAdminLogin ? "owner@candidatesignal.ai" : "name@company.com");
     const passwordPlaceholder = showLocalDevHelp ? "resume-intel" : "Password";
     const loginPanel = (
-        <section className={showMergedHome ? "loginPanel stitchAuthCard" : "loginPanel"}>
+        <section ref={publicAuthPanelRef} className={showMergedHome ? "loginPanel stitchAuthCard" : "loginPanel"}>
           <ShieldCheck size={28} />
           {inviteMode ? (
             <>
@@ -1526,6 +1543,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               {showCompanySignup ? (
                 <>
                   <input
+                    ref={signupCompanyInputRef}
                     value={signupCompanyName}
                     onChange={(event) => {
                       setSignupCompanyName(event.target.value);
@@ -1631,7 +1649,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                   {!isAdminLogin ? <button className="plain" onClick={() => setInviteMode(true)} disabled={busy}>
                     Accept invite
                   </button> : null}
-                  {!isAdminLogin ? <button className="plain" onClick={() => setSignupMode(true)} disabled={busy}>
+                  {!isAdminLogin ? <button className="plain" onClick={openCompanySignupPanel} disabled={busy}>
                     Create a company workspace
                   </button> : null}
                 </>
@@ -1672,7 +1690,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               </h1>
               <p>Built for calm, evidence-backed hiring. Cut through traditional screening noise and discover the real professional signal in your company talent pool without mixing company data.</p>
               <div className="stitchHeroActions">
-                <button className="primary" type="button" onClick={() => { setSignupMode(true); setApplicantLoginSelected(false); }}>
+                <button className="primary" type="button" onClick={openCompanySignupPanel}>
                   <Rocket size={16} /> Get Started
                 </button>
                 <button className="secondary" type="button" onClick={() => { setSignupMode(false); setApplicantLoginSelected(true); }}>
@@ -1731,7 +1749,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                     <li>Resume database, Copilot search, campaign matching.</li>
                     <li>Member invites, recruiter notes, and privacy controls.</li>
                   </ul>
-                  <button className="primary" type="button" onClick={() => { setSignupMode(true); setApplicantLoginSelected(false); }}>Create Free Workspace</button>
+                  <button className="primary" type="button" onClick={openCompanySignupPanel}>Create Free Workspace</button>
                 </article>
                 <article className="pricingCompactPlan soon">
                   <div>
@@ -1818,7 +1836,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
           <section className="stitchFinalCta">
             <h2>Ready to hire with evidence?</h2>
             <p>Start with company access, upload resumes, and turn candidate data into recruiter-ready decisions.</p>
-            <button className="primary" type="button" onClick={() => { setSignupMode(true); setApplicantLoginSelected(false); }}>Create Free Workspace</button>
+            <button className="primary" type="button" onClick={openCompanySignupPanel}>Create Free Workspace</button>
           </section>
 
           <footer className="stitchPublicFooter">
