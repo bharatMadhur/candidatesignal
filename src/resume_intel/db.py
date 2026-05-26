@@ -15,6 +15,7 @@ SCHEMA_BASELINE_VERSION = "20260512_0001_consolidated_baseline"
 LOCAL_DEV_PASSWORD = "resume-intel"
 LOCAL_DEV_ADMIN_EMAIL = "admin@example.com"
 LOCAL_DEV_RECRUITER_EMAIL = "recruiter@example.com"
+LOCAL_DEV_CANDIDATE_EMAIL = "candidate@example.com"
 
 
 def database_url() -> str:
@@ -803,7 +804,7 @@ def migrate() -> None:
                    case when users.role in ('admin', 'platform_admin') then 'tenant_owner' else users.role end,
                    'active', now()
             from users
-            where users.role not in ('admin', 'platform_admin')
+            where users.role not in ('admin', 'platform_admin', 'candidate')
               and not exists (
                 select 1 from tenant_memberships
                 where tenant_memberships.user_id = users.id
@@ -842,7 +843,7 @@ def migrate() -> None:
             set status='disabled', updated_at=now()
             from users
             where tenant_memberships.user_id = users.id
-              and users.role in ('admin', 'platform_admin')
+              and users.role in ('admin', 'platform_admin', 'candidate')
               and tenant_memberships.status='active'
             """
         )
@@ -928,6 +929,67 @@ def migrate() -> None:
         from .migrations.runner import run_versioned_migrations
 
         run_versioned_migrations(conn)
+        if _seed_local_dev_users_enabled():
+            conn.execute(
+                """
+                insert into users (email, password_hash, role, name, email_verified, updated_at)
+                values (%s, %s, 'candidate', 'Local Candidate', true, now())
+                on conflict (email) do update set
+                  name = coalesce(users.name, excluded.name),
+                  role = case
+                    when users.role in ('admin', 'platform_admin', 'recruiter') then users.role
+                    else 'candidate'
+                  end,
+                  email_verified = true,
+                  updated_at = now()
+                """,
+                (LOCAL_DEV_CANDIDATE_EMAIL, _hash_password(LOCAL_DEV_PASSWORD)),
+            )
+            conn.execute(
+                """
+                insert into candidate_profiles (user_id, display_name, headline, profile_json)
+                select users.id, coalesce(users.name, 'Local Candidate'), 'Candidate profile workspace',
+                       jsonb_build_object(
+                         'display_name', coalesce(users.name, 'Local Candidate'),
+                         'email', users.email,
+                         'headline', 'Candidate profile workspace',
+                         'skills', '[]'::jsonb,
+                         'experience', '[]'::jsonb,
+                         'education', '[]'::jsonb,
+                         'certifications', '[]'::jsonb,
+                         'projects', '[]'::jsonb,
+                         'links', '[]'::jsonb
+                       )
+                from users
+                where lower(users.email)=lower(%s)
+                  and users.role='candidate'
+                on conflict (user_id) do nothing
+                """,
+                (LOCAL_DEV_CANDIDATE_EMAIL,),
+            )
+            conn.execute(
+                """
+                insert into accounts (user_id, account_id, provider_id, password)
+                select users.id, users.id::text, 'credential', users.password_hash
+                from users
+                where lower(users.email)=lower(%s)
+                  and users.password_hash is not null
+                on conflict (provider_id, account_id) do update set
+                  password=excluded.password,
+                  updated_at=now()
+                """,
+                (LOCAL_DEV_CANDIDATE_EMAIL,),
+            )
+        conn.execute(
+            """
+            update tenant_memberships
+            set status='disabled', updated_at=now()
+            from users
+            where tenant_memberships.user_id = users.id
+              and users.role='candidate'
+              and tenant_memberships.status='active'
+            """
+        )
         conn.commit()
 
 

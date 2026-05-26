@@ -4,6 +4,7 @@ import html
 import logging
 import os
 import shutil
+import tempfile
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -14,7 +15,7 @@ from typing import Any
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse, Response
 from pydantic import BaseModel, Field
 from docx import Document
 from docx.oxml.table import CT_Tbl
@@ -70,6 +71,35 @@ from .db_store import (
     update_note_db,
 )
 from .candidate_versions import candidate_version_requirements, decide_match, find_matches_for_record, list_clusters, list_matches_for_candidate, persist_matches
+from .candidate_portal import (
+    archive_resume_version as archive_candidate_resume_version,
+    create_candidate_application,
+    create_candidate_account,
+    create_resume_share as create_candidate_resume_share,
+    create_resume_upload as create_candidate_resume_upload,
+    create_resume_version as create_candidate_resume_version,
+    create_targeted_resume_version as create_candidate_targeted_resume_version,
+    decide_candidate_access_request,
+    get_candidate_profile as get_candidate_portal_profile,
+    get_resume_upload as get_candidate_resume_upload,
+    get_resume_version as get_candidate_resume_version,
+    list_candidate_access_requests,
+    list_candidate_applications,
+    list_native_candidates as list_native_candidate_portal_candidates,
+    list_resume_uploads as list_candidate_resume_uploads,
+    list_resume_shares as list_candidate_resume_shares,
+    list_resume_versions as list_candidate_resume_versions,
+    match_resume_version_to_requirement,
+    public_resume_share,
+    render_resume_version_html,
+    render_resume_version_pdf,
+    request_native_candidate_access,
+    revoke_resume_share as revoke_candidate_resume_share,
+    run_resume_upload_parse as run_candidate_resume_upload_parse,
+    update_candidate_profile as update_candidate_portal_profile,
+    update_candidate_application,
+    update_candidate_privacy_settings as update_candidate_portal_privacy_settings,
+)
 from .governance import get_tenant_governance_policy, list_pii_access_events, role_can_view_contact_pii, update_tenant_governance_policy
 from .llm_provider import Message, NormalizedProvider
 from .linkedin_verification import (
@@ -276,6 +306,85 @@ class CompanySignupRequest(BaseModel):
     password: str
 
 
+class CandidateSignupRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+
+
+class CandidatePortalProfileUpdateRequest(BaseModel):
+    display_name: str | None = None
+    headline: str | None = None
+    summary: str | None = None
+    current_location: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    linkedin_url: str | None = None
+    portfolio_url: str | None = None
+    github_url: str | None = None
+    skills: list[str] | str | None = None
+    experience: list[dict[str, Any]] | None = None
+    education: list[dict[str, Any]] | None = None
+    certifications: list[str] | str | None = None
+    awards: list[str] | str | None = None
+    publications: list[str] | str | None = None
+    languages: list[str] | str | None = None
+    projects: list[dict[str, Any]] | None = None
+    links: list[str] | str | None = None
+    other_sections: dict[str, Any] | None = None
+
+
+class CandidatePortalPrivacySettingsRequest(BaseModel):
+    candidate_signal_native_search_enabled: bool | None = None
+    pii_visible_to_recruiters: bool | None = None
+    pii_permission_required: bool | None = None
+    allow_linkedin_verification: bool | None = None
+    public_resume_fields: list[str] | None = None
+
+
+class CandidateResumeVersionRequest(BaseModel):
+    title: str
+    target_role: str | None = None
+    resume_json: dict[str, Any] | None = None
+
+
+class CandidateTargetedResumeVersionRequest(BaseModel):
+    requirement_text: str
+    title: str | None = None
+    target_role: str | None = None
+
+
+class CandidateResumeShareRequest(BaseModel):
+    label: str = "Resume share"
+    include_pii: bool = False
+
+
+class CandidateApplicationRequest(BaseModel):
+    resume_version_id: str
+    destination_name: str
+    destination_type: str = "manual"
+    job_title: str | None = None
+    job_url: str | None = None
+    status: str = "shared"
+    note: str | None = None
+    create_share_link: bool = False
+    include_pii: bool = False
+
+
+class CandidateApplicationUpdateRequest(BaseModel):
+    status: str | None = None
+    note: str | None = None
+
+
+class NativeCandidateAccessRequest(BaseModel):
+    resume_version_id: str | None = None
+    message: str | None = None
+
+
+class CandidateRequirementSelfMatchRequest(BaseModel):
+    requirement_text: str
+
+
 class TenantRequest(BaseModel):
     name: str
     seat_limit: int = 5
@@ -453,6 +562,11 @@ def auth_company_signup(request: CompanySignupRequest) -> dict:
     )
 
 
+@app.post("/auth/candidate-signup")
+def auth_candidate_signup(request: CandidateSignupRequest) -> dict:
+    return create_candidate_account(name=request.name, email=request.email, password=request.password)
+
+
 @app.post("/auth/login")
 def auth_login(request: AuthRequest) -> dict:
     if (os.getenv("RESUME_INTEL_ENABLE_LEGACY_AUTH") or "").lower() not in {"1", "true", "yes"}:
@@ -484,6 +598,212 @@ def auth_logout(credentials: HTTPAuthorizationCredentials = Depends(security)) -
     if credentials:
         logout(credentials.credentials)
     return {"ok": True}
+
+
+@app.get("/candidate/profile")
+def candidate_portal_profile(user: dict = Depends(current_user)) -> dict:
+    return get_candidate_portal_profile(user)
+
+
+@app.patch("/candidate/profile")
+def candidate_portal_update_profile(request: CandidatePortalProfileUpdateRequest, user: dict = Depends(current_user)) -> dict:
+    return update_candidate_portal_profile(user, request.model_dump(exclude_unset=True))
+
+
+@app.patch("/candidate/privacy-settings")
+def candidate_portal_update_privacy_settings(request: CandidatePortalPrivacySettingsRequest, user: dict = Depends(current_user)) -> dict:
+    return update_candidate_portal_privacy_settings(user, request.model_dump(exclude_unset=True))
+
+
+@app.post("/candidate/resume-preview")
+def candidate_portal_resume_preview(file: UploadFile = File(...), user: dict = Depends(current_user)) -> dict:
+    get_candidate_portal_profile(user)
+    _validate_upload_size(file)
+    filename = file.filename or "resume"
+    suffix = Path(filename).suffix.lower()
+    if suffix not in {".docx", ".txt", ".md"}:
+        raise HTTPException(status_code=415, detail="server-side preview is only available for DOCX, TXT, and MD files")
+    data = file.file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="resume file is empty")
+    tmp_path = Path(tempfile.gettempdir()) / f"candidate-preview-{uuid.uuid4()}{suffix}"
+    tmp_path.write_bytes(data)
+    try:
+        if suffix == ".docx":
+            rendered_html = _docx_to_safe_html(tmp_path)
+            return {"filename": filename, "source_type": "docx", "html": rendered_html}
+        rendered_html = f"<pre>{html.escape(tmp_path.read_text(errors='ignore'))}</pre>"
+        return {"filename": filename, "source_type": suffix.lstrip("."), "html": rendered_html}
+    finally:
+        try:
+            tmp_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+@app.post("/candidate/resume-uploads", status_code=202)
+def candidate_portal_upload_resume(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    target_role: str = Form(""),
+    note: str = Form(""),
+    user: dict = Depends(current_user),
+) -> dict:
+    _validate_upload_size(file)
+    result = create_candidate_resume_upload(
+        user,
+        filename=file.filename or "resume.pdf",
+        file_obj=file.file,
+        mime_type=file.content_type,
+        target_role=target_role,
+        note=note,
+    )
+    upload = result["upload"]
+    background_tasks.add_task(run_candidate_resume_upload_parse, upload["id"], user["id"])
+    return result | {"message": "resume queued for candidate-side parsing"}
+
+
+@app.get("/candidate/resume-uploads")
+def candidate_portal_resume_uploads(user: dict = Depends(current_user)) -> dict:
+    return list_candidate_resume_uploads(user)
+
+
+@app.get("/candidate/resume-uploads/{upload_id}")
+def candidate_portal_resume_upload(upload_id: str, user: dict = Depends(current_user)) -> dict:
+    return get_candidate_resume_upload(user, upload_id)
+
+
+@app.get("/candidate/resume-versions")
+def candidate_portal_resume_versions(user: dict = Depends(current_user)) -> dict:
+    return list_candidate_resume_versions(user)
+
+
+@app.post("/candidate/resume-versions")
+def candidate_portal_create_resume_version(request: CandidateResumeVersionRequest, user: dict = Depends(current_user)) -> dict:
+    return create_candidate_resume_version(
+        user,
+        title=request.title,
+        target_role=request.target_role,
+        resume_json=request.resume_json,
+    )
+
+
+@app.get("/candidate/resume-versions/{version_id}")
+def candidate_portal_resume_version(version_id: str, user: dict = Depends(current_user)) -> dict:
+    return get_candidate_resume_version(user, version_id)
+
+
+@app.post("/candidate/resume-versions/{version_id}/archive")
+def candidate_portal_archive_resume_version(version_id: str, user: dict = Depends(current_user)) -> dict:
+    return archive_candidate_resume_version(user, version_id)
+
+
+@app.post("/candidate/resume-versions/{version_id}/targeted-version")
+def candidate_portal_targeted_resume_version(version_id: str, request: CandidateTargetedResumeVersionRequest, user: dict = Depends(current_user)) -> dict:
+    return create_candidate_targeted_resume_version(
+        user,
+        version_id,
+        requirement_text=request.requirement_text,
+        title=request.title,
+        target_role=request.target_role,
+    )
+
+
+@app.get("/candidate/resume-shares")
+def candidate_portal_resume_shares(user: dict = Depends(current_user)) -> dict:
+    return list_candidate_resume_shares(user)
+
+
+@app.post("/candidate/resume-versions/{version_id}/shares")
+def candidate_portal_create_resume_share(version_id: str, request: CandidateResumeShareRequest, user: dict = Depends(current_user)) -> dict:
+    return create_candidate_resume_share(user, version_id=version_id, label=request.label, include_pii=request.include_pii)
+
+
+@app.post("/candidate/resume-shares/{share_id}/revoke")
+def candidate_portal_revoke_resume_share(share_id: str, user: dict = Depends(current_user)) -> dict:
+    return revoke_candidate_resume_share(user, share_id)
+
+
+@app.get("/candidate/applications")
+def candidate_portal_applications(user: dict = Depends(current_user)) -> dict:
+    return list_candidate_applications(user)
+
+
+@app.post("/candidate/applications")
+def candidate_portal_create_application(request: CandidateApplicationRequest, user: dict = Depends(current_user)) -> dict:
+    return create_candidate_application(
+        user,
+        resume_version_id=request.resume_version_id,
+        destination_name=request.destination_name,
+        destination_type=request.destination_type,
+        job_title=request.job_title,
+        job_url=request.job_url,
+        status=request.status,
+        note=request.note,
+        create_share_link=request.create_share_link,
+        include_pii=request.include_pii,
+    )
+
+
+@app.patch("/candidate/applications/{application_id}")
+def candidate_portal_update_application(application_id: str, request: CandidateApplicationUpdateRequest, user: dict = Depends(current_user)) -> dict:
+    return update_candidate_application(user, application_id, request.model_dump(exclude_unset=True))
+
+
+@app.get("/candidate/access-requests")
+def candidate_portal_access_requests(user: dict = Depends(current_user)) -> dict:
+    return list_candidate_access_requests(user)
+
+
+@app.post("/candidate/access-requests/{request_id}/approve")
+def candidate_portal_approve_access_request(request_id: str, user: dict = Depends(current_user)) -> dict:
+    return decide_candidate_access_request(user, request_id, approve=True)
+
+
+@app.post("/candidate/access-requests/{request_id}/deny")
+def candidate_portal_deny_access_request(request_id: str, user: dict = Depends(current_user)) -> dict:
+    return decide_candidate_access_request(user, request_id, approve=False)
+
+
+@app.get("/candidate/resume-versions/{version_id}/cv-html")
+def candidate_portal_resume_version_html(version_id: str, template: str = Query("atlas"), user: dict = Depends(current_user)) -> PlainTextResponse:
+    return PlainTextResponse(render_resume_version_html(user, version_id, template=template), media_type="text/html")
+
+
+@app.get("/candidate/resume-versions/{version_id}/cv.pdf")
+def candidate_portal_resume_version_pdf(version_id: str, template: str = Query("atlas"), user: dict = Depends(current_user)) -> Response:
+    pdf_bytes, filename = render_resume_version_pdf(user, version_id, template=template)
+    safe_filename = filename.replace('"', "")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
+    )
+
+
+@app.post("/candidate/resume-versions/{version_id}/match-requirement")
+def candidate_portal_match_requirement(version_id: str, request: CandidateRequirementSelfMatchRequest, user: dict = Depends(current_user)) -> dict:
+    return match_resume_version_to_requirement(user, version_id, request.requirement_text)
+
+
+@app.get("/candidate-shares/{access_token}")
+def candidate_portal_public_resume_share(access_token: str) -> dict:
+    return public_resume_share(access_token)
+
+
+@app.get("/native-candidates")
+def native_candidates(query: str = Query(""), limit: int = Query(20), user: dict = Depends(current_user)) -> dict:
+    return list_native_candidate_portal_candidates(user, query=query, limit=limit)
+
+
+@app.post("/native-candidates/{candidate_user_id}/access-requests")
+def native_candidate_access_request(candidate_user_id: str, request: NativeCandidateAccessRequest, user: dict = Depends(current_user)) -> dict:
+    return request_native_candidate_access(
+        user,
+        candidate_user_id,
+        resume_version_id=request.resume_version_id,
+        message=request.message,
+    )
 
 
 @app.get("/candidates")

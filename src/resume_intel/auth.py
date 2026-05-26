@@ -268,22 +268,28 @@ def _user_context(conn: Any, token: str) -> dict[str, Any] | None:
     if not row:
         return None
     is_platform_admin = row["platform_role"] in {"admin", "platform_admin"}
+    is_candidate = row["platform_role"] == "candidate"
     tenant_id = None if is_platform_admin else row["member_tenant_id"]
     tenant_name = None if is_platform_admin else row["member_tenant_name"]
     tenant_status = None if is_platform_admin else row["member_tenant_status"]
     tenant_role = None if is_platform_admin else row["member_tenant_role"]
+    if is_candidate:
+        tenant_id = None
+        tenant_name = None
+        tenant_status = None
+        tenant_role = None
     if tenant_id and tenant_status != "active" and not is_platform_admin:
         raise HTTPException(status_code=403, detail="tenant is not active")
     return {
         "id": str(row["id"]),
         "email": row["email"],
         "name": row["name"],
-        "role": tenant_role or row["platform_role"],
+        "role": "candidate" if is_candidate else tenant_role or row["platform_role"],
         "platform_role": row["platform_role"],
         "tenant_role": tenant_role,
         "tenant_id": str(tenant_id) if tenant_id else None,
         "tenant_name": tenant_name,
-        "workspace_access": "platform_admin" if is_platform_admin else "tenant_member",
+        "workspace_access": "platform_admin" if is_platform_admin else "candidate" if is_candidate else "tenant_member",
     }
 
 

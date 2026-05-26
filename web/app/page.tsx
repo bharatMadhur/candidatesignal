@@ -17,12 +17,22 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Sparkles,
   UploadCloud,
   Users,
 } from "lucide-react";
 import {
   Candidate,
+  CandidatePortalProfile,
+  CandidatePortalPrivacySettings,
+  CandidateResumeShare,
   CandidateProfileUpdate,
+  CandidateResumeUpload,
+  CandidateResumeVersion,
+  CandidateApplication,
+  CandidateAccessRequest,
+  CandidateSelfMatch,
+  NativeCandidateSummary,
   CampaignPipelineStatus,
   CampaignScorecard,
   CandidateMaintenanceJob,
@@ -65,7 +75,13 @@ import {
   chatCopilot,
   archiveCopilotThread,
   archiveCampaign,
+  archiveCandidatePortalResumeVersion,
+  candidateSignup,
   companySignup,
+  createCandidatePortalResumeVersion,
+  createCandidatePortalTargetedVersion,
+  createCandidatePortalResumeShare,
+  createCandidatePortalApplication,
   createCampaign,
   createCampaignRequirement,
   createCandidateRederiveJob,
@@ -75,6 +91,7 @@ import {
   createRequirement,
   createRequirementFromCopilotThread,
   decideCandidateVersion,
+  decideCandidatePortalAccessRequest,
   deleteCollaborationComment,
   deleteCandidate,
   deleteRecruiterTask,
@@ -87,6 +104,11 @@ import {
   getCopilotThread,
   getTenantAdminDetail,
   getCandidateRawText,
+  getCandidatePortalProfile,
+  getCandidatePortalResumeUpload,
+  getCandidatePortalResumeVersion,
+  candidateResumeVersionHtmlPath,
+  candidateResumeVersionPdfPath,
   getCandidateSource,
   getCandidate,
   getRequirementMatches,
@@ -98,6 +120,11 @@ import {
   inviteTeamMember,
   importLinkedInCandidate,
   listCandidates,
+  listCandidatePortalAccessRequests,
+  listCandidatePortalApplications,
+  listCandidatePortalResumeVersions,
+  listCandidatePortalResumeUploads,
+  listCandidatePortalResumeShares,
   listCampaigns,
   listCopilotThreads,
   listAuditLogs,
@@ -113,22 +140,30 @@ import {
   listRecruiterTasks,
   listRequirements,
   listTenants,
+  listNativeCandidates,
   me,
   matchRequirement,
   matchCampaign,
   markCandidateReviewSignal,
+  previewCandidatePortalResume,
   reactivateTenant,
   rejectMatch,
   resendInvitation,
   resolveParseDeadLetter,
+  revokeCandidatePortalResumeShare,
+  requestNativeCandidateAccess,
   retryCandidateMaintenanceJob,
   retryMailMessage,
   retryParseJob,
   reparseCandidate,
   searchCandidates,
   shortlistMatch,
+  matchCandidatePortalRequirement,
   updateMemberRole,
   updateNote,
+  updateCandidatePortalProfile,
+  updateCandidatePortalApplication,
+  updateCandidatePortalPrivacySettings,
   uploadRequirement,
   uploadResume,
   uploadCampaignResumes,
@@ -139,6 +174,7 @@ import {
   updateGovernancePolicy,
   updateRecruiterTask,
   uploadCampaignRequirement,
+  uploadCandidatePortalResume,
   verifyLinkedInProfile,
   deleteNote,
   disableTenant,
@@ -200,13 +236,25 @@ function workspaceRouteIdentity(route: WorkspaceRoute) {
 }
 
 type HomeAppProps = {
-  initialLoginMode?: "company" | "admin";
+  initialLoginMode?: "company" | "admin" | "candidate";
   lockedLoginMode?: boolean;
   showPublicHome?: boolean;
 };
 
 const DEPLOY_ENV = (process.env.NEXT_PUBLIC_DEPLOY_ENV ?? "production").toLowerCase();
 const IS_STAGING_ENV = DEPLOY_ENV === "staging";
+const CANDIDATE_RESUME_TEMPLATES = [
+  { id: "atlas", name: "Atlas", tone: "Balanced", note: "Clean professional default for most roles." },
+  { id: "classic", name: "Classic", tone: "Traditional", note: "Best for conservative HR and academic-style readers." },
+  { id: "modern", name: "Modern", tone: "Sharp", note: "Stronger hierarchy without breaking ATS safety." },
+  { id: "compact", name: "Compact", tone: "Dense", note: "For longer careers that need tight spacing." },
+  { id: "executive", name: "Executive", tone: "Senior", note: "For leadership, strategy, and client-facing profiles." },
+  { id: "technical", name: "Technical", tone: "Engineering", note: "For software, data, infra, and technical roles." },
+  { id: "academic", name: "Academic", tone: "Research", note: "For publications, education, and research-heavy profiles." },
+  { id: "startup", name: "Startup", tone: "Builder", note: "For founding, product, and high-ownership resumes." },
+  { id: "consulting", name: "Consulting", tone: "Client-ready", note: "For business, transformation, and advisory roles." },
+  { id: "minimal", name: "Minimal", tone: "ATS-first", note: "Maximum simplicity for strict ATS parsing." },
+] as const;
 
 export default function Home() {
   return <HomeApp showPublicHome />;
@@ -217,7 +265,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [view, setView] = useState<View>("dashboard");
-  const [workspaceMode, setWorkspaceMode] = useState<"admin" | "tenant">("admin");
+  const [workspaceMode, setWorkspaceMode] = useState<"admin" | "tenant" | "candidate">("admin");
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [status, setStatus] = useState("Ready");
   const [busy, setBusy] = useState(false);
@@ -287,7 +335,19 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   const [signupOwnerName, setSignupOwnerName] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
-  const [loginMode, setLoginMode] = useState<"company" | "admin">(initialLoginMode ?? "company");
+  const [candidateSignupMode, setCandidateSignupMode] = useState(false);
+  const [candidateSignupName, setCandidateSignupName] = useState("");
+  const [candidateSignupEmail, setCandidateSignupEmail] = useState("");
+  const [candidateSignupPassword, setCandidateSignupPassword] = useState("");
+  const [candidatePortalProfile, setCandidatePortalProfile] = useState<CandidatePortalProfile | null>(null);
+  const [candidateResumeVersions, setCandidateResumeVersions] = useState<CandidateResumeVersion[]>([]);
+  const [candidateResumeUploads, setCandidateResumeUploads] = useState<CandidateResumeUpload[]>([]);
+  const [candidateResumeShares, setCandidateResumeShares] = useState<CandidateResumeShare[]>([]);
+  const [candidateApplications, setCandidateApplications] = useState<CandidateApplication[]>([]);
+  const [candidateAccessRequests, setCandidateAccessRequests] = useState<CandidateAccessRequest[]>([]);
+  const [nativeCandidateQuery, setNativeCandidateQuery] = useState("");
+  const [nativeCandidates, setNativeCandidates] = useState<NativeCandidateSummary[]>([]);
+  const [loginMode, setLoginMode] = useState<"company" | "admin" | "candidate">(initialLoginMode ?? "company");
   const [applicantLoginSelected, setApplicantLoginSelected] = useState(false);
   const [loginError, setLoginError] = useState("");
   const initialRouteAppliedRef = useRef(false);
@@ -307,7 +367,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     const params = new URLSearchParams(window.location.search);
     const invite = params.get("invite");
     const login = params.get("login");
-    if (!lockedLoginMode && login === "company") setLoginMode(login);
+    if (!lockedLoginMode && (login === "company" || login === "candidate")) setLoginMode(login);
     if (invite) {
       setInviteToken(invite);
       setInviteMode(true);
@@ -422,6 +482,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     const meResult = await me(activeToken) as { user: CurrentUser };
     const user = meResult.user;
     const isPlatform = isPlatformAdmin(user);
+    const isCandidate = isCandidateUser(user);
     if (lockedLoginMode && initialLoginMode === "company" && isPlatform) {
       setToken("");
       setCurrentUser(null);
@@ -438,7 +499,55 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
       setStatus("Recruiter session found. Use Recruiter Login.");
       return;
     }
+    if (lockedLoginMode && initialLoginMode !== "candidate" && isCandidate) {
+      setToken("");
+      setCurrentUser(null);
+      setWorkspaceMode("tenant");
+      setView("dashboard");
+      setStatus("Candidate session found. Use Candidate Access.");
+      return;
+    }
     setCurrentUser(user);
+    if (isCandidate) {
+      setWorkspaceMode("candidate");
+      const [profileResult, versionResult, uploadResult, shareResult, applicationResult, accessResult] = await Promise.all([
+        getCandidatePortalProfile(activeToken),
+        listCandidatePortalResumeVersions(activeToken),
+        listCandidatePortalResumeUploads(activeToken),
+        listCandidatePortalResumeShares(activeToken),
+        listCandidatePortalApplications(activeToken),
+        listCandidatePortalAccessRequests(activeToken),
+      ]);
+      setCandidatePortalProfile(profileResult);
+      setCandidateResumeVersions(versionResult.versions ?? []);
+      setCandidateResumeUploads(uploadResult.uploads ?? []);
+      setCandidateResumeShares(shareResult.shares ?? []);
+      setCandidateApplications(applicationResult.applications ?? []);
+      setCandidateAccessRequests(accessResult.access_requests ?? []);
+      setCandidates([]);
+      setRequirements([]);
+      setCampaigns([]);
+      setCampaign(null);
+      setClusters([]);
+      setParseBatches([]);
+      setParseDeadLetters([]);
+      setOperationalAlerts([]);
+      setOperationalAlertDeliveries([]);
+      setMaintenanceJobs([]);
+      setWorkerStatus(null);
+      setPiiAccessEvents([]);
+      setSearchResults([]);
+      setCopilotThreads([]);
+      setCopilotThread(null);
+      setCopilotMessages([COPILOT_GREETING]);
+      setMatches([]);
+      setMatchRuns([]);
+      setMatchRunChanges([]);
+      setTeamMembers([]);
+      setTeamInvites([]);
+      setGovernancePolicy(null);
+      return;
+    }
     if (isPlatform) {
       setWorkspaceMode("admin");
       const [tenantResult, auditResult] = await Promise.all([
@@ -663,19 +772,26 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
       const nextToken = result.token || COOKIE_SESSION_TOKEN;
       const current = await me(nextToken) as { user: CurrentUser };
       const platform = isPlatformAdmin(current.user);
+      const candidateAccount = isCandidateUser(current.user);
       if (loginMode === "admin" && !platform) {
-        throw new Error("This account belongs to a recruiter workspace. Use Recruiter Login.");
+        throw new Error("This account does not have platform admin access.");
       }
       if (loginMode === "company" && platform) {
         throw new Error("This account is a platform admin. Open /admin to use the platform admin system.");
       }
+      if (loginMode === "company" && candidateAccount) {
+        throw new Error("This is a candidate account. Use Candidate Access.");
+      }
+      if (loginMode === "candidate" && !candidateAccount) {
+        throw new Error("This account is not a candidate account. Use Recruiter Access.");
+      }
       const session = { token: nextToken, user: current.user };
       setToken(session.token);
       setCurrentUser(session.user);
-      setWorkspaceMode(platform ? "admin" : "tenant");
+      setWorkspaceMode(platform ? "admin" : candidateAccount ? "candidate" : "tenant");
       setView(platform ? "admin" : "dashboard");
       setStatus("Login successful");
-      await refresh(session.token, platform ? "admin" : "tenant");
+      await refresh(session.token, platform ? "admin" : candidateAccount ? "candidate" : "tenant");
     } catch (error) {
       const message = readableError(error);
       setToken("");
@@ -691,6 +807,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     setLoginMode("company");
     setInviteMode(false);
     setApplicantLoginSelected(false);
+    setCandidateSignupMode(false);
     setSignupMode(true);
     setLoginError("");
     setStatus("Ready");
@@ -734,6 +851,39 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     }
   }
 
+  async function handleCandidateSignup() {
+    setBusy(true);
+    setStatus("Creating candidate profile...");
+    setLoginError("");
+    try {
+      const normalizedEmail = candidateSignupEmail.trim().toLowerCase();
+      await candidateSignup(candidateSignupName, normalizedEmail, candidateSignupPassword);
+      setStatus("Candidate profile created. Signing in...");
+      const result = await signInWithBetterAuth(normalizedEmail, candidateSignupPassword);
+      const nextToken = result.token || COOKIE_SESSION_TOKEN;
+      const current = await me(nextToken) as { user: CurrentUser };
+      if (!isCandidateUser(current.user)) {
+        throw new Error("Candidate signup did not create a candidate account.");
+      }
+      setToken(nextToken);
+      setCurrentUser(current.user);
+      setWorkspaceMode("candidate");
+      setCandidateSignupMode(false);
+      setApplicantLoginSelected(false);
+      setView("dashboard");
+      setStatus("Candidate profile created");
+      await refresh(nextToken, "candidate");
+    } catch (error) {
+      const message = readableError(error);
+      setToken("");
+      setCurrentUser(null);
+      setLoginError(message);
+      setStatus("Candidate signup failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleAcceptInvitation() {
     if (!inviteToken.trim() || !inviteName.trim() || !invitePassword.trim()) return;
     await run("Accepting invite", () => acceptInvitation(inviteToken, inviteName, invitePassword));
@@ -750,11 +900,12 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     await handleLogin();
   }
 
-  function handleLoginModeChange(mode: "company" | "admin") {
+  function handleLoginModeChange(mode: "company" | "admin" | "candidate") {
     if (lockedLoginMode) return;
     setLoginMode(mode);
-    setApplicantLoginSelected(false);
+    setApplicantLoginSelected(mode === "candidate");
     setSignupMode(false);
+    setCandidateSignupMode(false);
     setInviteMode(false);
     setEmail("");
     setPassword("");
@@ -779,6 +930,15 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     setCurrentUser(null);
     setWorkspaceMode("admin");
     setCandidate(null);
+    setCandidatePortalProfile(null);
+    setCandidateResumeVersions([]);
+    setCandidateResumeUploads([]);
+    setCandidateResumeShares([]);
+    setCandidateApplications([]);
+    setCandidateAccessRequests([]);
+    setNativeCandidateQuery("");
+    setNativeCandidates([]);
+    setCandidateSignupMode(false);
     setRequirement(null);
     setCampaign(null);
     setMatches([]);
@@ -1454,6 +1614,128 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     setMailMessages((items) => [result.mail_message, ...items.filter((item) => item.id !== messageId)]);
   }
 
+  async function handleSaveCandidatePortalProfile(profile: CandidatePortalProfile["profile"]) {
+    const result = await run("Saving candidate profile", () => updateCandidatePortalProfile(token, profile));
+    if (result) setCandidatePortalProfile(result);
+  }
+
+  async function handleSaveCandidatePortalPrivacySettings(settings: CandidatePortalPrivacySettings) {
+    const result = await run("Saving candidate visibility", () => updateCandidatePortalPrivacySettings(token, settings));
+    if (result) setCandidatePortalProfile(result);
+  }
+
+  async function handleCreateCandidatePortalVersion(title: string, targetRole?: string, resumeJson?: Record<string, any>) {
+    const result = await run("Creating resume version", () => createCandidatePortalResumeVersion(token, title, targetRole, resumeJson));
+    if (!result) return null;
+    setCandidateResumeVersions((items) => [result.version, ...items.filter((item) => item.id !== result.version.id)]);
+    return result.version;
+  }
+
+  async function handleCreateCandidatePortalTargetedVersion(versionId: string, payload: { requirement_text: string; title?: string; target_role?: string }) {
+    const result = await run("Creating targeted resume version", () => createCandidatePortalTargetedVersion(token, versionId, payload));
+    if (!result) return null;
+    setCandidateResumeVersions((items) => [result.version, ...items.filter((item) => item.id !== result.version.id)]);
+    return result;
+  }
+
+  async function handleArchiveCandidatePortalVersion(versionId: string) {
+    const result = await run("Archiving resume version", () => archiveCandidatePortalResumeVersion(token, versionId));
+    if (!result) return null;
+    setCandidateResumeVersions((items) => items.filter((item) => item.id !== versionId));
+    return result.version;
+  }
+
+  async function handleCreateCandidatePortalShare(versionId: string, label: string, includePii = false) {
+    const result = await run("Creating resume share", () => createCandidatePortalResumeShare(token, versionId, label, includePii));
+    if (!result) return null;
+    setCandidateResumeShares((items) => [result.share, ...items.filter((item) => item.id !== result.share.id)]);
+    return result.share;
+  }
+
+  async function handleRevokeCandidatePortalShare(shareId: string) {
+    const result = await run("Revoking resume share", () => revokeCandidatePortalResumeShare(token, shareId));
+    if (!result) return;
+    setCandidateResumeShares((items) => items.map((item) => item.id === shareId ? { ...item, status: "revoked" } : item));
+  }
+
+  async function handleCreateCandidatePortalApplication(payload: {
+    resume_version_id: string;
+    destination_name: string;
+    destination_type?: string;
+    job_title?: string;
+    job_url?: string;
+    status?: string;
+    note?: string;
+    create_share_link?: boolean;
+    include_pii?: boolean;
+  }) {
+    const result = await run("Saving resume share history", () => createCandidatePortalApplication(token, payload));
+    if (!result) return null;
+    setCandidateApplications((items) => [result.application, ...items.filter((item) => item.id !== result.application.id)]);
+    if (result.share) setCandidateResumeShares((items) => [result.share as CandidateResumeShare, ...items.filter((item) => item.id !== result.share?.id)]);
+    return result.application;
+  }
+
+  async function handleUpdateCandidatePortalApplication(applicationId: string, payload: { status?: string; note?: string }) {
+    const result = await run("Updating resume share history", () => updateCandidatePortalApplication(token, applicationId, payload));
+    if (!result) return null;
+    setCandidateApplications((items) => items.map((item) => item.id === applicationId ? result.application : item));
+    return result.application;
+  }
+
+  async function handleCandidateAccessDecision(requestId: string, decision: "approve" | "deny") {
+    const result = await run(`${decision === "approve" ? "Approving" : "Denying"} recruiter access`, () => decideCandidatePortalAccessRequest(token, requestId, decision));
+    if (!result) return;
+    setCandidateAccessRequests((items) => items.map((item) => item.id === requestId ? result.access_request : item));
+  }
+
+  async function handleLoadCandidatePortalVersion(versionId: string) {
+    const result = await getCandidatePortalResumeVersion(token, versionId);
+    setCandidateResumeVersions((items) => items.map((item) => item.id === versionId ? result.version : item));
+    return result.version;
+  }
+
+  async function handleUploadCandidatePortalResume(file: File, targetRole?: string, note?: string) {
+    const result = await run("Uploading candidate resume", () => uploadCandidatePortalResume(token, file, targetRole, note));
+    if (!result) return null;
+    setCandidateResumeUploads((items) => [result.upload, ...items.filter((item) => item.id !== result.upload.id)]);
+    return result.upload;
+  }
+
+  async function handlePreviewCandidatePortalResume(file: File) {
+    return previewCandidatePortalResume(token, file);
+  }
+
+  async function handleRefreshCandidatePortalUpload(uploadId: string) {
+    const result = await getCandidatePortalResumeUpload(token, uploadId);
+    setCandidateResumeUploads((items) => [result.upload, ...items.filter((item) => item.id !== uploadId)]);
+    if (result.upload.status === "succeeded") {
+      const [profileResult, versionResult] = await Promise.all([
+        getCandidatePortalProfile(token),
+        listCandidatePortalResumeVersions(token),
+      ]);
+      setCandidatePortalProfile(profileResult);
+      setCandidateResumeVersions(versionResult.versions ?? []);
+    }
+    return result.upload;
+  }
+
+  async function handleCandidatePortalRequirementMatch(versionId: string, requirementText: string) {
+    const result = await run("Matching resume version", () => matchCandidatePortalRequirement(token, versionId, requirementText));
+    return result?.match ?? null;
+  }
+
+  async function handleSearchNativeCandidates(searchText = nativeCandidateQuery) {
+    const result = await run("Searching candidateSignal native candidates", () => listNativeCandidates(token, searchText, 20));
+    if (result) setNativeCandidates(result.native_candidates ?? []);
+  }
+
+  async function handleRequestNativeCandidateAccess(candidateUserId: string, resumeVersionId?: string | null) {
+    const result = await run("Requesting candidate PII access", () => requestNativeCandidateAccess(token, candidateUserId, "Recruiter is interested in this candidate for a role and requests permission to view contact details.", resumeVersionId));
+    if (!result) return;
+    setNativeCandidates((items) => items.map((item) => item.candidate_user_id === candidateUserId ? { ...item, request_status: result.access_request.status } : item));
+  }
+
   const filteredCandidates = useMemo(() => {
     const needle = query.toLowerCase();
     if (!needle) return candidates;
@@ -1465,11 +1747,14 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     const showBootstrap = process.env.NODE_ENV !== "production";
     const showLocalDevHelp = process.env.NODE_ENV !== "production";
     const isAdminLogin = loginMode === "admin";
-    const showApplicantComingSoon = applicantLoginSelected && !isAdminLogin && !inviteMode;
-    const showCompanySignup = signupMode && !isAdminLogin && !inviteMode && !showApplicantComingSoon;
+    const isCandidateLogin = loginMode === "candidate" || applicantLoginSelected;
+    const showCandidateSignup = candidateSignupMode && isCandidateLogin && !inviteMode;
+    const showCompanySignup = signupMode && !isAdminLogin && !inviteMode && !isCandidateLogin;
     const showMergedHome = showPublicHome && !lockedLoginMode && !inviteMode;
-    const canShowPublicLoginTabs = showMergedHome && !inviteMode && !signupMode;
-    const loginEmailPlaceholder = showLocalDevHelp ? (isAdminLogin ? "admin@example.com" : "recruiter@example.com") : (isAdminLogin ? "owner@candidatesignal.ai" : "name@company.com");
+    const canShowPublicLoginTabs = showMergedHome && !inviteMode && !signupMode && !candidateSignupMode;
+    const loginEmailPlaceholder = showLocalDevHelp
+      ? (isAdminLogin ? "admin@example.com" : isCandidateLogin ? "candidate@example.com" : "recruiter@example.com")
+      : (isAdminLogin ? "owner@candidatesignal.ai" : isCandidateLogin ? "candidate@email.com" : "name@company.com");
     const passwordPlaceholder = showLocalDevHelp ? "resume-intel" : "Password";
     const loginPanel = (
         <section ref={publicAuthPanelRef} className={showMergedHome ? "loginPanel stitchAuthCard" : "loginPanel"}>
@@ -1488,12 +1773,14 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
             </>
           ) : (
             <>
-              <h1>{showCompanySignup ? "Create Recruiter Workspace" : showApplicantComingSoon ? "Applicant Login" : isAdminLogin ? "Admin Login" : "Recruiter Login"}</h1>
+              <h1>{showCompanySignup ? "Create Recruiter Workspace" : showCandidateSignup ? "Create Candidate Profile" : isCandidateLogin ? "Candidate Access" : isAdminLogin ? "Admin Login" : "Recruiter Login"}</h1>
               <p>
                 {showCompanySignup
                   ? "Register your recruiter workspace for your company and become the tenant owner. No platform-admin approval is required."
-                  : showApplicantComingSoon
-                  ? "Applicant and student access is coming soon."
+                  : showCandidateSignup
+                  ? "Create a candidate-owned profile, maintain resume versions, and generate application-specific CVs. LinkedIn verification does not run from candidate access."
+                  : isCandidateLogin
+                  ? "Candidates can maintain resume versions, generate a clean CV, and compare their profile against requirements."
                   : isAdminLogin
                     ? "Platform owners only. This opens the admin system, not the recruiter app."
                     : "Recruiters only. This opens the recruiter workspace for one tenant."}
@@ -1501,10 +1788,10 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               {canShowPublicLoginTabs ? (
                 <div className="loginModeTabs" role="tablist" aria-label="Choose login type">
                   <button
-                    className={!showApplicantComingSoon ? "active" : ""}
+                    className={!isCandidateLogin ? "active" : ""}
                     type="button"
                     role="tab"
-                    aria-selected={!showApplicantComingSoon}
+                    aria-selected={!isCandidateLogin}
                     onClick={() => {
                       handleLoginModeChange("company");
                       setApplicantLoginSelected(false);
@@ -1517,20 +1804,20 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                     <span>Recruiters, candidates, campaigns, matching.</span>
                   </button>
                   <button
-                    className={showApplicantComingSoon ? "active" : ""}
+                    className={isCandidateLogin ? "active" : ""}
                     type="button"
                     role="tab"
-                    aria-selected={showApplicantComingSoon}
+                    aria-selected={isCandidateLogin}
                     onClick={() => {
-                      handleLoginModeChange("company");
+                      handleLoginModeChange("candidate");
                       setApplicantLoginSelected(true);
                       setEmail("");
                       setLoginError("");
                     }}
                     disabled={busy}
                   >
-                    <strong>Applicant Login</strong>
-                    <span>Coming soon for applicants and students.</span>
+                    <strong>Candidate Access</strong>
+                    <span>Resume versions, application fit, data-to-CV.</span>
                   </button>
                 </div>
               ) : (
@@ -1597,13 +1884,53 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                   {loginError ? <div className="loginError">{loginError}</div> : null}
                   <button className="plain" type="button" onClick={() => setSignupMode(false)} disabled={busy}>Back to recruiter login</button>
                 </>
-              ) : showApplicantComingSoon ? (
-                <div className="applicantComingSoonCard">
-                  <Users size={26} />
-                  <strong>Applicant portal is coming soon</strong>
-                  <span>Applicants will eventually review their resume signal and application fit here. Recruiters should continue with Recruiter Access.</span>
-                  <button className="primary" type="button" onClick={() => setApplicantLoginSelected(false)}>Use Recruiter Login</button>
-                </div>
+              ) : showCandidateSignup ? (
+                <>
+                  <input
+                    value={candidateSignupName}
+                    onChange={(event) => {
+                      setCandidateSignupName(event.target.value);
+                      setLoginError("");
+                    }}
+                    placeholder="Your full name"
+                    aria-label="Candidate full name"
+                    autoComplete="name"
+                  />
+                  <input
+                    value={candidateSignupEmail}
+                    onChange={(event) => {
+                      setCandidateSignupEmail(event.target.value);
+                      setLoginError("");
+                    }}
+                    placeholder="candidate@email.com"
+                    aria-label="Candidate email"
+                    autoComplete="username"
+                  />
+                  <input
+                    value={candidateSignupPassword}
+                    onChange={(event) => {
+                      setCandidateSignupPassword(event.target.value);
+                      setLoginError("");
+                    }}
+                    placeholder="Create password (10+ characters)"
+                    type="password"
+                    aria-label="Create candidate password"
+                    autoComplete="new-password"
+                  />
+                  <button
+                    className="primary"
+                    onClick={handleCandidateSignup}
+                    disabled={busy || !candidateSignupName.trim() || !candidateSignupEmail.trim() || candidateSignupPassword.length < 10}
+                  >
+                    <Rocket size={16} /> {busy ? "Creating..." : "Create Candidate Profile"}
+                  </button>
+                  <div className="loginHelpBox">
+                    <strong>Candidate-owned workspace</strong>
+                    <span>You control your resume data and versions. Candidate access does not trigger LinkedIn verification.</span>
+                  </div>
+                  {loginError ? <div className="loginError">{loginError}</div> : null}
+                  <button className="plain" type="button" onClick={() => setCandidateSignupMode(false)} disabled={busy}>Back to candidate login</button>
+                </>
               ) : (
                 <>
                   <input
@@ -1614,7 +1941,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                     }}
                     onKeyDown={handleLoginKeyDown}
                     placeholder={loginEmailPlaceholder}
-                    aria-label={isAdminLogin ? "Admin email or username" : "Recruiter email or username"}
+                    aria-label={isAdminLogin ? "Admin email or username" : isCandidateLogin ? "Candidate email or username" : "Recruiter email or username"}
                     autoComplete="username"
                   />
                   <input
@@ -1630,12 +1957,12 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                     autoComplete="current-password"
                   />
                   <button className="primary" onClick={handleLogin} disabled={busy || !email.trim() || !password.trim()}>
-                    <LogIn size={16} /> {busy ? "Signing in..." : isAdminLogin ? "Enter Admin System" : "Enter Recruiter Workspace"}
+                    <LogIn size={16} /> {busy ? "Signing in..." : isAdminLogin ? "Enter Admin System" : isCandidateLogin ? "Enter Candidate Workspace" : "Enter Recruiter Workspace"}
                   </button>
                   {loginError ? <div className="loginError">{loginError}</div> : null}
                   {showLocalDevHelp ? <div className="loginHelpBox">
                     <strong>Local dev login</strong>
-                    <span>{isAdminLogin ? "admin or admin@example.com / resume-intel" : "recruiter or recruiter@example.com / resume-intel"}</span>
+                    <span>{isAdminLogin ? "admin or admin@example.com / resume-intel" : isCandidateLogin ? "candidate or candidate@example.com / resume-intel" : "recruiter or recruiter@example.com / resume-intel"}</span>
                   </div> : null}
                   {lockedLoginMode ? (
                     <a className="plain actionLink" href={isAdminLogin ? "/" : "/admin"}>
@@ -1645,11 +1972,14 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                   {isAdminLogin && showBootstrap ? <button className="plain" onClick={handleBootstrap} disabled={busy || !email.trim() || !password.trim()}>
                     Create local platform admin
                   </button> : null}
-                  {!isAdminLogin ? <button className="plain" onClick={() => setInviteMode(true)} disabled={busy}>
+                  {!isAdminLogin && !isCandidateLogin ? <button className="plain" onClick={() => setInviteMode(true)} disabled={busy}>
                     Accept invite
                   </button> : null}
-                  {!isAdminLogin ? <button className="plain" onClick={openCompanySignupPanel} disabled={busy}>
+                  {!isAdminLogin && !isCandidateLogin ? <button className="plain" onClick={openCompanySignupPanel} disabled={busy}>
                     Create a recruiter workspace
+                  </button> : null}
+                  {isCandidateLogin ? <button className="plain" onClick={() => setCandidateSignupMode(true)} disabled={busy}>
+                    Create candidate profile
                   </button> : null}
                 </>
               )}
@@ -1675,8 +2005,8 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               <a href="#security">Security</a>
             </nav>
             <div className="stitchNavActions">
-              <button className="plain" type="button" onClick={() => { setSignupMode(false); setApplicantLoginSelected(true); }}>Applicant Login</button>
-              <button className="primary" type="button" onClick={() => { setSignupMode(false); setApplicantLoginSelected(false); }}>Recruiter Login</button>
+              <button className="plain" type="button" onClick={() => { setSignupMode(false); setCandidateSignupMode(false); handleLoginModeChange("candidate"); }}>Candidate Access</button>
+              <button className="primary" type="button" onClick={() => { setSignupMode(false); setCandidateSignupMode(false); handleLoginModeChange("company"); }}>Recruiter Login</button>
             </div>
           </header>
 
@@ -1693,8 +2023,8 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                 <button className="primary" type="button" onClick={openCompanySignupPanel}>
                   <Rocket size={16} /> Get Started
                 </button>
-                <button className="secondary" type="button" onClick={() => { setSignupMode(false); setApplicantLoginSelected(true); }}>
-                  <Users size={16} /> Applicant Portal
+                <button className="secondary" type="button" onClick={() => { setSignupMode(false); setCandidateSignupMode(false); handleLoginModeChange("candidate"); }}>
+                  <Users size={16} /> Candidate Access
                 </button>
               </div>
             </div>
@@ -1968,7 +2298,18 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
           ) : null}
 
           {workspaceMode === "tenant" && view === "database" ? (
-            <DatabaseView candidates={filteredCandidates} query={query} setQuery={setQuery} open={handleOpenCandidate} />
+            <DatabaseView
+              candidates={filteredCandidates}
+              query={query}
+              setQuery={setQuery}
+              open={handleOpenCandidate}
+              nativeQuery={nativeCandidateQuery}
+              setNativeQuery={setNativeCandidateQuery}
+              nativeCandidates={nativeCandidates}
+              searchNativeCandidates={handleSearchNativeCandidates}
+              requestNativeAccess={handleRequestNativeCandidateAccess}
+              busy={busy}
+            />
           ) : null}
 
           {workspaceMode === "tenant" && view === "upload" ? (
@@ -2148,6 +2489,36 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
             )
           ) : null}
 
+          {workspaceMode === "candidate" ? (
+            <CandidatePortalWorkspace
+              user={currentUser}
+              profile={candidatePortalProfile}
+              uploads={candidateResumeUploads}
+              versions={candidateResumeVersions}
+              shares={candidateResumeShares}
+              applications={candidateApplications}
+              accessRequests={candidateAccessRequests}
+              status={status}
+              busy={busy}
+              previewResume={handlePreviewCandidatePortalResume}
+              uploadResume={handleUploadCandidatePortalResume}
+              refreshUpload={handleRefreshCandidatePortalUpload}
+              saveProfile={handleSaveCandidatePortalProfile}
+              savePrivacySettings={handleSaveCandidatePortalPrivacySettings}
+              createVersion={handleCreateCandidatePortalVersion}
+              createTargetedVersion={handleCreateCandidatePortalTargetedVersion}
+              archiveVersion={handleArchiveCandidatePortalVersion}
+              createShare={handleCreateCandidatePortalShare}
+              revokeShare={handleRevokeCandidatePortalShare}
+              createApplication={handleCreateCandidatePortalApplication}
+              updateApplication={handleUpdateCandidatePortalApplication}
+              decideAccessRequest={handleCandidateAccessDecision}
+              loadVersion={handleLoadCandidatePortalVersion}
+              matchRequirement={handleCandidatePortalRequirementMatch}
+              logout={handleLogout}
+            />
+          ) : null}
+
           {workspaceMode === "admin" && isPlatformAdmin(currentUser) ? (
             <AdminSettings tenants={tenants} invitations={teamInvites} auditEvents={auditEvents} selectedTenant={tenantDetail} selectTenant={handleSelectTenant} createTenant={handleCreateTenant} setTenantStatus={handleTenantStatus} />
           ) : null}
@@ -2165,6 +2536,2763 @@ function EnvironmentBanner() {
       <span>Test data only. Do not upload production resumes or customer information.</span>
     </aside>
   );
+}
+
+type CandidatePortalSection = "dashboard" | "upload" | "review" | "profile" | "match";
+
+const CANDIDATE_PORTAL_SECTIONS: CandidatePortalSection[] = ["dashboard", "upload", "review", "profile", "match"];
+
+function candidatePortalSectionFromSearch(search: string, fallback: CandidatePortalSection = "dashboard"): CandidatePortalSection {
+  const params = new URLSearchParams(search);
+  const value = params.get("candidate_view") || params.get("section");
+  if (value === "versions" || value === "export") return "review";
+  if (value === "editor") return "profile";
+  if (value === "job_board") return "match";
+  return CANDIDATE_PORTAL_SECTIONS.includes(value as CandidatePortalSection) ? value as CandidatePortalSection : fallback;
+}
+
+function candidatePortalSectionCopy(section: CandidatePortalSection, latestUpload: CandidateResumeUpload | null, versionCount: number) {
+  if (section === "upload") {
+    return {
+      eyebrow: "Upload",
+      title: "Bring in your existing resume.",
+      body: "Preview the file first, then turn it into an editable master profile you control.",
+    };
+  }
+  if (section === "review") {
+    return {
+      eyebrow: "Resume",
+      title: versionCount ? "Manage your resume versions." : "Create your first clean resume version.",
+      body: "Open a version to edit, preview, export as PDF, share safely, or tailor it to a job.",
+    };
+  }
+  if (section === "profile") {
+    return {
+      eyebrow: "Editor",
+      title: "Shape the resume people will actually read.",
+      body: "Update facts, improve bullets, add sections, and keep the master profile clean before creating role-specific versions.",
+    };
+  }
+  if (section === "match") {
+    return {
+      eyebrow: "Jobs",
+      title: "Tailor one version to one job.",
+      body: "Paste a job requirement, choose a resume version, and get a clear fit read before applying.",
+    };
+  }
+  return {
+    eyebrow: "Candidate workspace",
+    title: latestUpload ? "Own the resume you send." : "Start from the resume you already have.",
+    body: "Maintain one approved profile, create targeted versions, export clean PDFs, and track where every version was shared.",
+  };
+}
+
+function CandidatePortalWorkspace({
+  user,
+  profile,
+  uploads,
+  versions,
+  shares,
+  applications,
+  accessRequests,
+  status,
+  busy,
+  previewResume,
+  uploadResume,
+  refreshUpload,
+  saveProfile,
+  savePrivacySettings,
+  createVersion,
+  createTargetedVersion,
+  archiveVersion,
+  createShare,
+  revokeShare,
+  createApplication,
+  updateApplication,
+  decideAccessRequest,
+  loadVersion,
+  matchRequirement,
+  logout,
+}: {
+  user: CurrentUser | null;
+  profile: CandidatePortalProfile | null;
+  uploads: CandidateResumeUpload[];
+  versions: CandidateResumeVersion[];
+  shares: CandidateResumeShare[];
+  applications: CandidateApplication[];
+  accessRequests: CandidateAccessRequest[];
+  status: string;
+  busy: boolean;
+  previewResume: (file: File) => Promise<{ filename: string; source_type: string; html: string }>;
+  uploadResume: (file: File, targetRole?: string, note?: string) => Promise<CandidateResumeUpload | null>;
+  refreshUpload: (uploadId: string) => Promise<CandidateResumeUpload>;
+  saveProfile: (profile: CandidatePortalProfile["profile"]) => Promise<void>;
+  savePrivacySettings: (settings: CandidatePortalPrivacySettings) => Promise<void>;
+  createVersion: (title: string, targetRole?: string, resumeJson?: Record<string, any>) => Promise<CandidateResumeVersion | null>;
+  createTargetedVersion: (versionId: string, payload: { requirement_text: string; title?: string; target_role?: string }) => Promise<{ version: CandidateResumeVersion; match: CandidateSelfMatch } | null>;
+  archiveVersion: (versionId: string) => Promise<CandidateResumeVersion | null>;
+  createShare: (versionId: string, label: string, includePii?: boolean) => Promise<CandidateResumeShare | null>;
+  revokeShare: (shareId: string) => Promise<void>;
+  createApplication: (payload: {
+    resume_version_id: string;
+    destination_name: string;
+    destination_type?: string;
+    job_title?: string;
+    job_url?: string;
+    status?: string;
+    note?: string;
+    create_share_link?: boolean;
+    include_pii?: boolean;
+  }) => Promise<CandidateApplication | null>;
+  updateApplication: (applicationId: string, payload: { status?: string; note?: string }) => Promise<CandidateApplication | null>;
+  decideAccessRequest: (requestId: string, decision: "approve" | "deny") => Promise<void>;
+  loadVersion: (versionId: string) => Promise<CandidateResumeVersion>;
+  matchRequirement: (versionId: string, requirementText: string) => Promise<CandidateSelfMatch | null>;
+  logout: () => void;
+}) {
+  const [draft, setDraft] = useState<CandidatePortalProfile["profile"]>({});
+  const [skillsText, setSkillsText] = useState("");
+  const [certificationsText, setCertificationsText] = useState("");
+  const [awardsText, setAwardsText] = useState("");
+  const [publicationsText, setPublicationsText] = useState("");
+  const [languagesText, setLanguagesText] = useState("");
+  const [linksText, setLinksText] = useState("");
+  const [referencesText, setReferencesText] = useState("");
+  const [experienceItems, setExperienceItems] = useState<Array<Record<string, any>>>([]);
+  const [educationItems, setEducationItems] = useState<Array<Record<string, any>>>([]);
+  const [projectItems, setProjectItems] = useState<Array<Record<string, any>>>([]);
+  const [activeSection, setActiveSection] = useState<CandidatePortalSection>(() => typeof window === "undefined" ? "dashboard" : candidatePortalSectionFromSearch(window.location.search));
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [resumePreviewUrl, setResumePreviewUrl] = useState("");
+  const [resumePreviewHtml, setResumePreviewHtml] = useState("");
+  const [resumePreviewLoading, setResumePreviewLoading] = useState(false);
+  const [resumePreviewError, setResumePreviewError] = useState("");
+  const [uploadTargetRole, setUploadTargetRole] = useState("");
+  const [uploadNote, setUploadNote] = useState("");
+  const [activeUploadId, setActiveUploadId] = useState("");
+  const [versionTitle, setVersionTitle] = useState("General Resume");
+  const [targetRole, setTargetRole] = useState("");
+  const [shareLabel, setShareLabel] = useState("Recruiter-safe resume view");
+  const [shareIncludePii, setShareIncludePii] = useState(false);
+  const [applicationDestination, setApplicationDestination] = useState("");
+  const [applicationDestinationType, setApplicationDestinationType] = useState("company");
+  const [applicationJobTitle, setApplicationJobTitle] = useState("");
+  const [applicationJobUrl, setApplicationJobUrl] = useState("");
+  const [applicationStatus, setApplicationStatus] = useState("shared");
+  const [applicationNote, setApplicationNote] = useState("");
+  const [applicationCreateShare, setApplicationCreateShare] = useState(false);
+  const [applicationIncludePii, setApplicationIncludePii] = useState(false);
+  const [selectedVersionId, setSelectedVersionId] = useState("");
+  const [selectedVersion, setSelectedVersion] = useState<CandidateResumeVersion | null>(null);
+  const [versionDetailOpen, setVersionDetailOpen] = useState(false);
+  const [versionQuery, setVersionQuery] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState("atlas");
+  const [requirementText, setRequirementText] = useState("");
+  const [selfMatch, setSelfMatch] = useState<CandidateSelfMatch | null>(null);
+  const [coachInput, setCoachInput] = useState("");
+  const [coachMessages, setCoachMessages] = useState<Array<{ role: "assistant" | "user"; content: string }>>([
+    { role: "assistant", content: "I can help improve positioning, tighten bullets, suggest missing evidence, and decide which resume version/template fits a job." },
+  ]);
+  const [scratchMode, setScratchMode] = useState(false);
+  const [localError, setLocalError] = useState("");
+  const candidateUrlReadyRef = useRef(false);
+
+  const latestUpload = uploads[0] ?? null;
+  const activeUpload = uploads.find((item) => item.id === activeUploadId) ?? latestUpload;
+  const uploadInProgress = Boolean(activeUpload && ["queued", "running"].includes(activeUpload.status));
+  const profileCompleteness = candidatePortalCompleteness(profile?.profile ?? {});
+  const needsReview = activeUpload?.needs_review_json ?? [];
+  const resumePreviewKind = candidateUploadPreviewKind(resumeFile);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const applyFromUrl = () => {
+      const params = new URLSearchParams(window.location.search);
+      setActiveSection(candidatePortalSectionFromSearch(window.location.search));
+      const uploadId = params.get("upload");
+      const versionId = params.get("resume_version");
+      if (uploadId) setActiveUploadId(uploadId);
+      if (versionId) {
+        setSelectedVersionId(versionId);
+        setVersionDetailOpen(true);
+      }
+    };
+    applyFromUrl();
+    candidateUrlReadyRef.current = true;
+    window.addEventListener("popstate", applyFromUrl);
+    return () => window.removeEventListener("popstate", applyFromUrl);
+  }, []);
+
+  useEffect(() => {
+    if (!candidateUrlReadyRef.current || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    params.set("login", "candidate");
+    params.set("candidate_view", activeSection);
+    if ((activeSection === "review" || activeSection === "profile") && activeUpload?.id) params.set("upload", activeUpload.id);
+    else params.delete("upload");
+    if (((activeSection === "review" && versionDetailOpen) || activeSection === "match") && selectedVersionId) params.set("resume_version", selectedVersionId);
+    else params.delete("resume_version");
+    const next = `${window.location.pathname}?${params.toString()}`;
+    const current = `${window.location.pathname}${window.location.search}`;
+    if (next !== current) window.history.pushState(null, "", next);
+  }, [activeSection, activeUpload?.id, selectedVersionId, versionDetailOpen]);
+
+  useEffect(() => {
+    const next = profile?.profile ?? {};
+    setDraft(next);
+    setSkillsText((next.skills ?? []).join(", "));
+    setCertificationsText((next.certifications ?? []).join("\n"));
+    setAwardsText((next.awards ?? []).join("\n"));
+    setPublicationsText((next.publications ?? []).join("\n"));
+    setLanguagesText((next.languages ?? []).join(", "));
+    setLinksText((next.links ?? []).join("\n"));
+    setReferencesText(toTextList((next.other_sections ?? {}).references).join("\n"));
+    setExperienceItems(next.experience ?? []);
+    setEducationItems(next.education ?? []);
+    setProjectItems(next.projects ?? []);
+  }, [profile]);
+
+  useEffect(() => {
+    if (!resumeFile) {
+      setResumePreviewUrl("");
+      return;
+    }
+    const url = URL.createObjectURL(resumeFile);
+    setResumePreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [resumeFile]);
+
+  useEffect(() => {
+    setResumePreviewHtml("");
+    setResumePreviewError("");
+    if (!resumeFile || resumePreviewKind !== "document") return;
+    let active = true;
+    setResumePreviewLoading(true);
+    previewResume(resumeFile)
+      .then((result) => {
+        if (active) setResumePreviewHtml(result.html || "");
+      })
+      .catch((error) => {
+        if (active) setResumePreviewError(readableError(error));
+      })
+      .finally(() => {
+        if (active) setResumePreviewLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+    // previewResume is stable for the current candidate session; including it causes redundant preview uploads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeFile, resumePreviewKind]);
+
+  useEffect(() => {
+    if (!activeUploadId && latestUpload) setActiveUploadId(latestUpload.id);
+  }, [activeUploadId, latestUpload]);
+
+  useEffect(() => {
+    if (!activeUpload || !["queued", "running"].includes(activeUpload.status)) return;
+    const timer = window.setInterval(() => {
+      void refreshUpload(activeUpload.id).catch((error) => setLocalError(readableError(error)));
+    }, 2500);
+    return () => window.clearInterval(timer);
+  }, [activeUpload, refreshUpload]);
+
+  useEffect(() => {
+    if (selectedVersionId || !versions.length) return;
+    setSelectedVersionId(versions[0].id);
+  }, [selectedVersionId, versions]);
+
+  useEffect(() => {
+    if (!selectedVersionId) {
+      setSelectedVersion(null);
+      return;
+    }
+    const cached = versions.find((item) => item.id === selectedVersionId);
+    if (cached?.resume_json) {
+      setSelectedVersion(cached);
+      return;
+    }
+    let active = true;
+    loadVersion(selectedVersionId)
+      .then((version) => {
+        if (active) setSelectedVersion(version);
+      })
+      .catch((error) => {
+        if (active) setLocalError(readableError(error));
+      });
+    return () => {
+      active = false;
+    };
+  }, [loadVersion, selectedVersionId, versions]);
+
+  function updateDraft(key: string, value: string) {
+    setDraft((current) => ({ ...current, [key]: value }));
+  }
+
+  function handleStartFromScratch() {
+    setScratchMode(true);
+    if (!versionTitle.trim()) setVersionTitle("General Resume");
+    if (!draft.summary && !draft.headline) {
+      setCoachMessages((items) => [
+        ...items,
+        {
+          role: "assistant",
+          content: "Start with identity, target role, education, experience/projects, and skills. Write rough bullets; I will help convert them into resume-ready language without inventing facts.",
+        },
+      ]);
+    }
+    setActiveSection("profile");
+  }
+
+  function openSubmissionTracker(versionId?: string) {
+    const nextVersionId = versionId || selectedVersionId || versions[0]?.id || "";
+    if (nextVersionId) {
+      setSelectedVersionId(nextVersionId);
+      setVersionDetailOpen(true);
+      setActiveSection("review");
+      window.setTimeout(() => {
+        document.querySelector("#candidate-application-tracker")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 100);
+      return;
+    }
+    setVersionDetailOpen(false);
+    setActiveSection("review");
+  }
+
+  async function handleSave() {
+    setLocalError("");
+    try {
+      await saveProfile({
+        ...draft,
+        skills: splitCommaList(skillsText),
+        certifications: certificationsText.split("\n").map((item) => item.trim()).filter(Boolean),
+        experience: normalizeEditableProfileItems(experienceItems, "bullets"),
+        education: normalizeEditableProfileItems(educationItems, "details"),
+        projects: normalizeEditableProfileItems(projectItems, "bullets"),
+        awards: splitLineList(awardsText),
+        publications: splitLineList(publicationsText),
+        languages: splitCommaList(languagesText),
+        links: splitLineList(linksText),
+        other_sections: {
+          ...(draft.other_sections ?? {}),
+          references: splitLineList(referencesText),
+        },
+      });
+    } catch (error) {
+      setLocalError(readableError(error));
+    }
+  }
+
+  async function handleCreateVersion() {
+    setLocalError("");
+    try {
+      const version = await createVersion(versionTitle, targetRole);
+      if (version) {
+        setSelectedVersionId(version.id);
+        setSelectedVersion(version);
+        setVersionDetailOpen(true);
+        setActiveSection("review");
+      }
+    } catch (error) {
+      setLocalError(readableError(error));
+    }
+  }
+
+  async function handleSaveAndCreateVersion() {
+    await handleSave();
+    await handleCreateVersion();
+  }
+
+  async function handleCreateTargetedVersion() {
+    const inferredRole = targetRole.trim() || inferTargetRoleFromRequirement(requirementText) || "Target Job";
+    setLocalError("");
+    try {
+      const sourceVersionId = selectedVersionId || versions[0]?.id || "";
+      if (!sourceVersionId) {
+        const version = await createVersion(`${inferredRole} Resume`, inferredRole);
+        if (version) {
+          setSelectedVersionId(version.id);
+          setSelectedVersion(version);
+          setVersionDetailOpen(true);
+          setActiveSection("review");
+        }
+        return;
+      }
+      if (requirementText.trim().length < 20) {
+        setLocalError("Paste a job requirement first so the targeted version can be created from real evidence.");
+        return;
+      }
+      const result = await createTargetedVersion(sourceVersionId, {
+        requirement_text: requirementText,
+        title: `${inferredRole} Resume`,
+        target_role: inferredRole,
+      });
+      if (result?.version) {
+        setSelfMatch(result.match);
+        setSelectedVersionId(result.version.id);
+        setSelectedVersion(result.version);
+        setVersionDetailOpen(true);
+        setActiveSection("review");
+      }
+    } catch (error) {
+      setLocalError(readableError(error));
+    }
+  }
+
+  async function handleArchiveSelectedVersion() {
+    if (!selectedVersionId) return;
+    const confirmed = window.confirm("Archive this resume version? It will be hidden from the active Application Vault, but not hard deleted.");
+    if (!confirmed) return;
+    setLocalError("");
+    try {
+      await archiveVersion(selectedVersionId);
+      const next = versions.find((item) => item.id !== selectedVersionId);
+      setSelectedVersionId(next?.id ?? "");
+      setSelectedVersion(null);
+      setVersionDetailOpen(false);
+    } catch (error) {
+      setLocalError(readableError(error));
+    }
+  }
+
+  async function handleCreateShare() {
+    if (!selectedVersionId) return;
+    setLocalError("");
+    try {
+      const share = await createShare(selectedVersionId, shareLabel, shareIncludePii);
+      if (share) setShareLabel(`${selectedVersion?.title || "Resume"} share`);
+    } catch (error) {
+      setLocalError(readableError(error));
+    }
+  }
+
+  async function handleCreateApplication() {
+    if (!selectedVersionId || !applicationDestination.trim()) return;
+    setLocalError("");
+    try {
+      const application = await createApplication({
+        resume_version_id: selectedVersionId,
+        destination_name: applicationDestination,
+        destination_type: applicationDestinationType,
+        job_title: applicationJobTitle,
+        job_url: applicationJobUrl,
+        status: applicationStatus,
+        note: applicationNote,
+        create_share_link: applicationCreateShare,
+        include_pii: applicationIncludePii,
+      });
+      if (application) {
+        setApplicationDestination("");
+        setApplicationJobTitle("");
+        setApplicationJobUrl("");
+        setApplicationNote("");
+        setApplicationCreateShare(false);
+        setApplicationIncludePii(false);
+      }
+    } catch (error) {
+      setLocalError(readableError(error));
+    }
+  }
+
+  async function handleUpdateApplicationStatus(applicationId: string, status: string) {
+    setLocalError("");
+    try {
+      await updateApplication(applicationId, { status });
+    } catch (error) {
+      setLocalError(readableError(error));
+    }
+  }
+
+  async function handleRevokeShare(shareId: string) {
+    setLocalError("");
+    try {
+      await revokeShare(shareId);
+    } catch (error) {
+      setLocalError(readableError(error));
+    }
+  }
+
+  async function handleAccessDecision(requestId: string, decision: "approve" | "deny") {
+    setLocalError("");
+    try {
+      await decideAccessRequest(requestId, decision);
+    } catch (error) {
+      setLocalError(readableError(error));
+    }
+  }
+
+  async function handleUploadResume() {
+    if (!resumeFile) return;
+    setLocalError("");
+    try {
+      const upload = await uploadResume(resumeFile, uploadTargetRole, uploadNote);
+      if (upload) {
+        setActiveUploadId(upload.id);
+        setActiveSection("upload");
+        setResumeFile(null);
+      }
+    } catch (error) {
+      setLocalError(readableError(error));
+    }
+  }
+
+  async function handleMatchRequirement() {
+    if (!selectedVersionId) return;
+    setLocalError("");
+    try {
+      const result = await matchRequirement(selectedVersionId, requirementText);
+      setSelfMatch(result);
+    } catch (error) {
+      setLocalError(readableError(error));
+    }
+  }
+
+  function updateRequirementText(value: string) {
+    setRequirementText(value);
+    setSelfMatch(null);
+  }
+
+  function handleExportSelectedVersion() {
+    if (!selectedVersionId) return;
+    window.location.href = candidateResumeVersionPdfPath(selectedVersionId, selectedTemplateId);
+  }
+
+  function handlePreviewSelectedVersion() {
+    if (!selectedVersionId) return;
+    window.open(candidateResumeVersionHtmlPath(selectedVersionId, selectedTemplateId), "_blank", "noopener,noreferrer");
+  }
+
+  function sendCoachMessage() {
+    const message = coachInput.trim();
+    if (!message) return;
+    const reply = candidateCoachReply(profile?.profile ?? {}, message);
+    setCoachMessages((items) => [...items, { role: "user", content: message }, { role: "assistant", content: reply }]);
+    setCoachInput("");
+  }
+
+  async function handleToggleNativeSearch(enabled: boolean) {
+    setLocalError("");
+    try {
+      await savePrivacySettings({
+        candidate_signal_native_search_enabled: enabled,
+        pii_permission_required: true,
+        pii_visible_to_recruiters: false,
+      });
+    } catch (error) {
+      setLocalError(readableError(error));
+    }
+  }
+
+  const resume = selectedVersion?.resume_json ?? candidateResumeFromProfile(profile?.profile ?? {});
+  const privacySettings = profile?.privacy_settings ?? {};
+  const sectionCopy = candidatePortalSectionCopy(activeSection, latestUpload, versions.length);
+  const selectedVersionApplications = applications.filter((item) => item.resume_version_id === selectedVersionId);
+
+  function openVersionDetail(versionId: string) {
+    setSelectedVersionId(versionId);
+    setVersionDetailOpen(true);
+    setActiveSection("review");
+  }
+
+  function renderProfileEditor(context: "review" | "profile", showCoachTools = true) {
+    const isReview = context === "review";
+    return (
+      <>
+        <div className="candidatePortalSectionHead">
+          <div>
+            <span className="eyebrow">{isReview ? "Editable resume data" : "Resume sections"}</span>
+            <h2>{isReview ? "Review and edit what was extracted" : "Edit resume content"}</h2>
+            {isReview ? <p>Correct names, dates, links, bullets, projects, education, and skills. Saving updates the profile used for versions, matching, and exports.</p> : null}
+          </div>
+          <button className="primary" type="button" onClick={handleSave} disabled={busy}>{isReview ? "Save corrections" : "Save resume"}</button>
+        </div>
+        {showCoachTools ? <CandidateEditorCoachTools
+          enhancement={normalizedAiEnhancement(draft.ai_enhancement)}
+          applyHeadline={(value) => updateDraft("headline", value)}
+          applySummary={(value) => updateDraft("summary", value)}
+        /> : null}
+        <div className="candidateFormGrid" data-candidate-editor-section="Identity">
+          <label>Full name<input value={draft.display_name ?? ""} onChange={(event) => updateDraft("display_name", event.target.value)} /></label>
+          <label>Headline<input value={draft.headline ?? ""} onChange={(event) => updateDraft("headline", event.target.value)} /></label>
+          <label>Current location<input value={draft.current_location ?? ""} onChange={(event) => updateDraft("current_location", event.target.value)} /></label>
+          <label>Email<input value={draft.email ?? ""} onChange={(event) => updateDraft("email", event.target.value)} /></label>
+          <label>Phone<input value={draft.phone ?? ""} onChange={(event) => updateDraft("phone", event.target.value)} /></label>
+          <label>LinkedIn URL<input value={draft.linkedin_url ?? ""} onChange={(event) => updateDraft("linkedin_url", event.target.value)} placeholder="Stored only. No candidate-side verification." /></label>
+          <label>Portfolio URL<input value={draft.portfolio_url ?? ""} onChange={(event) => updateDraft("portfolio_url", event.target.value)} /></label>
+          <label>GitHub URL<input value={draft.github_url ?? ""} onChange={(event) => updateDraft("github_url", event.target.value)} /></label>
+        </div>
+        <label className="candidateWideField" data-candidate-editor-section="Summary">Summary<textarea value={draft.summary ?? ""} onChange={(event) => updateDraft("summary", event.target.value)} rows={4} /></label>
+        <label className="candidateWideField" data-candidate-editor-section="Skills">Skills<textarea value={skillsText} onChange={(event) => setSkillsText(event.target.value)} rows={3} placeholder="Python, Spark, Azure, Reliability Engineering" /></label>
+        <div data-candidate-editor-section="Experience">
+          <EditableProfileList
+            title="Work experience"
+            addLabel="Add role"
+            items={experienceItems}
+            setItems={setExperienceItems}
+            detailsKey="bullets"
+            enableWorkstreams
+            fields={[
+              { key: "title", label: "Title" },
+              { key: "company", label: "Company" },
+              { key: "location", label: "Location" },
+              { key: "start_date", label: "Start" },
+              { key: "end_date", label: "End" },
+            ]}
+            detailsLabel="Bullets"
+          />
+        </div>
+        <div data-candidate-editor-section="Education">
+          <EditableProfileList
+            title="Education"
+            addLabel="Add education"
+            items={educationItems}
+            setItems={setEducationItems}
+            detailsKey="details"
+            fields={[
+              { key: "degree", label: "Degree" },
+              { key: "school", label: "School" },
+              { key: "field", label: "Field" },
+              { key: "location", label: "Location" },
+              { key: "start_date", label: "Start" },
+              { key: "end_date", label: "End" },
+            ]}
+            detailsLabel="Details"
+          />
+        </div>
+        <div data-candidate-editor-section="Projects">
+          <EditableProfileList
+            title="Projects"
+            addLabel="Add project"
+            items={projectItems}
+            setItems={setProjectItems}
+            detailsKey="bullets"
+            fields={[
+              { key: "name", label: "Project" },
+              { key: "role", label: "Role" },
+              { key: "start_date", label: "Start" },
+              { key: "end_date", label: "End" },
+            ]}
+            detailsLabel="Project bullets"
+          />
+        </div>
+        <section className="candidateOptionalSections" data-candidate-editor-section="Optional">
+          <div>
+            <span className="eyebrow">Optional sections</span>
+            <h3>Add what this candidate actually has</h3>
+            <p>Portfolio, references, publications, languages, awards, and extra links stay blank unless the candidate adds them.</p>
+          </div>
+          <label className="candidateWideField">Certifications<textarea value={certificationsText} onChange={(event) => setCertificationsText(event.target.value)} rows={4} placeholder="One certification per line" /></label>
+          <label className="candidateWideField">Awards<textarea value={awardsText} onChange={(event) => setAwardsText(event.target.value)} rows={3} placeholder="One award per line" /></label>
+          <label className="candidateWideField">Publications<textarea value={publicationsText} onChange={(event) => setPublicationsText(event.target.value)} rows={3} placeholder="One publication per line" /></label>
+          <label className="candidateWideField">Languages<input value={languagesText} onChange={(event) => setLanguagesText(event.target.value)} placeholder="English, Hindi, Spanish" /></label>
+          <label className="candidateWideField">Additional links<textarea value={linksText} onChange={(event) => setLinksText(event.target.value)} rows={3} placeholder="Portfolio, blog, publication, project, or other URLs. One per line." /></label>
+          <label className="candidateWideField">References<textarea value={referencesText} onChange={(event) => setReferencesText(event.target.value)} rows={3} placeholder="Available on request, or named references only if you want them stored and exported." /></label>
+        </section>
+      </>
+    );
+  }
+
+  return (
+    <section className="candidatePortalShell">
+      <header className="candidatePortalTopbar">
+        <a className="publicBrand" href="/">
+          <BrandMark />
+          <strong>candidateSignal<span>.ai</span></strong>
+        </a>
+        <div>
+          <span>{user?.email}</span>
+          <button className="plain" type="button" onClick={logout}><LogOut size={15} /> Sign out</button>
+        </div>
+      </header>
+      <nav className="candidatePortalNav" aria-label="Candidate workspace sections">
+        {[
+          ["dashboard", "Home"],
+          ["review", "Resume"],
+          ["profile", "Editor"],
+          ["match", "Jobs"],
+          ["upload", "Upload"],
+        ].map(([id, label]) => (
+          <button key={id} className={activeSection === id ? "active" : ""} type="button" onClick={() => {
+            if (id === "review") setVersionDetailOpen(false);
+            setActiveSection(id as typeof activeSection);
+          }}>
+            {label}
+          </button>
+        ))}
+      </nav>
+      {activeSection !== "dashboard" ? (
+        <section className="candidatePortalHero compact">
+          <div>
+            <span className="eyebrow">{sectionCopy.eyebrow}</span>
+            <h1>{sectionCopy.title}</h1>
+            <p>{sectionCopy.body}</p>
+          </div>
+          {uploadInProgress || busy ? (
+            <div className="candidatePortalStatus">
+              <strong>{uploadInProgress ? "Parsing" : "Saving"}</strong>
+              <span>{uploadInProgress ? `${activeUpload?.stage_label ?? "Parsing"} · ${activeUpload?.progress ?? 0}%` : status}</span>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      {localError ? <div className="loginError candidatePortalError">{localError}</div> : null}
+
+      {activeSection === "dashboard" ? (
+        <CandidateHomeCommandCenter
+          profile={profile?.profile ?? {}}
+          latestUpload={latestUpload}
+          activeUpload={activeUpload}
+          versions={versions}
+          applications={applications}
+          accessRequests={accessRequests}
+          profileCompleteness={profileCompleteness}
+          needsReview={needsReview}
+          resume={resume}
+          selectedVersion={selectedVersion}
+          selectedTemplateId={selectedTemplateId}
+          busy={busy}
+          uploadInProgress={uploadInProgress}
+          openUpload={() => setActiveSection("upload")}
+          startFromScratch={handleStartFromScratch}
+          openEditor={() => setActiveSection("profile")}
+          openVersions={() => {
+            setVersionDetailOpen(false);
+            setActiveSection("review");
+          }}
+          openCreateVersion={() => {
+            setVersionDetailOpen(false);
+            setActiveSection("review");
+          }}
+          openVersion={(versionId) => openVersionDetail(versionId)}
+          openJobBoard={() => setActiveSection("match")}
+          openSubmissionTracker={openSubmissionTracker}
+        />
+      ) : null}
+
+      {activeSection === "upload" ? (
+        <section className="candidatePortalGrid">
+          <article className="candidatePortalCard candidateUploadDrop">
+            <div>
+              <span className="eyebrow">Secure resume upload</span>
+              <h2>Upload an existing resume</h2>
+              <p>PDF, DOCX, TXT, and image resumes become an editable profile. You review the details before using them in any exported version.</p>
+            </div>
+            <label className="candidateFilePicker">
+              <FileUp size={24} />
+              <strong>{resumeFile ? resumeFile.name : "Drop or choose a resume"}</strong>
+              <span>{DOCUMENT_FORMAT_LABEL}</span>
+              <input type="file" accept={DOCUMENT_FILE_ACCEPT} onChange={(event) => setResumeFile(event.target.files?.[0] ?? null)} />
+            </label>
+            <CandidatePreParsePreview
+              file={resumeFile}
+              previewUrl={resumePreviewUrl}
+              previewKind={resumePreviewKind}
+              documentHtml={resumePreviewHtml}
+              loading={resumePreviewLoading}
+              error={resumePreviewError}
+              clear={() => setResumeFile(null)}
+            />
+            <div className="candidateFormGrid">
+              <label>Target role<input value={uploadTargetRole} onChange={(event) => setUploadTargetRole(event.target.value)} placeholder="Data Engineer, Reliability Engineer..." /></label>
+              <label>Upload note<input value={uploadNote} onChange={(event) => setUploadNote(event.target.value)} placeholder="Optional context for this resume" /></label>
+            </div>
+            <button className="primary" type="button" disabled={!resumeFile || busy} onClick={handleUploadResume}>
+              {busy ? <Loader2 size={15} className="spin" /> : <UploadCloud size={15} />} Confirm and parse resume
+            </button>
+            <div className="candidateStartScratchInline">
+              <span>No resume file yet?</span>
+              <button className="secondary" type="button" onClick={handleStartFromScratch}>Start from scratch instead</button>
+            </div>
+            {activeUpload ? (
+              <div className="candidateUploadStatusCard">
+                <span>{humanizeLabel(activeUpload.status)}</span>
+                <strong>{activeUpload.original_filename}</strong>
+                <ProgressBar value={activeUpload.progress} />
+                <p>{activeUpload.status === "succeeded" ? "Your resume is ready to review. Confirm the details before exporting." : activeUpload.stage_label ?? "We are preparing your editable profile."}</p>
+                <button className="secondary" type="button" onClick={() => setActiveSection(activeUpload.status === "succeeded" ? "profile" : "review")}>
+                  {activeUpload.status === "succeeded" ? "Review extracted facts" : "Open resume workspace"}
+                </button>
+              </div>
+            ) : null}
+          </article>
+          <aside className="candidatePortalCard">
+            <div className="candidatePortalSectionHead">
+              <div>
+                <span className="eyebrow">Upload history</span>
+                <h2>Recent uploads</h2>
+              </div>
+            </div>
+            <CandidateUploadList uploads={uploads} activeUploadId={activeUpload?.id ?? ""} selectUpload={(id) => { setActiveUploadId(id); setActiveSection("review"); }} />
+          </aside>
+        </section>
+      ) : null}
+
+      {activeSection === "review" ? (
+        !versionDetailOpen ? (
+          <CandidateVersionDatabase
+            versions={versions}
+            selectedVersionId={selectedVersionId}
+            query={versionQuery}
+            setQuery={setVersionQuery}
+            shares={shares}
+            applications={applications}
+            accessRequests={accessRequests}
+            versionTitle={versionTitle}
+            setVersionTitle={setVersionTitle}
+            targetRole={targetRole}
+            setTargetRole={setTargetRole}
+            busy={busy}
+            createVersion={handleCreateVersion}
+            openVersion={openVersionDetail}
+            editFacts={() => setActiveSection("profile")}
+          />
+        ) : (
+          <section className="candidateResumeWorkspace">
+          <article className="candidatePortalCard cvPreviewCard candidateResumeMain">
+            <div className="candidatePortalSectionHead candidateResumeHead">
+              <div>
+                <span className="eyebrow">Resume preview</span>
+                <h2>{selectedVersion?.title || "Master resume preview"}</h2>
+                <p>Preview the final candidate-owned resume. If something is wrong, fix it in Editor; if it is ready, export or share this version.</p>
+              </div>
+              <div className="candidateVersionActions">
+                <button className="plain" type="button" onClick={() => setVersionDetailOpen(false)}>All versions</button>
+                <button className="primary" type="button" onClick={() => setActiveSection("profile")}>Edit resume</button>
+                <button className="secondary" type="button" disabled={!selectedVersionId} onClick={() => openSubmissionTracker(selectedVersionId)}>Log submission</button>
+                <button className="secondary" type="button" disabled={!selectedVersionId} onClick={handlePreviewSelectedVersion}>Open HTML</button>
+                <button className="secondary" type="button" disabled={!selectedVersionId} onClick={handleExportSelectedVersion}>
+                  <FileSearch size={15} /> Download PDF
+                </button>
+                <button className="secondary" type="button" disabled={!selectedVersionId} onClick={() => navigator.clipboard?.writeText(window.location.href)}>Copy link</button>
+                <button className="plain dangerText" type="button" disabled={!selectedVersionId} onClick={handleArchiveSelectedVersion}>Archive</button>
+              </div>
+            </div>
+            <CandidateCvPreview resume={resume} templateId={selectedTemplateId} />
+          </article>
+          <aside className="candidateResumeRail">
+            <CandidateTemplateSelector selectedTemplateId={selectedTemplateId} setSelectedTemplateId={setSelectedTemplateId} />
+            <CandidateAtsConfidencePanel profile={profile?.profile ?? {}} resume={resume} selectedTemplateId={selectedTemplateId} versions={versions} applications={applications} />
+            <CandidateVersionDiffPanel baseResume={candidateResumeFromProfile(profile?.profile ?? {})} version={selectedVersion} resume={resume} />
+            <article className="candidatePortalCard candidateNextActionCard">
+              <span className="eyebrow">What to do next</span>
+              <h2>{selectedVersionId ? "This version is ready to use" : "Create or select a version"}</h2>
+              <p>Edit the resume content, preview/export this version, or tailor it for a job.</p>
+              <div className="candidateNextActions">
+                <button className="primary" type="button" onClick={() => setActiveSection("profile")}>Edit resume</button>
+                <button className="secondary" type="button" onClick={() => setVersionDetailOpen(false)}>Manage versions</button>
+                <button className="secondary" type="button" disabled={!selectedVersionId} onClick={() => setActiveSection("match")}>Match to a job</button>
+                <button className="secondary" type="button" disabled={!selectedVersionId} onClick={() => openSubmissionTracker(selectedVersionId)}>Log where used</button>
+              </div>
+            </article>
+            <CandidateApplicationTracker
+              applications={selectedVersionApplications}
+              selectedVersionId={selectedVersionId}
+              destination={applicationDestination}
+              setDestination={setApplicationDestination}
+              destinationType={applicationDestinationType}
+              setDestinationType={setApplicationDestinationType}
+              jobTitle={applicationJobTitle}
+              setJobTitle={setApplicationJobTitle}
+              jobUrl={applicationJobUrl}
+              setJobUrl={setApplicationJobUrl}
+              status={applicationStatus}
+              setStatus={setApplicationStatus}
+              note={applicationNote}
+              setNote={setApplicationNote}
+              createShare={applicationCreateShare}
+              setCreateShare={setApplicationCreateShare}
+              includePii={applicationIncludePii}
+              setIncludePii={setApplicationIncludePii}
+              busy={busy}
+              save={handleCreateApplication}
+              updateStatus={handleUpdateApplicationStatus}
+            />
+            <article id="candidate-version-card" className="candidatePortalCard">
+              <div className="candidatePortalSectionHead">
+                <div>
+                  <span className="eyebrow">Versions</span>
+                  <h2>Application vault</h2>
+                  <p>Create targeted versions from the same approved profile data.</p>
+                </div>
+              </div>
+              <label>Version title<input value={versionTitle} onChange={(event) => setVersionTitle(event.target.value)} /></label>
+              <label>Target role<input value={targetRole} onChange={(event) => setTargetRole(event.target.value)} placeholder="Data Engineer, Reliability Engineer..." /></label>
+              <button className="primary fullWidth" type="button" onClick={handleCreateVersion} disabled={busy || !versionTitle.trim()}>Create version</button>
+              <div className="candidateVersionList compact">
+                {versions.length ? versions.map((version) => (
+                  <button key={version.id} className={selectedVersionId === version.id ? "active" : ""} type="button" onClick={() => setSelectedVersionId(version.id)}>
+                    <strong>{version.title}</strong>
+                    <span>{version.target_role || "General"} · {formatDateTime(version.updated_at)}</span>
+                  </button>
+                )) : <EmptyPanel title="No versions yet" body="Upload and parse a resume, then create the first version." />}
+              </div>
+            </article>
+            <details className="candidateControlDisclosure">
+              <summary>Recruiter visibility and sharing</summary>
+              <CandidateVisibilityPanel
+                settings={privacySettings}
+                busy={busy}
+                toggleNativeSearch={handleToggleNativeSearch}
+              />
+              <CandidateSharePanel
+                shares={shares}
+                selectedVersionId={selectedVersionId}
+                shareLabel={shareLabel}
+                setShareLabel={setShareLabel}
+                includePii={shareIncludePii}
+                setIncludePii={setShareIncludePii}
+                busy={busy}
+                createShare={handleCreateShare}
+                revokeShare={handleRevokeShare}
+              />
+              <CandidateAccessRequestsPanel
+                accessRequests={accessRequests}
+                busy={busy}
+                decide={handleAccessDecision}
+              />
+            </details>
+          </aside>
+        </section>
+        )
+      ) : null}
+
+      {activeSection === "profile" ? (
+        <section className="candidateAiEditorShell">
+          <article className="candidateAiEditorMain">
+            <header className="candidateAiEditorHero">
+              <div>
+                <span className="eyebrow">AI resume editor</span>
+                <h1>Edit the resume people will actually read.</h1>
+                <p>Change the resume directly, use the coach to improve positioning, then preview the exact version before exporting.</p>
+              </div>
+              <div>
+                <button className="secondary" type="button" onClick={() => setActiveSection("review")}>Preview resume</button>
+                <button className="secondary" type="button" onClick={() => document.querySelector(".candidateJobAiEditor")?.scrollIntoView({ behavior: "smooth", block: "start" })}>Job editor</button>
+                <button className="primary" type="button" onClick={handleSave} disabled={busy}>Save changes</button>
+              </div>
+            </header>
+            {scratchMode || (!latestUpload && !versions.length) ? (
+              <CandidateScratchBuilderGuide
+                busy={busy}
+                saveProfile={handleSave}
+                createVersion={handleSaveAndCreateVersion}
+              />
+            ) : null}
+            <div className="candidateAiEditorBody">
+              <aside className="candidateEditorSectionNav" aria-label="Resume sections">
+                {[
+                  ["Identity", "Name, links, location"],
+                  ["Summary", "Career positioning"],
+                  ["Experience", "Roles and bullets"],
+                  ["Projects", "Proof of work"],
+                  ["Education", "Schools and degrees"],
+                  ["Skills", "Keywords and tools"],
+                  ["Optional", "Links, awards, references"],
+                ].map(([title, body]) => (
+                  <button key={title} type="button" onClick={() => document.querySelector(`[data-candidate-editor-section="${title}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+                    <strong>{title}</strong>
+                    <span>{body}</span>
+                  </button>
+                ))}
+              </aside>
+              <div className="candidateEditorFormSurface">
+                {renderProfileEditor("profile", false)}
+              </div>
+            </div>
+          </article>
+          <aside className="candidateAiEditorRail">
+            <CandidateBulletRewriteCard
+              experienceItems={experienceItems}
+              setExperienceItems={setExperienceItems}
+            />
+            <CandidateJobAiEditor
+              versions={versions}
+          selectedVersionId={selectedVersionId}
+          setSelectedVersionId={setSelectedVersionId}
+          targetRole={targetRole}
+          setTargetRole={setTargetRole}
+          requirementText={requirementText}
+          setRequirementText={updateRequirementText}
+          match={selfMatch}
+          busy={busy}
+              analyze={handleMatchRequirement}
+              createTargetedVersion={handleCreateTargetedVersion}
+              openJobBoard={() => setActiveSection("match")}
+            />
+            <CandidateCoachChat
+              messages={coachMessages}
+              input={coachInput}
+              setInput={setCoachInput}
+              send={sendCoachMessage}
+              enhancement={normalizedAiEnhancement(draft.ai_enhancement)}
+              applyHeadline={(value) => updateDraft("headline", value)}
+              applySummary={(value) => updateDraft("summary", value)}
+            />
+            <article className="candidatePortalCard">
+              <div className="candidatePortalSectionHead">
+                <div>
+                  <span className="eyebrow">Readiness</span>
+                  <h2>{needsReview.length ? `${needsReview.length} review items` : "Looks clean"}</h2>
+                  <p>Fix only the items that would hurt the resume or confuse a recruiter.</p>
+                </div>
+              </div>
+              <div className="candidateNeedsList">
+                {needsReview.length ? needsReview.map((item, index) => (
+                  <article key={`${item.field ?? "review"}-${index}`}>
+                    <strong>{item.label ?? item.field}</strong>
+                    <span>{item.reason}</span>
+                  </article>
+                )) : <EmptyPanel title="No blocking checks" body="Still verify dates, links, and role titles before exporting." />}
+              </div>
+              <button className="secondary fullWidth" type="button" onClick={() => setActiveSection("review")}>Preview/export</button>
+            </article>
+          </aside>
+        </section>
+      ) : null}
+
+      {activeSection === "match" ? (
+        <section className="candidatePortalGrid">
+        <CandidatePracticalJobBoard
+          profile={profile?.profile ?? {}}
+          versions={versions}
+          selectedVersionId={selectedVersionId}
+          setSelectedVersionId={setSelectedVersionId}
+          setRequirementText={updateRequirementText}
+        />
+        <article className="candidatePortalCard">
+          <div className="candidatePortalSectionHead">
+            <div>
+              <span className="eyebrow">Resume version</span>
+              <h2>Match a specific job</h2>
+              <p>Use a practical job card as a starting point or paste a real requirement.</p>
+            </div>
+          </div>
+          <label>Resume version
+            <select value={selectedVersionId} onChange={(event) => setSelectedVersionId(event.target.value)}>
+              <option value="">Select version</option>
+              {versions.map((version) => <option value={version.id} key={version.id}>{version.title} · {version.target_role || "General"}</option>)}
+            </select>
+          </label>
+          <textarea value={requirementText} onChange={(event) => updateRequirementText(event.target.value)} rows={9} placeholder="Paste a job requirement here..." />
+          <button className="primary fullWidth" type="button" onClick={handleMatchRequirement} disabled={busy || !selectedVersionId || requirementText.trim().length < 20}>Match this version</button>
+          {selfMatch ? (
+            <div className="candidateSelfMatch">
+              <strong>{selfMatch.score}% · {humanizeLabel(selfMatch.fit_label)}</strong>
+              <p>{selfMatch.summary}</p>
+              <span>{selfMatch.recommended_next_action}</span>
+              <div>
+                <h4>Matched</h4>
+                <p>{selfMatch.matched_terms.slice(0, 18).join(", ") || "No clear matched terms yet."}</p>
+              </div>
+              <div>
+                <h4>Missing or unclear</h4>
+                <p>{selfMatch.missing_or_unclear_terms.slice(0, 18).join(", ") || "No major missing terms detected."}</p>
+              </div>
+              <small>{selfMatch.privacy_note}</small>
+            </div>
+          ) : null}
+        </article>
+        </section>
+      ) : null}
+    </section>
+  );
+}
+
+function CandidateHomeCommandCenter({
+  profile,
+  latestUpload,
+  activeUpload,
+  versions,
+  applications,
+  accessRequests,
+  profileCompleteness,
+  needsReview,
+  resume,
+  selectedVersion,
+  selectedTemplateId,
+  busy,
+  uploadInProgress,
+  openUpload,
+  startFromScratch,
+  openEditor,
+  openVersions,
+  openCreateVersion,
+  openVersion,
+  openJobBoard,
+  openSubmissionTracker,
+}: {
+  profile: CandidatePortalProfile["profile"];
+  latestUpload: CandidateResumeUpload | null;
+  activeUpload: CandidateResumeUpload | null;
+  versions: CandidateResumeVersion[];
+  applications: CandidateApplication[];
+  accessRequests: CandidateAccessRequest[];
+  profileCompleteness: number;
+  needsReview: Array<Record<string, any>>;
+  resume: Record<string, any>;
+  selectedVersion: CandidateResumeVersion | null;
+  selectedTemplateId: string;
+  busy: boolean;
+  uploadInProgress: boolean;
+  openUpload: () => void;
+  startFromScratch: () => void;
+  openEditor: () => void;
+  openVersions: () => void;
+  openCreateVersion: () => void;
+  openVersion: (versionId: string) => void;
+  openJobBoard: () => void;
+  openSubmissionTracker: (versionId?: string) => void;
+}) {
+  const displayName = textValue(profile.display_name) || "Your resume";
+  const firstName = displayName === "Your resume" ? "Build" : displayName.split(/\s+/)[0];
+  const headline = textValue(profile.headline) || "Upload a resume to build your candidate-owned profile.";
+  const latestVersion = selectedVersion ?? versions[0] ?? null;
+  const pendingAccessCount = accessRequests.filter((request) => request.status === "pending").length;
+  const recentApplication = applications[0] ?? null;
+  const visibleFixes = needsReview.filter((item) => !candidateReviewItemAlreadyResolved(profile, item)).slice(0, 3);
+  const readinessLabel = profileCompleteness >= 90 ? "Ready to apply" : profileCompleteness >= 70 ? "Almost ready" : "Needs review";
+  const versionSummary = latestVersion ? `${latestVersion.title} · ${latestVersion.target_role || "General"}` : "Create the first resume version after upload.";
+  const nextActionTitle = uploadInProgress ? "Parsing your resume" : visibleFixes.length ? "Review the extracted facts" : versions.length ? "Tailor this resume to a job" : "Start your resume";
+  const nextActionBody = uploadInProgress
+    ? `${activeUpload?.stage_label ?? "Parsing"} · ${activeUpload?.progress ?? 0}%`
+    : visibleFixes.length
+      ? visibleFixes[0]?.reason ?? "Verify the extracted fields before exporting."
+      : versions.length
+        ? "Use AI to compare this version against a job brief and create a sharper application copy."
+        : "Upload an existing file or start from scratch with a guided builder. You approve every fact before export.";
+  const nextAction = visibleFixes.length ? openEditor : versions.length ? openJobBoard : openUpload;
+  const nextActionLabel = visibleFixes.length ? "Review now" : versions.length ? "Match to a job" : "Upload resume";
+
+  return (
+    <section className="candidateCommandCenter candidateHomeStudio">
+      <article className="candidateHomeResumeStage">
+        <header>
+          <div>
+            <span className="eyebrow">My resume</span>
+            <h1>{displayName === "Your resume" ? "Build a resume you can actually control." : `${firstName}, this is the resume you control.`}</h1>
+            <p>Edit it, tailor it, export it, and track where each version goes.</p>
+          </div>
+          <div className="candidateHomeStageActions">
+            <button className="primary" type="button" onClick={latestUpload ? openEditor : openUpload}>
+              {latestUpload ? "Edit resume" : "Upload resume"}
+            </button>
+            <button className="secondary" type="button" onClick={startFromScratch}>
+              Start from scratch
+            </button>
+            <button className="secondary" type="button" onClick={openCreateVersion}>
+              Create version
+            </button>
+            <button className="secondary" type="button" disabled={!latestVersion} onClick={() => latestVersion ? openVersion(latestVersion.id) : undefined}>
+              Preview
+            </button>
+          </div>
+        </header>
+        <article className="candidateHomeResumePaper" aria-label="Scrollable resume preview">
+          <CandidateCvPreview resume={resume} templateId={selectedTemplateId} />
+        </article>
+      </article>
+
+      <aside className="candidateHomeSide">
+        <section className="candidateHomeCoachCard">
+          <span className="eyebrow">AI coach</span>
+          <h2>{nextActionTitle}</h2>
+          <p>{nextActionBody}</p>
+          {uploadInProgress && activeUpload ? <ProgressBar value={activeUpload.progress} /> : null}
+          <button className="primary fullWidth" type="button" disabled={busy && !uploadInProgress} onClick={nextAction}>{nextActionLabel}</button>
+          {!versions.length ? <button className="secondary fullWidth" type="button" onClick={startFromScratch}>Start from scratch</button> : null}
+        </section>
+
+        <section className="candidateHomeSimpleCard candidateHomeControlCard">
+          <span className="eyebrow">Resume control</span>
+          <h2>{readinessLabel}</h2>
+          <p>{headline}</p>
+          <div className="candidateHomeControlRows">
+            <button type="button" onClick={openEditor}>
+              <strong>Master profile</strong>
+              <span>{profileCompleteness}% complete · {profile.current_location || "location unclear"}</span>
+            </button>
+            <button type="button" disabled={!latestVersion} onClick={() => latestVersion ? openVersion(latestVersion.id) : undefined}>
+              <strong>Current version</strong>
+              <span>{versionSummary}</span>
+            </button>
+            <button type="button" disabled={!latestVersion} onClick={() => latestVersion ? openSubmissionTracker(latestVersion.id) : undefined}>
+              <strong>Submission memory</strong>
+              <span>{recentApplication ? `${recentApplication.destination_name} · ${humanizeLabel(recentApplication.status)}` : "Nothing logged yet"}</span>
+            </button>
+          </div>
+          <div className="candidateHomeMiniActions">
+            <button className="secondary" type="button" onClick={openCreateVersion}>Create version</button>
+            <button className="secondary" type="button" onClick={openVersions} disabled={!versions.length}>All versions</button>
+            <button className="secondary" type="button" disabled={!latestVersion} onClick={() => latestVersion ? openSubmissionTracker(latestVersion.id) : undefined}>Log submission</button>
+            <button
+              className="secondary"
+              type="button"
+              disabled={!latestVersion}
+              onClick={() => {
+                if (latestVersion) window.location.href = candidateResumeVersionPdfPath(latestVersion.id, selectedTemplateId);
+              }}
+            >
+              Download PDF
+            </button>
+          </div>
+          {pendingAccessCount ? <p>{pendingAccessCount} recruiter access request{pendingAccessCount === 1 ? "" : "s"} waiting for your decision.</p> : null}
+        </section>
+
+        <CandidateAtsConfidencePanel profile={profile} resume={resume} selectedTemplateId={selectedTemplateId} versions={versions} applications={applications} />
+
+        {recentApplication ? (
+          <section className="candidateHomeSimpleCard candidateSubmissionSnapshot">
+            <span className="eyebrow">Last shared</span>
+            <h2>{recentApplication.destination_name}</h2>
+            <p>{[recentApplication.job_title, humanizeLabel(recentApplication.status)].filter(Boolean).join(" · ")}</p>
+            <button className="secondary" type="button" onClick={() => openSubmissionTracker(recentApplication.resume_version_id || undefined)}>View submission history</button>
+          </section>
+        ) : (
+          <section className="candidateHomeSimpleCard candidateSubmissionSnapshot">
+            <span className="eyebrow">Submission tracker</span>
+            <h2>Know what you sent where</h2>
+            <p>Log each company, recruiter, job board, or LinkedIn conversation against the exact resume version used.</p>
+            <button className="secondary" type="button" disabled={!latestVersion} onClick={() => latestVersion ? openSubmissionTracker(latestVersion.id) : undefined}>Log first submission</button>
+          </section>
+        )}
+      </aside>
+    </section>
+  );
+}
+
+function candidateReviewItemAlreadyResolved(profile: CandidatePortalProfile["profile"], item: Record<string, any>) {
+  const label = String(item.field ?? item.label ?? "").toLowerCase();
+  const hasValue = (value: unknown) => Boolean(textValue(value).trim());
+  if (label.includes("location")) return hasValue(profile.current_location);
+  if (label.includes("email")) return hasValue(profile.email);
+  if (label.includes("phone")) return hasValue(profile.phone);
+  if (label.includes("linkedin")) return hasValue(profile.linkedin_url);
+  if (label.includes("portfolio")) return hasValue(profile.portfolio_url) || hasValue(profile.github_url);
+  if (label.includes("github")) return hasValue(profile.github_url);
+  if (label.includes("name")) return hasValue(profile.display_name);
+  if (label.includes("headline") || label.includes("title")) return hasValue(profile.headline);
+  if (label.includes("summary")) return hasValue(profile.summary);
+  if (label.includes("skill")) return toTextList(profile.skills).length > 0;
+  if (label.includes("experience") || label.includes("role")) return Array.isArray(profile.experience) && profile.experience.length > 0;
+  if (label.includes("education")) return Array.isArray(profile.education) && profile.education.length > 0;
+  return false;
+}
+
+function CandidatePreParsePreview({
+  file,
+  previewUrl,
+  previewKind,
+  documentHtml,
+  loading,
+  error,
+  clear,
+}: {
+  file: File | null;
+  previewUrl: string;
+  previewKind: "pdf" | "image" | "document" | "none";
+  documentHtml: string;
+  loading: boolean;
+  error: string;
+  clear: () => void;
+}) {
+  if (!file) {
+    return (
+      <div className="candidatePreParsePreview empty">
+        <FileSearch size={18} />
+        <div>
+          <strong>Preview before extraction</strong>
+          <span>Select the file first. Nothing is parsed until you confirm.</span>
+        </div>
+      </div>
+    );
+  }
+  const sizeLabel = formatBytes(file.size);
+  return (
+    <article className="candidatePreParsePreview">
+      <header>
+        <div>
+          <span className="eyebrow">Confirm file before parsing</span>
+          <strong>{file.name}</strong>
+          <small>{sizeLabel} · {file.type || "Unknown type"}</small>
+        </div>
+        <button className="plain small" type="button" onClick={clear}>Replace file</button>
+      </header>
+      {previewKind === "pdf" ? (
+        <iframe src={previewUrl} title="Selected resume preview before extraction" />
+      ) : null}
+      {previewKind === "image" ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={previewUrl} alt="Selected resume preview before extraction" />
+      ) : null}
+      {previewKind === "document" ? (
+        loading ? (
+          <div className="candidatePreParseFallback">
+            <Loader2 size={20} className="spin" />
+            <strong>Building safe document preview</strong>
+            <span>This does not extract the resume into your profile yet.</span>
+          </div>
+        ) : error ? (
+          <div className="candidatePreParseFallback">
+            <AlertTriangle size={20} />
+            <strong>Preview unavailable</strong>
+            <span>{error}</span>
+          </div>
+        ) : documentHtml ? (
+          <div className="docxPreview candidatePreParseDocHtml" dangerouslySetInnerHTML={{ __html: documentHtml }} />
+        ) : (
+          <div className="candidatePreParseFallback">
+            <FileSearch size={20} />
+            <strong>Document selected</strong>
+            <span>Confirm this is the right file before extraction.</span>
+          </div>
+        )
+      ) : null}
+    </article>
+  );
+}
+
+function CandidateVersionDatabase({
+  versions,
+  selectedVersionId,
+  query,
+  setQuery,
+  shares,
+  applications,
+  accessRequests,
+  versionTitle,
+  setVersionTitle,
+  targetRole,
+  setTargetRole,
+  busy,
+  createVersion,
+  openVersion,
+  editFacts,
+}: {
+  versions: CandidateResumeVersion[];
+  selectedVersionId: string;
+  query: string;
+  setQuery: (value: string) => void;
+  shares: CandidateResumeShare[];
+  applications: CandidateApplication[];
+  accessRequests: CandidateAccessRequest[];
+  versionTitle: string;
+  setVersionTitle: (value: string) => void;
+  targetRole: string;
+  setTargetRole: (value: string) => void;
+  busy: boolean;
+  createVersion: () => Promise<void>;
+  openVersion: (versionId: string) => void;
+  editFacts: () => void;
+}) {
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredVersions = versions.filter((version) => {
+    if (!normalizedQuery) return true;
+    const resume = version.resume_json ?? {};
+    const haystack = [
+      version.title,
+      version.target_role,
+      version.status,
+      resume.headline,
+      resume.summary,
+      ...toTextList(resume.skills),
+      ...(Array.isArray(resume.experience) ? resume.experience.flatMap((item) => [item.title, item.company, ...(toTextList(item.bullets))]) : []),
+    ].filter(Boolean).join(" ").toLowerCase();
+    return haystack.includes(normalizedQuery);
+  });
+  const roleCount = new Set(versions.map((version) => version.target_role).filter(Boolean)).size;
+  const activeShareCount = shares.filter((share) => share.status === "active").length;
+  const destinationCount = new Set(applications.map((item) => item.destination_name).filter(Boolean)).size;
+  const pendingAccessCount = accessRequests.filter((request) => request.status === "pending").length;
+  return (
+    <section className="databasePage candidateVersionDatabasePage">
+      <header className="profilesHeader">
+        <div>
+          <span className="eyebrow">Resume versions</span>
+          <h2>Application Vault</h2>
+          <p>Search, open, edit, export, and track every resume version from one place.</p>
+        </div>
+        <div className="profilesResultCount">
+          <strong>{filteredVersions.length}</strong>
+          <span>shown of {versions.length}</span>
+        </div>
+      </header>
+
+      <div className="profilesMetricStrip">
+        <article>
+          <div className="profileMetricCardHead"><span>Total Versions</span></div>
+          <strong>{versions.length}</strong>
+          <em>Exportable resumes</em>
+        </article>
+        <article>
+          <div className="profileMetricCardHead"><span>Target Roles</span></div>
+          <strong>{roleCount}</strong>
+          <em>Application directions</em>
+        </article>
+        <article>
+          <div className="profileMetricCardHead"><span>Shared To</span></div>
+          <strong>{destinationCount}</strong>
+          <em>{activeShareCount} active links</em>
+        </article>
+        <article className={pendingAccessCount ? "attention" : ""}>
+          <div className="profileMetricCardHead">
+            <span>Access Requests</span>
+            {pendingAccessCount ? <i className="profileMetricHazard" aria-label="Needs attention"><AlertTriangle size={14} /></i> : null}
+          </div>
+          <strong>{pendingAccessCount}</strong>
+          <em>Awaiting approval</em>
+        </article>
+      </div>
+
+      <CandidateVersionWorkflowCard createVersion={createVersion} editFacts={editFacts} busy={busy} hasVersions={versions.length > 0} />
+
+      <section className="candidateVersionDatabaseGrid">
+        <div>
+          <section className="profileSearchPanel">
+            <form className="semanticSearch" onSubmit={(event) => event.preventDefault()}>
+              <Search size={20} />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search versions by role, skill, company, or resume content" />
+              <button type="submit">Search</button>
+            </form>
+            <div className="filterRow">
+              <button className="filterChip" onClick={() => setQuery("")}>Clear</button>
+              <button className="filterChip" onClick={editFacts}>Edit resume</button>
+            </div>
+          </section>
+          <div className="table candidateVersionTable">
+            <div className="tableRow header">
+              <span>Version</span>
+              <span>Target</span>
+              <span>Evidence</span>
+              <span>Status</span>
+              <span>Updated</span>
+            </div>
+            {!filteredVersions.length ? (
+              <div className="tableEmpty">
+                <strong>No resume versions match this view.</strong>
+                <span>Create a version from the approved master profile, or clear the search.</span>
+              </div>
+            ) : null}
+            {filteredVersions.map((version) => {
+              const resume = version.resume_json ?? {};
+              const evidence = versionEvidenceSummary(resume);
+              return (
+                <button className={selectedVersionId === version.id ? "tableRow active" : "tableRow"} key={version.id} onClick={() => openVersion(version.id)}>
+                  <span className="truncateCell candidateListNameCell" title={version.title}>
+                    <span>{version.title}</span>
+                    <small>{resume.headline || "Resume version"}</small>
+                  </span>
+                  <span className="truncateCell" title={version.target_role || "General"}>{version.target_role || "General"}</span>
+                  <span className="truncateCell" title={evidence}>{evidence}</span>
+                  <span><b className="riskBadge">{humanizeLabel(version.status || "ready")}</b></span>
+                  <span>{version.updated_at ? new Date(version.updated_at).toLocaleDateString() : "N/A"}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <aside className="candidatePortalCard candidateVersionCreateCard">
+          <div className="candidatePortalSectionHead">
+            <div>
+              <span className="eyebrow">Create version</span>
+              <h2>New application resume</h2>
+              <p>Use your approved resume content, then export or tailor this version.</p>
+            </div>
+          </div>
+          <label>Version title<input value={versionTitle} onChange={(event) => setVersionTitle(event.target.value)} /></label>
+          <label>Target role<input value={targetRole} onChange={(event) => setTargetRole(event.target.value)} placeholder="Data Engineer, Reliability Engineer..." /></label>
+          <button className="primary fullWidth" type="button" onClick={createVersion} disabled={busy || !versionTitle.trim()}>Create and open</button>
+          <button className="secondary fullWidth" type="button" onClick={editFacts}>Edit resume first</button>
+        </aside>
+      </section>
+      <CandidateSubmissionHistory applications={applications} versions={versions} openVersion={openVersion} />
+    </section>
+  );
+}
+
+function CandidateVersionWorkflowCard({
+  createVersion,
+  editFacts,
+  busy,
+  hasVersions,
+}: {
+  createVersion: () => Promise<void>;
+  editFacts: () => void;
+  busy: boolean;
+  hasVersions: boolean;
+}) {
+  return (
+    <section className="candidateVersionWorkflowCard">
+      <div>
+        <span className="eyebrow">How versions work</span>
+        <h3>One master profile. Many application resumes.</h3>
+        <p>Keep the facts in one place, create a focused version for each role, export a clean PDF, then log where that version was sent.</p>
+      </div>
+      <div>
+        <span>1. Review facts</span>
+        <span>2. Create version</span>
+        <span>3. Tailor to job</span>
+        <span>4. Export and track</span>
+      </div>
+      <footer>
+        <button className="secondary" type="button" onClick={editFacts}>Edit master profile</button>
+        <button className="primary" type="button" disabled={busy} onClick={createVersion}>{hasVersions ? "Create another version" : "Create first version"}</button>
+      </footer>
+    </section>
+  );
+}
+
+function CandidateSubmissionHistory({
+  applications,
+  versions,
+  openVersion,
+}: {
+  applications: CandidateApplication[];
+  versions: CandidateResumeVersion[];
+  openVersion: (versionId: string) => void;
+}) {
+  const versionById = new Map(versions.map((version) => [version.id, version]));
+  return (
+    <section className="candidateSubmissionHistory">
+      <div className="candidatePortalSectionHead">
+        <div>
+          <span className="eyebrow">Submission history</span>
+          <h2>Which resume went where</h2>
+          <p>Each application points to the exact resume version used, so later edits do not rewrite old submissions.</p>
+        </div>
+      </div>
+      <div className="candidateSubmissionRows">
+        {applications.length ? applications.slice(0, 10).map((application) => {
+          const versionId = application.resume_version_id || "";
+          const version = versionById.get(versionId);
+          return (
+            <article key={application.id}>
+              <div>
+                <strong>{application.destination_name}</strong>
+                <span>{[application.job_title, humanizeLabel(application.destination_type), humanizeLabel(application.status)].filter(Boolean).join(" · ")}</span>
+                <small>{version?.title || application.version_title || "Resume version"} · {formatDateTime(application.shared_at)}</small>
+              </div>
+              <button className="secondary small" type="button" disabled={!versionId} onClick={() => openVersion(versionId)}>Open version</button>
+            </article>
+          );
+        }) : <EmptyPanel title="No submissions logged yet" body="Open a resume version and use “Log submission” when you send it to a company, recruiter, job board, or LinkedIn contact." />}
+      </div>
+    </section>
+  );
+}
+
+function CandidateScratchBuilderGuide({
+  busy,
+  saveProfile,
+  createVersion,
+}: {
+  busy: boolean;
+  saveProfile: () => Promise<void>;
+  createVersion: () => Promise<void>;
+}) {
+  const steps = [
+    ["Identity", "Add name, contact, location, LinkedIn, GitHub, or portfolio only if you have them."],
+    ["Direction", "Write the target role and a rough summary. The coach can tighten it after facts exist."],
+    ["Evidence", "Add education, roles, projects, skills, certifications, publications, or references as needed."],
+    ["Version", "Save the profile, then create a version for the first application."],
+  ];
+  return (
+    <section className="candidateScratchGuide">
+      <div>
+        <span className="eyebrow">Start from scratch</span>
+        <h2>No resume file needed.</h2>
+        <p>Use the structured editor below as the source of truth. Add only facts you can defend, then create a resume version and export it.</p>
+      </div>
+      <ol>
+        {steps.map(([title, body]) => (
+          <li key={title}>
+            <strong>{title}</strong>
+            <span>{body}</span>
+          </li>
+        ))}
+      </ol>
+      <div>
+        <button className="primary" type="button" disabled={busy} onClick={saveProfile}>Save profile</button>
+        <button className="secondary" type="button" disabled={busy} onClick={createVersion}>Save and create first version</button>
+      </div>
+    </section>
+  );
+}
+
+function CandidatePracticalJobBoard({
+  profile,
+  versions,
+  selectedVersionId,
+  setSelectedVersionId,
+  setRequirementText,
+}: {
+  profile: CandidatePortalProfile["profile"];
+  versions: CandidateResumeVersion[];
+  selectedVersionId: string;
+  setSelectedVersionId: (versionId: string) => void;
+  setRequirementText: (value: string) => void;
+}) {
+  const cards = practicalJobCardsForCandidate(profile, versions);
+  return (
+    <section className="candidateJobBoardPanel">
+      <div className="candidatePortalSectionHead">
+        <div>
+          <span className="eyebrow">Practical job board</span>
+          <h2>Roles worth testing</h2>
+          <p>These are not random jobs. They are practical targets inferred from the approved profile, skills, projects, and existing versions.</p>
+        </div>
+      </div>
+      <div className="candidateJobCards">
+        {cards.length ? cards.map((card) => (
+          <article key={card.role}>
+            <div>
+              <strong>{card.role}</strong>
+              <span>{card.fit}</span>
+            </div>
+            <p>{card.reason}</p>
+            <div className="nativeCandidateTags">
+              {card.keywords.slice(0, 6).map((keyword) => <span key={keyword}>{keyword}</span>)}
+            </div>
+            <footer>
+              <small>{card.versionTitle || "Use any version"}</small>
+              <button className="secondary small" type="button" onClick={() => {
+                if (card.versionId && card.versionId !== selectedVersionId) setSelectedVersionId(card.versionId);
+                setRequirementText(card.requirementText);
+              }}>Use as job brief</button>
+            </footer>
+          </article>
+        )) : (
+          <EmptyPanel title="No practical roles yet" body="Upload and parse a resume first. The job board should only show practical roles after the profile has evidence." />
+        )}
+      </div>
+    </section>
+  );
+}
+
+function CandidateTemplateSelector({
+  selectedTemplateId,
+  setSelectedTemplateId,
+}: {
+  selectedTemplateId: string;
+  setSelectedTemplateId: (value: string) => void;
+}) {
+  return (
+    <article className="candidatePortalCard candidateTemplateSelector">
+      <div className="candidatePortalSectionHead">
+        <div>
+          <span className="eyebrow">PDF templates</span>
+          <h2>Choose export style</h2>
+          <p>All templates are standardized and ATS-safe. The candidate verifies the look before downloading.</p>
+        </div>
+      </div>
+      <div className="candidateTemplateGrid">
+        {CANDIDATE_RESUME_TEMPLATES.map((template) => (
+          <button
+            key={template.id}
+            className={selectedTemplateId === template.id ? "active" : ""}
+            type="button"
+            onClick={() => setSelectedTemplateId(template.id)}
+          >
+            <i />
+            <strong>{template.name}</strong>
+            <span>{template.tone}</span>
+            <small>{template.note}</small>
+          </button>
+        ))}
+      </div>
+      <p className="candidateTemplateActiveLabel">Preview is using {selectedTemplateLabel(selectedTemplateId)}.</p>
+    </article>
+  );
+}
+
+function CandidateAtsConfidencePanel({
+  profile,
+  resume,
+  selectedTemplateId,
+  versions,
+  applications,
+}: {
+  profile: CandidatePortalProfile["profile"];
+  resume: Record<string, any>;
+  selectedTemplateId: string;
+  versions: CandidateResumeVersion[];
+  applications: CandidateApplication[];
+}) {
+  const checks = candidateAtsSignals(profile, resume, selectedTemplateId, versions, applications);
+  const passed = checks.filter((item) => item.ok).length;
+  const score = Math.round((passed / checks.length) * 100);
+  return (
+    <article className="candidatePortalCard candidateAtsPanel">
+      <div className="candidatePortalSectionHead">
+        <div>
+          <span className="eyebrow">ATS confidence</span>
+          <h2>{score}% ready</h2>
+          <p>Checks for the practical things that usually break resume screening before export.</p>
+        </div>
+        <strong>{selectedTemplateLabel(selectedTemplateId)}</strong>
+      </div>
+      <div className="candidateAtsMeter"><i style={{ width: `${score}%` }} /></div>
+      <div className="candidateAtsChecks">
+        {checks.map((item) => (
+          <span key={item.label} className={item.ok ? "ok" : "warn"}>
+            {item.ok ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
+            {item.label}
+          </span>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function CandidateVersionDiffPanel({
+  baseResume,
+  version,
+  resume,
+}: {
+  baseResume: Record<string, any>;
+  version: CandidateResumeVersion | null;
+  resume: Record<string, any>;
+}) {
+  const baseSkills = toTextList(baseResume.skills).map((item) => item.toLowerCase());
+  const versionSkills = toTextList(resume.skills);
+  const prioritizedSkills = versionSkills.filter((item) => !baseSkills.includes(item.toLowerCase())).slice(0, 8);
+  const targetRole = textValue(resume.job_tailoring?.target_role || version?.target_role || resume.headline);
+  const matchedTerms = toTextList(resume.job_tailoring?.matched_terms).slice(0, 8);
+  const missingTerms = toTextList(resume.job_tailoring?.missing_or_unclear_terms).slice(0, 8);
+  const changes = [
+    {
+      label: "Headline",
+      value: textValue(baseResume.headline) === textValue(resume.headline) ? "Same as master profile" : `${textValue(baseResume.headline) || "No master headline"} -> ${textValue(resume.headline) || "No version headline"}`,
+    },
+    {
+      label: "Experience",
+      value: `${Array.isArray(resume.experience) ? resume.experience.length : 0} roles carried into this version`,
+    },
+    {
+      label: "Projects",
+      value: `${Array.isArray(resume.projects) ? resume.projects.length : 0} projects carried into this version`,
+    },
+  ];
+  return (
+    <article className="candidatePortalCard candidateVersionDiffPanel">
+      <div className="candidatePortalSectionHead">
+        <div>
+          <span className="eyebrow">Version changes</span>
+          <h2>{targetRole ? `Tailored for ${targetRole}` : "Compared with master profile"}</h2>
+          <p>Shows what this version emphasizes without hiding missing or unclear evidence.</p>
+        </div>
+      </div>
+      <div className="candidateVersionDiffRows">
+        {changes.map((item) => (
+          <span key={item.label}><strong>{item.label}</strong>{item.value}</span>
+        ))}
+      </div>
+      {prioritizedSkills.length || matchedTerms.length ? (
+        <div className="candidateDiffTags">
+          {[...prioritizedSkills, ...matchedTerms].slice(0, 12).map((item) => <span key={item}>{item}</span>)}
+        </div>
+      ) : null}
+      {missingTerms.length ? (
+        <div className="candidateMissingTerms">
+          <strong>Missing or unclear</strong>
+          <p>{missingTerms.join(", ")}</p>
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function CandidateCoachChat({
+  messages,
+  input,
+  setInput,
+  send,
+  enhancement,
+  applyHeadline,
+  applySummary,
+}: {
+  messages: Array<{ role: "assistant" | "user"; content: string }>;
+  input: string;
+  setInput: (value: string) => void;
+  send: () => void;
+  enhancement: Record<string, any>;
+  applyHeadline: (value: string) => void;
+  applySummary: (value: string) => void;
+}) {
+  const prompts = [
+    "Make my summary sharper without adding fake facts.",
+    "Rewrite my latest role bullets with stronger impact.",
+    "What is missing before I apply to data engineer roles?",
+    "Suggest a cleaner version for startup AI roles.",
+  ];
+  return (
+    <article className="candidatePortalCard candidateCoachChat">
+      <div className="candidatePortalSectionHead">
+        <div>
+          <span className="eyebrow">AI resume coach</span>
+          <h2>Improve the resume with AI</h2>
+          <p>Ask for rewrites, gaps, stronger bullets, or role-specific positioning. You approve every edit.</p>
+        </div>
+      </div>
+      <CandidateEditorCoachTools enhancement={enhancement} applyHeadline={applyHeadline} applySummary={applySummary} />
+      <div className="candidateCoachPrompts">
+        {prompts.map((prompt) => (
+          <button key={prompt} className="plain" type="button" onClick={() => setInput(prompt)}>{prompt}</button>
+        ))}
+      </div>
+      <div className="candidateCoachMessages">
+        {messages.map((message, index) => (
+          <div key={`${message.role}-${index}`} className={message.role}>
+            <span>{message.role === "assistant" ? "Coach" : "You"}</span>
+            <p>{message.content}</p>
+          </div>
+        ))}
+      </div>
+      <div className="candidateCoachComposer">
+        <textarea value={input} onChange={(event) => setInput(event.target.value)} rows={3} placeholder="Ask: make my summary stronger, what template should I use, what is missing for data engineer roles..." />
+        <button className="primary fullWidth" type="button" onClick={send}>Send to coach</button>
+      </div>
+    </article>
+  );
+}
+
+function CandidateBulletRewriteCard({
+  experienceItems,
+  setExperienceItems,
+}: {
+  experienceItems: Array<Record<string, any>>;
+  setExperienceItems: (items: Array<Record<string, any>>) => void;
+}) {
+  const firstEditable = experienceItems.findIndex((item) => toTextList(item.bullets).length > 0);
+  const role = firstEditable >= 0 ? experienceItems[firstEditable] : null;
+  const originalBullet = role ? toTextList(role.bullets)[0] ?? "" : "";
+  const suggestion = originalBullet ? strengthenResumeBullet(originalBullet, role) : "";
+
+  function applySuggestion() {
+    if (firstEditable < 0 || !suggestion) return;
+    setExperienceItems(experienceItems.map((item, index) => {
+      if (index !== firstEditable) return item;
+      const bullets = toTextList(item.bullets);
+      return { ...item, bullets: [suggestion, ...bullets.slice(1)] };
+    }));
+  }
+
+  return (
+    <article className="candidatePortalCard candidateBulletRewriteCard">
+      <div className="candidatePortalSectionHead">
+        <div>
+          <span className="eyebrow">Bullet editor</span>
+          <h2>Make one bullet sharper</h2>
+          <p>Rewrites use only the selected bullet and role context. Add metrics manually only when they are true.</p>
+        </div>
+      </div>
+      {originalBullet ? (
+        <>
+          <div className="candidateBulletCompare">
+            <span><strong>Current</strong>{originalBullet}</span>
+            <span><strong>Suggested</strong>{suggestion}</span>
+          </div>
+          <button className="secondary fullWidth" type="button" onClick={applySuggestion}>Apply rewrite to editor</button>
+        </>
+      ) : (
+        <EmptyPanel title="No bullet available" body="Add a work experience bullet first. The editor can then help make it clearer and stronger." />
+      )}
+    </article>
+  );
+}
+
+function CandidateJobAiEditor({
+  versions,
+  selectedVersionId,
+  setSelectedVersionId,
+  targetRole,
+  setTargetRole,
+  requirementText,
+  setRequirementText,
+  match,
+  busy,
+  analyze,
+  createTargetedVersion,
+  openJobBoard,
+}: {
+  versions: CandidateResumeVersion[];
+  selectedVersionId: string;
+  setSelectedVersionId: (versionId: string) => void;
+  targetRole: string;
+  setTargetRole: (value: string) => void;
+  requirementText: string;
+  setRequirementText: (value: string) => void;
+  match: CandidateSelfMatch | null;
+  busy: boolean;
+  analyze: () => Promise<void>;
+  createTargetedVersion: () => Promise<void>;
+  openJobBoard: () => void;
+}) {
+  const inferredRole = targetRole.trim() || inferTargetRoleFromRequirement(requirementText);
+  const enoughRequirement = requirementText.trim().length >= 20;
+  const editPlan = candidateJobEditPlan(match, inferredRole);
+  return (
+    <article className="candidatePortalCard candidateJobAiEditor">
+      <div className="candidatePortalSectionHead">
+        <div>
+          <span className="eyebrow">Job-level AI editor</span>
+          <h2>Tailor this resume to one job</h2>
+          <p>Paste the job brief, analyze fit, then create a targeted version without changing the master facts.</p>
+        </div>
+      </div>
+      <label>Resume version
+        <select value={selectedVersionId} onChange={(event) => setSelectedVersionId(event.target.value)}>
+          <option value="">Select version</option>
+          {versions.map((version) => <option value={version.id} key={version.id}>{version.title} · {version.target_role || "General"}</option>)}
+        </select>
+      </label>
+      <label>Target role
+        <input value={targetRole} onChange={(event) => setTargetRole(event.target.value)} placeholder={inferredRole || "Senior Data Engineer"} />
+      </label>
+      <label>Job requirement
+        <textarea value={requirementText} onChange={(event) => setRequirementText(event.target.value)} rows={5} placeholder="Paste the exact job description. The editor will identify keywords, gaps, and what to emphasize." />
+      </label>
+      <div className="candidateJobAiActions">
+        <button className="primary" type="button" disabled={busy || !selectedVersionId || !enoughRequirement} onClick={analyze}>
+          {busy ? <Loader2 size={15} className="spin" /> : <Sparkles size={15} />} Analyze job fit
+        </button>
+        <button className="secondary" type="button" disabled={busy || !selectedVersionId || !enoughRequirement || !inferredRole} onClick={createTargetedVersion}>
+          <Plus size={15} /> Create targeted version
+        </button>
+      </div>
+      {match ? (
+        <section className="candidateJobEditPlan">
+          <header>
+            <strong>{match.score}% · {humanizeLabel(match.fit_label)}</strong>
+            <span>{match.recommended_next_action}</span>
+          </header>
+          <div>
+            {editPlan.map((item) => (
+              <article key={item.title}>
+                <strong>{item.title}</strong>
+                <p>{item.body}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : (
+        <section className="candidateJobEditPlan empty">
+          <strong>What the AI editor will produce</strong>
+          <p>Role positioning, missing keywords, skills to emphasize, bullet edits to consider, and whether this deserves a separate resume version.</p>
+        </section>
+      )}
+      <button className="plain small" type="button" onClick={openJobBoard}>Open full job board</button>
+    </article>
+  );
+}
+
+function CandidateCvPreview({ resume, templateId = "atlas" }: { resume: Record<string, any>; templateId?: string }) {
+  const contact = resume.contact ?? {};
+  const skills = toTextList(resume.skills);
+  const summaryHighlights = toTextList(resume.summary_highlights);
+  const skillGroups = skillGroupEntries(resume.skill_groups, skills);
+  const experience = Array.isArray(resume.experience) ? resume.experience : [];
+  const education = Array.isArray(resume.education) ? resume.education : [];
+  const projects = Array.isArray(resume.projects) ? resume.projects : [];
+  const certifications = toTextList(resume.certifications);
+  const awards = toTextList(resume.awards);
+  const publications = toTextList(resume.publications);
+  const languages = toTextList(resume.languages);
+  const otherSections = resumeOtherSectionEntries(resume.other_sections);
+  const links = uniqueTextList(toTextList(resume.links).filter((link) => !toTextList([contact.linkedin_url, contact.portfolio_url, contact.github_url]).includes(link)));
+  const normalizedTemplate = CANDIDATE_RESUME_TEMPLATES.some((template) => template.id === templateId) ? templateId : "atlas";
+  return (
+    <div className={`candidateCvPreview candidateCvTemplate-${normalizedTemplate}`}>
+      <h1>{textValue(resume.name) || "Candidate Name"}</h1>
+      <p className="cvHeadline">{textValue(resume.headline)}</p>
+      <p className="cvMeta">{toTextList([contact.location, contact.email, contact.phone, contact.linkedin_url, contact.portfolio_url, contact.github_url]).join(" | ")}</p>
+      {resume.summary ? <p>{textValue(resume.summary)}</p> : null}
+      {summaryHighlights.length ? <TextListSection title="Summary Highlights" items={summaryHighlights} /> : null}
+      {skillGroups.length ? <section><h2>Skills</h2><SkillGroups groups={skillGroups} /></section> : skills.length ? <section><h2>Skills</h2><div className="cvSkills">{skills.map((skill) => <span key={skill}>{skill}</span>)}</div></section> : null}
+      {experience.length ? <section><h2>Experience</h2>{experience.map((item, index) => <CvItem key={`${item.company || item.title || "experience"}-${index}`} item={item} />)}</section> : null}
+      {projects.length ? <section><h2>Projects</h2>{projects.map((item, index) => <CvItem key={`${item.name || item.role || "project"}-${index}`} item={item} />)}</section> : null}
+      {education.length ? <section><h2>Education</h2>{education.map((item, index) => <CvItem key={`${item.school || item.degree || "education"}-${index}`} item={item} />)}</section> : null}
+      <TextListSection title="Certifications" items={certifications} />
+      <TextListSection title="Awards" items={awards} />
+      <TextListSection title="Publications" items={publications} />
+      <TextListSection title="Languages" items={languages} />
+      {otherSections.map((section) => <TextListSection key={section.title} title={section.title} items={section.items} />)}
+      <TextListSection title="Additional Links" items={links} />
+    </div>
+  );
+}
+
+function CandidateVisibilityPanel({
+  settings,
+  busy,
+  toggleNativeSearch,
+}: {
+  settings: Record<string, any>;
+  busy: boolean;
+  toggleNativeSearch: (enabled: boolean) => Promise<void>;
+}) {
+  const nativeSearchEnabled = Boolean(settings.candidate_signal_native_search_enabled);
+  return (
+    <article className="candidatePortalCard candidateVisibilityCard">
+      <div className="candidatePortalSectionHead">
+        <div>
+          <span className="eyebrow">Recruiter visibility</span>
+          <h2>{nativeSearchEnabled ? "Searchable, PII locked" : "Private"}</h2>
+          <p>Candidates can opt into recruiter discovery without exposing email, phone, LinkedIn, portfolio, or GitHub until they approve access.</p>
+        </div>
+      </div>
+      <div className="candidateVisibilityRows">
+        <span><ShieldCheck size={15} /> PII permission required</span>
+        <span><Database size={15} /> Candidate-owned profile</span>
+        <span><FileSearch size={15} /> Resume versions stay controlled</span>
+      </div>
+      <button className={nativeSearchEnabled ? "secondary fullWidth" : "primary fullWidth"} type="button" disabled={busy} onClick={() => toggleNativeSearch(!nativeSearchEnabled)}>
+        {nativeSearchEnabled ? "Turn recruiter discovery off" : "Make searchable without PII"}
+      </button>
+    </article>
+  );
+}
+
+function CandidateEditorCoachTools({
+  enhancement,
+  applyHeadline,
+  applySummary,
+}: {
+  enhancement: Record<string, any>;
+  applyHeadline: (value: string) => void;
+  applySummary: (value: string) => void;
+}) {
+  const [ignoredHeadline, setIgnoredHeadline] = useState(false);
+  const [ignoredSummary, setIgnoredSummary] = useState(false);
+  const headline = textValue(enhancement.headline_suggestion);
+  const summary = textValue(enhancement.career_narrative || enhancement.profile_read);
+  const bestFitRoles = cvTextList(enhancement.best_fit_roles);
+  const questions = cvTextList(enhancement.screening_questions || enhancement.likely_missed_details);
+  if (!headline && !summary && !bestFitRoles.length && !questions.length) {
+    return (
+      <section className="candidateEditorCoachTools">
+        <div>
+          <span className="eyebrow">AI resume coach</span>
+          <h3>Start improving the resume</h3>
+          <p>Use the editor to add facts, sharpen bullets, and prepare a clean version. Coaching suggestions appear here when enough resume context is available.</p>
+        </div>
+      </section>
+    );
+  }
+  return (
+    <section className="candidateEditorCoachTools">
+      <div>
+        <span className="eyebrow">AI resume coach</span>
+        <h3>Improve positioning without changing facts</h3>
+        <p>The coach suggests better positioning. You approve every change before it becomes part of the resume.</p>
+      </div>
+      {headline && !ignoredHeadline ? (
+        <article>
+          <strong>Suggested headline</strong>
+          <span>{headline}</span>
+          <div className="candidateCoachSuggestionActions">
+            <button className="secondary small" type="button" onClick={() => applyHeadline(headline)}>Accept</button>
+            <button className="plain small" type="button" onClick={() => setIgnoredHeadline(true)}>Ignore</button>
+          </div>
+        </article>
+      ) : null}
+      {summary && !ignoredSummary ? (
+        <article>
+          <strong>Suggested summary direction</strong>
+          <span>{summary}</span>
+          <div className="candidateCoachSuggestionActions">
+            <button className="secondary small" type="button" onClick={() => applySummary(summary)}>Accept</button>
+            <button className="plain small" type="button" onClick={() => setIgnoredSummary(true)}>Ignore</button>
+          </div>
+        </article>
+      ) : null}
+      {bestFitRoles.length ? (
+        <article>
+          <strong>Best-fit roles to target</strong>
+          <span>{bestFitRoles.slice(0, 6).join(", ")}</span>
+        </article>
+      ) : null}
+      {questions.length ? (
+        <article>
+          <strong>Missing details to confirm</strong>
+          <span>{questions.slice(0, 4).join(" · ")}</span>
+        </article>
+      ) : null}
+    </section>
+  );
+}
+
+function CandidateSharePanel({
+  shares,
+  selectedVersionId,
+  shareLabel,
+  setShareLabel,
+  includePii,
+  setIncludePii,
+  busy,
+  createShare,
+  revokeShare,
+}: {
+  shares: CandidateResumeShare[];
+  selectedVersionId: string;
+  shareLabel: string;
+  setShareLabel: (value: string) => void;
+  includePii: boolean;
+  setIncludePii: (value: boolean) => void;
+  busy: boolean;
+  createShare: () => Promise<void>;
+  revokeShare: (shareId: string) => Promise<void>;
+}) {
+  const activeShares = shares.filter((share) => share.status === "active");
+  return (
+    <article className="candidatePortalCard candidateShareCard">
+      <div className="candidatePortalSectionHead">
+        <div>
+          <span className="eyebrow">Controlled sharing</span>
+          <h2>Resume MCP link</h2>
+          <p>Create a controlled resume-data endpoint for a specific version. PII stays off unless the candidate explicitly includes it.</p>
+        </div>
+      </div>
+      <label>Share label<input value={shareLabel} onChange={(event) => setShareLabel(event.target.value)} /></label>
+      <label className="candidateToggleRow">
+        <input type="checkbox" checked={includePii} onChange={(event) => setIncludePii(event.target.checked)} />
+        Include PII in this specific share link
+      </label>
+      <button className="primary fullWidth" type="button" disabled={busy || !selectedVersionId} onClick={createShare}>Create controlled link</button>
+      <div className="candidateShareList">
+        {activeShares.length ? activeShares.slice(0, 4).map((share) => {
+          const url = candidatePortalShareUrl(share.access_token);
+          return (
+            <article key={share.id}>
+              <strong>{share.label}</strong>
+              <span>{share.version_title || "Resume version"} · {share.permissions?.include_pii ? "PII included" : "PII locked"}</span>
+              <code>{url}</code>
+              <div>
+                <button className="plain small" type="button" onClick={() => navigator.clipboard?.writeText(url)}>Copy</button>
+                <button className="plain small dangerText" type="button" onClick={() => revokeShare(share.id)}>Revoke</button>
+              </div>
+            </article>
+          );
+        }) : <EmptyPanel title="No active share links" body="Create one when a candidate wants to share a controlled resume version externally." />}
+      </div>
+    </article>
+  );
+}
+
+function CandidateApplicationTracker({
+  applications,
+  selectedVersionId,
+  destination,
+  setDestination,
+  destinationType,
+  setDestinationType,
+  jobTitle,
+  setJobTitle,
+  jobUrl,
+  setJobUrl,
+  status,
+  setStatus,
+  note,
+  setNote,
+  createShare,
+  setCreateShare,
+  includePii,
+  setIncludePii,
+  busy,
+  save,
+  updateStatus,
+}: {
+  applications: CandidateApplication[];
+  selectedVersionId: string;
+  destination: string;
+  setDestination: (value: string) => void;
+  destinationType: string;
+  setDestinationType: (value: string) => void;
+  jobTitle: string;
+  setJobTitle: (value: string) => void;
+  jobUrl: string;
+  setJobUrl: (value: string) => void;
+  status: string;
+  setStatus: (value: string) => void;
+  note: string;
+  setNote: (value: string) => void;
+  createShare: boolean;
+  setCreateShare: (value: boolean) => void;
+  includePii: boolean;
+  setIncludePii: (value: boolean) => void;
+  busy: boolean;
+  save: () => Promise<void>;
+  updateStatus: (applicationId: string, status: string) => Promise<void>;
+}) {
+  return (
+    <article id="candidate-application-tracker" className="candidatePortalCard candidateApplicationTracker">
+      <div className="candidatePortalSectionHead">
+        <div>
+          <span className="eyebrow">Application memory</span>
+          <h2>Where did you share this?</h2>
+          <p>Track which resume version went to which company, recruiter, job board, or LinkedIn conversation.</p>
+        </div>
+      </div>
+      <div className="candidateFormGrid">
+        <label>Destination<input value={destination} onChange={(event) => setDestination(event.target.value)} placeholder="Company, recruiter, LinkedIn contact..." /></label>
+        <label>Type
+          <select value={destinationType} onChange={(event) => setDestinationType(event.target.value)}>
+            <option value="company">Company</option>
+            <option value="recruiter">Recruiter</option>
+            <option value="job_board">Job board</option>
+            <option value="linkedin">LinkedIn</option>
+            <option value="email">Email</option>
+            <option value="referral">Referral</option>
+            <option value="other">Other</option>
+          </select>
+        </label>
+        <label>Role / job title<input value={jobTitle} onChange={(event) => setJobTitle(event.target.value)} placeholder="Senior Data Engineer" /></label>
+        <label>Status
+          <select value={status} onChange={(event) => setStatus(event.target.value)}>
+            <option value="shared">Shared</option>
+            <option value="applied">Applied</option>
+            <option value="interviewing">Interviewing</option>
+            <option value="offer">Offer</option>
+            <option value="rejected">Rejected</option>
+            <option value="withdrawn">Withdrawn</option>
+            <option value="archived">Archived</option>
+          </select>
+        </label>
+      </div>
+      <label>Job URL<input value={jobUrl} onChange={(event) => setJobUrl(event.target.value)} placeholder="https://..." /></label>
+      <label>Private note<textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} placeholder="What did you send, who asked, what should you follow up on?" /></label>
+      <label className="candidateToggleRow">
+        <input type="checkbox" checked={createShare} onChange={(event) => setCreateShare(event.target.checked)} />
+        Also create a controlled resume link for this destination
+      </label>
+      {createShare ? (
+        <label className="candidateToggleRow">
+          <input type="checkbox" checked={includePii} onChange={(event) => setIncludePii(event.target.checked)} />
+          Include contact details in that controlled link
+        </label>
+      ) : null}
+      <button className="primary fullWidth" type="button" disabled={busy || !selectedVersionId || !destination.trim()} onClick={save}>Save share history</button>
+      <div className="candidateApplicationList">
+        {applications.length ? applications.slice(0, 6).map((application) => {
+          const shareUrl = application.share_url_token ? candidatePortalShareUrl(application.share_url_token) : "";
+          return (
+            <article key={application.id}>
+              <div>
+                <strong>{application.destination_name}</strong>
+                <span>{[application.job_title, humanizeLabel(application.destination_type), formatDateTime(application.shared_at)].filter(Boolean).join(" · ")}</span>
+              </div>
+              <select value={application.status} onChange={(event) => void updateStatus(application.id, event.target.value)}>
+                <option value="shared">Shared</option>
+                <option value="applied">Applied</option>
+                <option value="interviewing">Interviewing</option>
+                <option value="offer">Offer</option>
+                <option value="rejected">Rejected</option>
+                <option value="withdrawn">Withdrawn</option>
+                <option value="archived">Archived</option>
+              </select>
+              {application.job_url ? <a href={application.job_url} target="_blank" rel="noreferrer">Open job</a> : null}
+              {shareUrl ? <button className="plain small" type="button" onClick={() => navigator.clipboard?.writeText(shareUrl)}>Copy share link</button> : null}
+              {application.status !== "archived" ? <button className="plain small dangerText" type="button" onClick={() => void updateStatus(application.id, "archived")}>Archive</button> : null}
+              {application.candidate_note ? <p>{application.candidate_note}</p> : null}
+            </article>
+          );
+        }) : <EmptyPanel title="No share history for this version" body="When you send this resume anywhere, log it here so you know which version was used." />}
+      </div>
+    </article>
+  );
+}
+
+function CandidateAccessRequestsPanel({
+  accessRequests,
+  busy,
+  decide,
+}: {
+  accessRequests: CandidateAccessRequest[];
+  busy: boolean;
+  decide: (requestId: string, decision: "approve" | "deny") => Promise<void>;
+}) {
+  const pending = accessRequests.filter((request) => request.status === "pending");
+  return (
+    <article className="candidatePortalCard candidateAccessCard">
+      <div className="candidatePortalSectionHead">
+        <div>
+          <span className="eyebrow">PII access</span>
+          <h2>{pending.length ? `${pending.length} pending` : "No pending requests"}</h2>
+          <p>Recruiters can discover searchable native candidates, but contact details unlock only after approval.</p>
+        </div>
+      </div>
+      <div className="candidateAccessList">
+        {pending.length ? pending.slice(0, 4).map((request) => (
+          <article key={request.id}>
+            <strong>{request.tenant_name || "Recruiter workspace"}</strong>
+            <span>{request.request_message || "Requested permission to view candidate contact/profile details."}</span>
+            <small>{request.recruiter_email || "Recruiter"} · {formatDateTime(request.created_at)}</small>
+            <div>
+              <button className="primary small" type="button" disabled={busy} onClick={() => decide(request.id, "approve")}>Approve</button>
+              <button className="secondary small" type="button" disabled={busy} onClick={() => decide(request.id, "deny")}>Deny</button>
+            </div>
+          </article>
+        )) : <EmptyPanel title="No access requests" body="When recruiters ask to see PII, the candidate can approve or deny from here." />}
+      </div>
+    </article>
+  );
+}
+
+function candidatePortalShareUrl(token: string) {
+  const path = `/api/backend/candidate-shares/${encodeURIComponent(token)}`;
+  if (typeof window === "undefined") return path;
+  return `${window.location.origin}${path}`;
+}
+
+function selectedTemplateLabel(templateId: string) {
+  return CANDIDATE_RESUME_TEMPLATES.find((template) => template.id === templateId)?.name ?? "Atlas";
+}
+
+function candidateAtsSignals(
+  profile: CandidatePortalProfile["profile"],
+  resume: Record<string, any>,
+  selectedTemplateId: string,
+  versions: CandidateResumeVersion[],
+  applications: CandidateApplication[],
+) {
+  const contact = resume.contact ?? {};
+  const experience = Array.isArray(resume.experience) ? resume.experience : [];
+  const education = Array.isArray(resume.education) ? resume.education : [];
+  const projects = Array.isArray(resume.projects) ? resume.projects : [];
+  const skills = toTextList(resume.skills);
+  const hasDates = experience.some((item) => textValue(item.start_date) || textValue(item.end_date));
+  const hasLinks = Boolean(contact.linkedin_url || contact.portfolio_url || contact.github_url || profile.linkedin_url || profile.portfolio_url || profile.github_url);
+  const hasTargetedVersion = versions.some((version) => Boolean(textValue(version.target_role)));
+  return [
+    { label: "Name and headline", ok: Boolean(textValue(resume.name || profile.display_name) && textValue(resume.headline || profile.headline)) },
+    { label: "Contact details", ok: Boolean(textValue(contact.email || profile.email) || textValue(contact.phone || profile.phone)) },
+    { label: "Location", ok: Boolean(textValue(contact.location || profile.current_location)) },
+    { label: "Professional links", ok: hasLinks },
+    { label: "Summary", ok: Boolean(textValue(resume.summary || profile.summary)) },
+    { label: "Experience bullets", ok: experience.some((item) => cvTextList(item.bullets || item.details || item.description).length) },
+    { label: "Role dates", ok: hasDates },
+    { label: "Skills", ok: skills.length >= 6 },
+    { label: "Education or projects", ok: education.length > 0 || projects.length > 0 },
+    { label: "ATS-safe template", ok: CANDIDATE_RESUME_TEMPLATES.some((template) => template.id === selectedTemplateId) },
+    { label: "Role-specific version", ok: hasTargetedVersion || versions.length === 1 },
+    { label: "Submission tracking", ok: applications.length > 0 },
+  ];
+}
+
+function candidateResumeFromProfile(profile: CandidatePortalProfile["profile"]): Record<string, any> {
+  return {
+    name: profile.display_name || "",
+    headline: profile.headline || "",
+    summary: profile.summary || "",
+    summary_highlights: profile.summary_highlights || [],
+    ai_enhancement: profile.ai_enhancement || {},
+    contact: {
+      location: profile.current_location || "",
+      email: profile.email || "",
+      phone: profile.phone || "",
+      linkedin_url: profile.linkedin_url || "",
+      portfolio_url: profile.portfolio_url || "",
+      github_url: profile.github_url || "",
+    },
+    skills: profile.skills || [],
+    skill_groups: profile.skill_groups || {},
+    experience: profile.experience || [],
+    education: profile.education || [],
+    certifications: profile.certifications || [],
+    projects: profile.projects || [],
+    awards: profile.awards || [],
+    publications: profile.publications || [],
+    languages: profile.languages || [],
+    other_sections: profile.other_sections || {},
+    links: profile.links || [],
+  };
+}
+
+function SkillGroups({ groups }: { groups: Array<{ label: string; skills: string[] }> }) {
+  return (
+    <div className="cvSkillGroups">
+      {groups.map((group) => (
+        <div key={group.label}>
+          <strong>{group.label}</strong>
+          <span>{group.skills.join(", ")}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TextListSection({ title, items }: { title: string; items: string[] }) {
+  if (!items.length) return null;
+  return (
+    <section>
+      <h2>{title}</h2>
+      <ul>{items.map((item) => <li key={item}>{item}</li>)}</ul>
+    </section>
+  );
+}
+
+function CandidateUploadList({ uploads, activeUploadId, selectUpload }: { uploads: CandidateResumeUpload[]; activeUploadId: string; selectUpload: (id: string) => void }) {
+  if (!uploads.length) return <EmptyPanel title="No uploads yet" body="Upload a resume to start parsing and build the master profile." />;
+  return (
+    <div className="candidateUploadList">
+      {uploads.map((upload) => (
+        <button key={upload.id} className={activeUploadId === upload.id ? "active" : ""} type="button" onClick={() => selectUpload(upload.id)}>
+          <span>{humanizeLabel(upload.status)}</span>
+          <strong>{upload.original_filename}</strong>
+          <small>{upload.stage_label ?? humanizeLabel(upload.stage)} · {formatDateTime(upload.updated_at)}</small>
+          <ProgressBar value={upload.progress} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function CvItem({ item }: { item: Record<string, any> }) {
+  const title = textValue(item.title || item.degree || item.role || item.name);
+  const place = textValue(item.company || item.school);
+  const location = textValue(item.location);
+  const dates = toTextList([item.start_date, item.end_date]).join(" - ");
+  const technologies = cvTextList(item.technologies);
+  const links = cvTextList(item.links);
+  const bullets = cvTextList(item.bullets || item.details || item.description);
+  const workstreams = Array.isArray(item.workstreams) ? item.workstreams : [];
+  return (
+    <article className="cvItem">
+      <h3>{title}{place ? ` · ${place}` : ""}</h3>
+      {dates || location ? <span>{[dates, location].filter(Boolean).join(" · ")}</span> : null}
+      {technologies.length ? <p className="cvItemTech">{technologies.join(", ")}</p> : null}
+      {links.length ? <p className="cvItemLinks">{links.join(" | ")}</p> : null}
+      {bullets.length ? <ul>{bullets.map((bullet) => <li key={bullet}>{bullet}</li>)}</ul> : null}
+      {workstreams.length ? (
+        <div className="cvWorkstreams">
+          {workstreams.map((workstream, index) => (
+            <CvItem key={`${workstream.name || workstream.role || "workstream"}-${index}`} item={workstream} />
+          ))}
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function cvTextList(value: unknown): string[] {
+  if (typeof value === "string") {
+    return value.split(/\n+/).map((item) => item.trim()).filter(Boolean);
+  }
+  return toTextList(value);
+}
+
+function splitLineList(value: string): string[] {
+  return value.split(/\n+/).map((item) => item.trim()).filter(Boolean);
+}
+
+function candidateUploadPreviewKind(file: File | null): "pdf" | "image" | "document" | "none" {
+  if (!file) return "none";
+  const mime = (file.type || "").toLowerCase();
+  const name = file.name.toLowerCase();
+  if (mime.includes("pdf") || name.endsWith(".pdf")) return "pdf";
+  if (mime.startsWith("image/") || [".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"].some((suffix) => name.endsWith(suffix))) return "image";
+  return "document";
+}
+
+function skillGroupEntries(groups: unknown, fallbackSkills: string[]) {
+  if (groups && typeof groups === "object" && !Array.isArray(groups)) {
+    return Object.entries(groups as Record<string, unknown>)
+      .map(([label, values]) => ({ label: humanizeLabel(label), skills: cvTextList(values) }))
+      .filter((group) => group.skills.length);
+  }
+  return fallbackSkills.length ? [{ label: "Skills", skills: fallbackSkills }] : [];
+}
+
+function resumeOtherSectionEntries(value: unknown): Array<{ title: string; items: string[] }> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  return Object.entries(value as Record<string, unknown>)
+    .map(([title, items]) => ({
+      title: humanizeLabel(title),
+      items: cvTextList(items),
+    }))
+    .filter((section) => section.items.length);
+}
+
+function versionEvidenceSummary(resume: Record<string, any>) {
+  const skills = toTextList(resume.skills).slice(0, 3);
+  const experience = Array.isArray(resume.experience) ? resume.experience : [];
+  const latest = experience[0] ?? {};
+  return [
+    latest.title && latest.company ? `${latest.title} at ${latest.company}` : latest.title || latest.company,
+    skills.length ? skills.join(", ") : "",
+  ].filter(Boolean).join(" · ") || "Open to review resume evidence";
+}
+
+function practicalJobCardsForCandidate(profile: CandidatePortalProfile["profile"], versions: CandidateResumeVersion[]) {
+  const enhancement = normalizedAiEnhancement(profile.ai_enhancement);
+  const aiRoles = cvTextList(enhancement.best_fit_roles);
+  const versionRoles = versions.map((version) => version.target_role || "").filter(Boolean);
+  const headlineRoles = textValue(profile.headline)
+    ? [textValue(profile.headline).replace(/\|/g, " ").split(",")[0]?.trim()].filter(Boolean)
+    : [];
+  const roles = uniqueTextList([...aiRoles, ...versionRoles, ...headlineRoles]).slice(0, 6);
+  const skills = toTextList(profile.skills).slice(0, 12);
+  const experience = Array.isArray(profile.experience) ? profile.experience : [];
+  const latest = experience[0] ?? {};
+  return roles.map((role) => {
+    const roleNeedle = role.toLowerCase().split(" ")[0] || role.toLowerCase();
+    const matchingVersion = versions.find((version) => (version.target_role || version.title || "").toLowerCase().includes(roleNeedle));
+    const keywords = uniqueTextList([...skills, ...cvTextList(enhancement.search_keywords)]).slice(0, 8);
+    return {
+      role,
+      versionId: matchingVersion?.id || versions[0]?.id || "",
+      versionTitle: matchingVersion?.title || versions[0]?.title || "",
+      fit: matchingVersion ? "Version exists" : "Create or tailor a version",
+      reason: [
+        latest.title && latest.company ? `Recent evidence includes ${latest.title} at ${latest.company}.` : "",
+        skills.length ? `Core searchable skills include ${skills.slice(0, 5).join(", ")}.` : "",
+        textValue(enhancement.profile_read || enhancement.career_narrative),
+      ].filter(Boolean)[0] || "This role is inferred from the candidate profile. Verify against a real requirement before applying.",
+      keywords,
+      requirementText: [
+        `Role: ${role}`,
+        skills.length ? `Relevant skills to test: ${skills.slice(0, 10).join(", ")}` : "",
+        latest.title || latest.company ? `Recent experience evidence: ${[latest.title, latest.company].filter(Boolean).join(" at ")}` : "",
+        "Use this as a starting job brief. Paste the real requirement to get a better match.",
+      ].filter(Boolean).join("\n"),
+    };
+  });
+}
+
+function candidateCoachReply(profile: CandidatePortalProfile["profile"], message: string) {
+  const enhancement = normalizedAiEnhancement(profile.ai_enhancement);
+  const lower = message.toLowerCase();
+  const skills = toTextList(profile.skills).slice(0, 8);
+  const bestRoles = cvTextList(enhancement.best_fit_roles).slice(0, 4);
+  const questions = cvTextList(enhancement.screening_questions || enhancement.likely_missed_details).slice(0, 4);
+  if (lower.includes("template") || lower.includes("pdf") || lower.includes("download")) {
+    return "Use Atlas for the default professional export, Technical for engineering/data roles, Compact if the resume is too long, and Minimal when you want the safest ATS-first version. Verify the selected template in preview before downloading.";
+  }
+  if (lower.includes("summary") || lower.includes("headline")) {
+    const suggested = textValue(enhancement.headline_suggestion || enhancement.career_narrative || enhancement.profile_read);
+    return suggested
+      ? `I would start with this positioning: ${suggested}`
+      : "Your summary should be evidence-led: current role, strongest domain, top 3 skills, and one quantified impact. Add metrics from the resume before exporting.";
+  }
+  if (lower.includes("missing") || lower.includes("improve") || lower.includes("weak")) {
+    return questions.length
+      ? `The main missing items to verify are: ${questions.join("; ")}. Add these in the structured editor so every resume version improves.`
+      : "Check dates, latest title, location, LinkedIn/portfolio, quantified bullets, project ownership, and role-specific keywords. Those fields usually improve matching the most.";
+  }
+  if (lower.includes("job") || lower.includes("role") || lower.includes("match")) {
+    return bestRoles.length
+      ? `The strongest practical directions look like: ${bestRoles.join(", ")}. Use Job Board to test one version against a real requirement before applying.`
+      : `Based on captured skills${skills.length ? ` like ${skills.join(", ")}` : ""}, create a targeted version for the job and then match it against the requirement.`;
+  }
+  return `I would improve this profile by tightening the headline, making bullets outcome-based, and ensuring role-specific keywords are present${skills.length ? `: ${skills.slice(0, 5).join(", ")}` : ""}. Ask me about summary, missing evidence, template choice, or job matching.`;
+}
+
+function strengthenResumeBullet(bullet: string, role: Record<string, any> | null) {
+  const clean = textValue(bullet).replace(/^[-•]\s*/, "");
+  const roleLabel = [role?.title, role?.company].filter(Boolean).join(" at ");
+  if (!clean) return "";
+  if (/\b(led|built|designed|architected|improved|reduced|increased|launched|implemented|optimized|automated|delivered)\b/i.test(clean)) {
+    return clean;
+  }
+  const prefix = roleLabel ? `Delivered ${roleLabel} work by ` : "Delivered impact by ";
+  return `${prefix}${clean.charAt(0).toLowerCase()}${clean.slice(1)}`;
+}
+
+function inferTargetRoleFromRequirement(requirementText: string) {
+  const lines = requirementText
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const explicit = lines.find((line) => /^(role|job title|title|position)\s*:/i.test(line));
+  if (explicit) return explicit.replace(/^(role|job title|title|position)\s*:/i, "").trim().slice(0, 80);
+  const heading = lines.find((line) => line.length <= 80 && /(engineer|developer|analyst|manager|designer|architect|consultant|scientist|specialist|lead)/i.test(line));
+  if (heading) return heading.replace(/^job\s*/i, "").trim().slice(0, 80);
+  return "";
+}
+
+function candidateJobEditPlan(match: CandidateSelfMatch | null, targetRole: string) {
+  if (!match) return [];
+  const matched = match.matched_terms.slice(0, 8).join(", ") || "No strong matched terms yet.";
+  const missing = match.missing_or_unclear_terms.slice(0, 8).join(", ") || "No major gaps detected.";
+  const skills = match.skill_hits.slice(0, 8).join(", ") || matched;
+  return [
+    {
+      title: "Fit read",
+      body: match.summary || `This version scored ${match.score}% for the role. Use this as a decision aid, not a reason to invent missing details.`,
+    },
+    {
+      title: "Positioning",
+      body: targetRole
+        ? `Create a version that clearly targets ${targetRole}. The summary and headline should mention the role only if the resume evidence supports it.`
+        : "Add a target role before creating the version so the export has a clear direction.",
+    },
+    {
+      title: "Evidence to emphasize",
+      body: `Bring these signals higher in the resume where they are factual: ${matched}.`,
+    },
+    {
+      title: "Missing or unclear keywords",
+      body: `Verify these before adding them: ${missing}. If they are not true, keep them out and prepare an interview answer instead.`,
+    },
+    {
+      title: "ATS keyword focus",
+      body: `The strongest skill overlap is: ${skills}. Use the editor to sharpen bullets around these skills before export.`,
+    },
+    {
+      title: "What not to fake",
+      body: "Do not add tools, years, locations, certifications, or employers unless they are true. Mark unclear items as questions to verify.",
+    },
+  ];
+}
+
+function normalizedAiEnhancement(value: unknown): Record<string, any> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : {};
+}
+
+function EditableProfileList({
+  title,
+  addLabel,
+  items,
+  setItems,
+  fields,
+  detailsKey,
+  detailsLabel,
+  enableWorkstreams = false,
+}: {
+  title: string;
+  addLabel: string;
+  items: Array<Record<string, any>>;
+  setItems: (items: Array<Record<string, any>>) => void;
+  fields: Array<{ key: string; label: string }>;
+  detailsKey: "bullets" | "details";
+  detailsLabel: string;
+  enableWorkstreams?: boolean;
+}) {
+  function updateItem(index: number, key: string, value: string) {
+    setItems(items.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item));
+  }
+
+  function updateDetails(index: number, value: string) {
+    setItems(items.map((item, itemIndex) => itemIndex === index ? { ...item, [detailsKey]: value.split("\n").map((line) => line.trim()).filter(Boolean) } : item));
+  }
+
+  function updateWorkstreams(index: number, workstreams: Array<Record<string, any>>) {
+    setItems(items.map((item, itemIndex) => itemIndex === index ? { ...item, workstreams } : item));
+  }
+
+  return (
+    <section className="editableProfileList">
+      <div>
+        <h3>{title}</h3>
+        <button className="plain small" type="button" onClick={() => setItems([...items, {}])}><Plus size={14} /> {addLabel}</button>
+      </div>
+      {items.length ? items.map((item, index) => (
+        <article key={`${title}-${index}`} className="editableProfileItem">
+          <div className="candidateFormGrid">
+            {fields.map((field) => (
+              <label key={field.key}>{field.label}<input value={textValue(item[field.key])} onChange={(event) => updateItem(index, field.key, event.target.value)} /></label>
+            ))}
+          </div>
+          <label className="candidateWideField">{detailsLabel}<textarea value={toTextList(item[detailsKey]).join("\n")} onChange={(event) => updateDetails(index, event.target.value)} rows={4} placeholder="One bullet per line" /></label>
+          {enableWorkstreams ? (
+            <EditableWorkstreamList
+              workstreams={Array.isArray(item.workstreams) ? item.workstreams : []}
+              setWorkstreams={(workstreams) => updateWorkstreams(index, workstreams)}
+            />
+          ) : null}
+          <button className="plain dangerText" type="button" onClick={() => setItems(items.filter((_, itemIndex) => itemIndex !== index))}>Remove</button>
+        </article>
+      )) : <EmptyPanel title={`No ${title.toLowerCase()} yet`} body={`Add ${title.toLowerCase()} to make generated CV versions stronger.`} />}
+    </section>
+  );
+}
+
+function EditableWorkstreamList({
+  workstreams,
+  setWorkstreams,
+}: {
+  workstreams: Array<Record<string, any>>;
+  setWorkstreams: (items: Array<Record<string, any>>) => void;
+}) {
+  function updateItem(index: number, key: string, value: string) {
+    setWorkstreams(workstreams.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item));
+  }
+
+  function updateList(index: number, key: "bullets" | "technologies", value: string) {
+    const list = key === "technologies" ? splitCommaList(value) : splitLineList(value);
+    setWorkstreams(workstreams.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: list } : item));
+  }
+
+  return (
+    <section className="editableWorkstreamList">
+      <div className="editableWorkstreamHead">
+        <div>
+          <strong>Same-company projects / workstreams</strong>
+          <span>These stay under the parent role and are not counted as separate jobs.</span>
+        </div>
+        <button className="plain small" type="button" onClick={() => setWorkstreams([...workstreams, {}])}>
+          <Plus size={14} /> Add project
+        </button>
+      </div>
+      {workstreams.length ? workstreams.map((item, index) => (
+        <article className="editableWorkstreamItem" key={`${item.name || item.role || "workstream"}-${index}`}>
+          <div className="candidateFormGrid">
+            <label>Project / product<input value={textValue(item.name)} onChange={(event) => updateItem(index, "name", event.target.value)} /></label>
+            <label>Role on project<input value={textValue(item.role)} onChange={(event) => updateItem(index, "role", event.target.value)} /></label>
+            <label>Start<input value={textValue(item.start_date)} onChange={(event) => updateItem(index, "start_date", event.target.value)} /></label>
+            <label>End<input value={textValue(item.end_date)} onChange={(event) => updateItem(index, "end_date", event.target.value)} /></label>
+            <label>Location<input value={textValue(item.location)} onChange={(event) => updateItem(index, "location", event.target.value)} /></label>
+            <label>Technologies<input value={toTextList(item.technologies).join(", ")} onChange={(event) => updateList(index, "technologies", event.target.value)} /></label>
+          </div>
+          <label className="candidateWideField">Project bullets<textarea value={toTextList(item.bullets || item.details || item.description).join("\n")} onChange={(event) => updateList(index, "bullets", event.target.value)} rows={4} placeholder="One project bullet per line" /></label>
+          <button className="plain dangerText small" type="button" onClick={() => setWorkstreams(workstreams.filter((_, itemIndex) => itemIndex !== index))}>Remove project</button>
+        </article>
+      )) : (
+        <p className="editableWorkstreamEmpty">Add projects here when one employer contains several products, clients, agents, platforms, or implementations.</p>
+      )}
+    </section>
+  );
+}
+
+function normalizeEditableProfileItems(items: Array<Record<string, any>>, detailsKey: "bullets" | "details") {
+  return items
+    .map((item) => {
+      const normalized = { ...item };
+      normalized[detailsKey] = toTextList(item[detailsKey]);
+      if (Array.isArray(normalized.workstreams)) {
+        normalized.workstreams = normalized.workstreams
+          .map((workstream: Record<string, any>) => ({
+            ...workstream,
+            bullets: toTextList(workstream.bullets || workstream.details || workstream.description),
+            technologies: toTextList(workstream.technologies),
+          }))
+          .filter((workstream: Record<string, any>) => Object.values(workstream).some((value) => Array.isArray(value) ? value.length : Boolean(String(value ?? "").trim())));
+      }
+      return normalized;
+    })
+    .filter((item) => Object.values(item).some((value) => Array.isArray(value) ? value.length : Boolean(String(value ?? "").trim())));
+}
+
+function candidatePortalCompleteness(profile: CandidatePortalProfile["profile"]) {
+  const checks = [
+    profile.display_name,
+    profile.headline,
+    profile.current_location,
+    profile.email,
+    profile.phone,
+    profile.linkedin_url || profile.portfolio_url || profile.github_url,
+    profile.summary,
+    profile.skills?.length,
+    profile.experience?.length,
+    profile.education?.length,
+    profile.projects?.length,
+  ];
+  const complete = checks.filter(Boolean).length;
+  return Math.round((complete / checks.length) * 100);
+}
+
+function humanizeLabel(value: string) {
+  return value.split("_").map((item) => item.charAt(0).toUpperCase() + item.slice(1)).join(" ");
 }
 
 function NavButton({ icon, label, active, onClick }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void }) {
@@ -2919,7 +6047,29 @@ function RecruiterCopilot({
   );
 }
 
-function DatabaseView({ candidates, query, setQuery, open }: { candidates: CandidateSummary[]; query: string; setQuery: (value: string) => void; open: (id: string) => void }) {
+function DatabaseView({
+  candidates,
+  query,
+  setQuery,
+  open,
+  nativeQuery,
+  setNativeQuery,
+  nativeCandidates,
+  searchNativeCandidates,
+  requestNativeAccess,
+  busy,
+}: {
+  candidates: CandidateSummary[];
+  query: string;
+  setQuery: (value: string) => void;
+  open: (id: string) => void;
+  nativeQuery: string;
+  setNativeQuery: (value: string) => void;
+  nativeCandidates: NativeCandidateSummary[];
+  searchNativeCandidates: (query?: string) => Promise<void>;
+  requestNativeAccess: (candidateUserId: string, resumeVersionId?: string | null) => Promise<void>;
+  busy: boolean;
+}) {
   const [filters, setFilters] = useState<string[]>([]);
   const readyCount = candidates.filter((candidate) => (candidate.coverage ?? 0) >= 0.8 && Number(candidate.duplicate_risk_score ?? 0) < 0.75).length;
   const needsReviewCount = candidates.filter((candidate) => (candidate.coverage ?? 0) < 0.8 || Number(candidate.duplicate_risk_score ?? 0) >= 0.75).length;
@@ -3019,7 +6169,74 @@ function DatabaseView({ candidates, query, setQuery, open }: { candidates: Candi
         </div>
       </section>
 
+      <NativeCandidateDiscoveryPanel
+        query={nativeQuery}
+        setQuery={setNativeQuery}
+        nativeCandidates={nativeCandidates}
+        search={() => searchNativeCandidates(nativeQuery)}
+        requestAccess={requestNativeAccess}
+        busy={busy}
+      />
+
       <CandidateTable candidates={filteredCandidates} open={open} />
+    </section>
+  );
+}
+
+function NativeCandidateDiscoveryPanel({
+  query,
+  setQuery,
+  nativeCandidates,
+  search,
+  requestAccess,
+  busy,
+}: {
+  query: string;
+  setQuery: (value: string) => void;
+  nativeCandidates: NativeCandidateSummary[];
+  search: () => Promise<void>;
+  requestAccess: (candidateUserId: string, resumeVersionId?: string | null) => Promise<void>;
+  busy: boolean;
+}) {
+  return (
+    <section className="nativeDiscoveryPanel">
+      <div className="nativeDiscoveryHead">
+        <div>
+          <span className="eyebrow">candidateSignal native</span>
+          <h3>Search opt-in candidates without PII</h3>
+          <p>These candidates manage their own profiles. You can review fit signals, then request contact/profile access from the candidate.</p>
+        </div>
+        <form onSubmit={(event) => { event.preventDefault(); void search(); }}>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search native candidates by role, skills, location..." />
+          <button className="secondary" type="submit" disabled={busy}>{busy ? "Searching..." : "Search native"}</button>
+        </form>
+      </div>
+      {nativeCandidates.length ? (
+        <div className="nativeCandidateGrid">
+          {nativeCandidates.map((candidate) => (
+            <article key={candidate.candidate_user_id}>
+              <div>
+                <strong>{candidate.name}</strong>
+                <span>{candidate.headline || "Candidate-managed profile"}</span>
+              </div>
+              <p>{candidate.summary || "Summary is available after the candidate completes their profile."}</p>
+              <div className="nativeCandidateTags">
+                {(candidate.skills ?? []).slice(0, 8).map((skill) => <span key={skill}>{skill}</span>)}
+              </div>
+              <footer>
+                <small>{candidate.current_location || "Location unclear"} · {candidate.pii_locked ? "PII locked" : "PII approved"}</small>
+                <button className="secondary small" type="button" disabled={busy || candidate.request_status === "pending"} onClick={() => requestAccess(candidate.candidate_user_id, candidate.resume_version_id)}>
+                  {candidate.request_status === "pending" ? "Requested" : candidate.request_status === "approved" ? "Approved" : "Request access"}
+                </button>
+              </footer>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="nativeDiscoveryEmpty">
+          <span>Native candidates are separate from your tenant database until they opt in and approve PII access.</span>
+        </div>
+      )}
     </section>
   );
 }
@@ -8056,6 +11273,10 @@ function numericYears(value: unknown) {
 
 function isPlatformAdmin(user: CurrentUser | null) {
   return user?.platform_role === "platform_admin" || user?.platform_role === "admin" || user?.role === "platform_admin" || user?.role === "admin";
+}
+
+function isCandidateUser(user: CurrentUser | null) {
+  return user?.workspace_access === "candidate" || user?.platform_role === "candidate" || user?.role === "candidate";
 }
 
 function isTenantAdmin(user: CurrentUser | null) {

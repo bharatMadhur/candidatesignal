@@ -9,6 +9,159 @@ export type Session = {
 
 export type CurrentUser = Session["user"];
 
+export type CandidatePortalProfile = {
+  user_id: string;
+  email: string;
+  profile: {
+    display_name?: string;
+    headline?: string;
+    summary?: string;
+    current_location?: string;
+    email?: string;
+    phone?: string;
+    linkedin_url?: string;
+    portfolio_url?: string;
+    github_url?: string;
+    summary_highlights?: string[];
+    ai_enhancement?: Record<string, any>;
+    skills?: string[];
+    skill_groups?: Record<string, string[]>;
+    experience?: Array<Record<string, any>>;
+    education?: Array<Record<string, any>>;
+    certifications?: string[];
+    projects?: Array<Record<string, any>>;
+    awards?: string[];
+    publications?: string[];
+    languages?: string[];
+    other_sections?: Record<string, any>;
+    links?: string[];
+  };
+  privacy_settings?: Record<string, any>;
+  updated_at?: string | null;
+};
+
+export type CandidatePortalPrivacySettings = {
+  candidate_signal_native_search_enabled?: boolean;
+  pii_visible_to_recruiters?: boolean;
+  pii_permission_required?: boolean;
+  allow_linkedin_verification?: boolean;
+  public_resume_fields?: string[];
+};
+
+export type CandidateResumeVersion = {
+  id: string;
+  title: string;
+  target_role?: string | null;
+  status: string;
+  resume_json?: Record<string, any>;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type CandidateResumeShare = {
+  id: string;
+  resume_version_id: string;
+  version_title?: string | null;
+  label: string;
+  access_token: string;
+  permissions?: Record<string, any>;
+  status: string;
+  expires_at?: string | null;
+  created_at?: string | null;
+};
+
+export type CandidateApplication = {
+  id: string;
+  candidate_user_id: string;
+  tenant_id?: string | null;
+  campaign_id?: string | null;
+  resume_version_id?: string | null;
+  resume_share_id?: string | null;
+  version_title?: string | null;
+  destination_name: string;
+  destination_type: string;
+  job_title?: string | null;
+  job_url?: string | null;
+  status: string;
+  pii_visibility_status?: string | null;
+  candidate_note?: string | null;
+  share_url_token?: string | null;
+  share_status?: string | null;
+  share_permissions?: Record<string, any>;
+  shared_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type CandidateAccessRequest = {
+  id: string;
+  candidate_user_id: string;
+  recruiter_user_id?: string | null;
+  tenant_id?: string | null;
+  tenant_name?: string | null;
+  recruiter_email?: string | null;
+  resume_version_id?: string | null;
+  status: string;
+  request_message?: string | null;
+  permissions?: Record<string, any>;
+  approved_profile?: Record<string, any>;
+  created_at?: string | null;
+  updated_at?: string | null;
+  decided_at?: string | null;
+};
+
+export type NativeCandidateSummary = {
+  candidate_user_id: string;
+  resume_version_id?: string | null;
+  name: string;
+  headline?: string;
+  summary?: string;
+  current_location?: string;
+  skills?: string[];
+  experience?: Array<Record<string, any>>;
+  education?: Array<Record<string, any>>;
+  projects?: Array<Record<string, any>>;
+  pii_locked: boolean;
+  request_status?: string | null;
+  updated_at?: string | null;
+};
+
+export type CandidateResumeUpload = {
+  id: string;
+  resume_version_id?: string | null;
+  original_filename: string;
+  mime_type?: string | null;
+  size_bytes?: number | null;
+  sha256?: string | null;
+  target_role?: string | null;
+  candidate_note?: string | null;
+  status: string;
+  stage: string;
+  stage_label?: string | null;
+  progress: number;
+  error_message?: string | null;
+  parsed_profile_json?: CandidatePortalProfile["profile"];
+  parsed_resume_json?: Record<string, any>;
+  parse_quality_json?: Record<string, any>;
+  needs_review_json?: Array<{ field?: string; label?: string; reason?: string }>;
+  created_at?: string | null;
+  updated_at?: string | null;
+  completed_at?: string | null;
+};
+
+export type CandidateSelfMatch = {
+  id?: string;
+  score: number;
+  fit_label: string;
+  matched_terms: string[];
+  missing_or_unclear_terms: string[];
+  skill_hits: string[];
+  summary: string;
+  recommended_next_action: string;
+  privacy_note: string;
+  created_at?: string | null;
+};
+
 export type CandidateSummary = {
   document_id: string;
   name: string | null;
@@ -842,8 +995,188 @@ export async function companySignup(companyName: string, ownerName: string, emai
   });
 }
 
+export async function candidateSignup(name: string, email: string, password: string): Promise<{ user: CurrentUser; profile: CandidatePortalProfile }> {
+  return request("/auth/candidate-signup", {
+    method: "POST",
+    body: JSON.stringify({ name, email, password }),
+  });
+}
+
 export async function me(token: string) {
   return request("/auth/me", { token });
+}
+
+export async function getCandidatePortalProfile(token: string): Promise<CandidatePortalProfile> {
+  return request("/candidate/profile", { token });
+}
+
+export async function updateCandidatePortalProfile(token: string, profile: CandidatePortalProfile["profile"]): Promise<CandidatePortalProfile> {
+  return request("/candidate/profile", {
+    method: "PATCH",
+    token,
+    body: JSON.stringify(profile),
+  });
+}
+
+export async function updateCandidatePortalPrivacySettings(token: string, settings: CandidatePortalPrivacySettings): Promise<CandidatePortalProfile> {
+  return request("/candidate/privacy-settings", {
+    method: "PATCH",
+    token,
+    body: JSON.stringify(settings),
+  });
+}
+
+export async function previewCandidatePortalResume(token: string, file: File): Promise<{ filename: string; source_type: string; html: string }> {
+  const body = new FormData();
+  body.append("file", file);
+  return request("/candidate/resume-preview", { method: "POST", token, body, form: true });
+}
+
+export async function uploadCandidatePortalResume(token: string, file: File, targetRole = "", note = ""): Promise<{ upload: CandidateResumeUpload; message?: string }> {
+  const body = new FormData();
+  body.append("file", file);
+  body.append("target_role", targetRole);
+  body.append("note", note);
+  return request("/candidate/resume-uploads", { method: "POST", token, body, form: true });
+}
+
+export async function listCandidatePortalResumeUploads(token: string): Promise<{ uploads: CandidateResumeUpload[] }> {
+  return request("/candidate/resume-uploads", { token });
+}
+
+export async function getCandidatePortalResumeUpload(token: string, uploadId: string): Promise<{ upload: CandidateResumeUpload }> {
+  return request(`/candidate/resume-uploads/${uploadId}`, { token });
+}
+
+export async function listCandidatePortalResumeVersions(token: string): Promise<{ versions: CandidateResumeVersion[] }> {
+  return request("/candidate/resume-versions", { token });
+}
+
+export async function createCandidatePortalResumeVersion(
+  token: string,
+  title: string,
+  targetRole?: string,
+  resumeJson?: Record<string, any>,
+): Promise<{ version: CandidateResumeVersion }> {
+  return request("/candidate/resume-versions", {
+    method: "POST",
+    token,
+    body: JSON.stringify({ title, target_role: targetRole || null, resume_json: resumeJson || null }),
+  });
+}
+
+export async function getCandidatePortalResumeVersion(token: string, versionId: string): Promise<{ version: CandidateResumeVersion }> {
+  return request(`/candidate/resume-versions/${versionId}`, { token });
+}
+
+export async function archiveCandidatePortalResumeVersion(token: string, versionId: string): Promise<{ version: CandidateResumeVersion }> {
+  return request(`/candidate/resume-versions/${versionId}/archive`, { method: "POST", token });
+}
+
+export async function createCandidatePortalTargetedVersion(
+  token: string,
+  versionId: string,
+  payload: { requirement_text: string; title?: string; target_role?: string },
+): Promise<{ version: CandidateResumeVersion; match: CandidateSelfMatch }> {
+  return request(`/candidate/resume-versions/${versionId}/targeted-version`, {
+    method: "POST",
+    token,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listCandidatePortalResumeShares(token: string): Promise<{ shares: CandidateResumeShare[] }> {
+  return request("/candidate/resume-shares", { token });
+}
+
+export async function createCandidatePortalResumeShare(token: string, versionId: string, label: string, includePii = false): Promise<{ share: CandidateResumeShare }> {
+  return request(`/candidate/resume-versions/${versionId}/shares`, {
+    method: "POST",
+    token,
+    body: JSON.stringify({ label, include_pii: includePii }),
+  });
+}
+
+export async function revokeCandidatePortalResumeShare(token: string, shareId: string): Promise<{ ok: boolean; share_id: string }> {
+  return request(`/candidate/resume-shares/${shareId}/revoke`, { method: "POST", token });
+}
+
+export async function listCandidatePortalApplications(token: string): Promise<{ applications: CandidateApplication[] }> {
+  return request("/candidate/applications", { token });
+}
+
+export async function createCandidatePortalApplication(
+  token: string,
+  payload: {
+    resume_version_id: string;
+    destination_name: string;
+    destination_type?: string;
+    job_title?: string;
+    job_url?: string;
+    status?: string;
+    note?: string;
+    create_share_link?: boolean;
+    include_pii?: boolean;
+  },
+): Promise<{ application: CandidateApplication; share?: CandidateResumeShare | null }> {
+  return request("/candidate/applications", {
+    method: "POST",
+    token,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateCandidatePortalApplication(
+  token: string,
+  applicationId: string,
+  payload: { status?: string; note?: string },
+): Promise<{ application: CandidateApplication }> {
+  return request(`/candidate/applications/${applicationId}`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listCandidatePortalAccessRequests(token: string): Promise<{ access_requests: CandidateAccessRequest[] }> {
+  return request("/candidate/access-requests", { token });
+}
+
+export async function decideCandidatePortalAccessRequest(token: string, requestId: string, decision: "approve" | "deny"): Promise<{ access_request: CandidateAccessRequest }> {
+  return request(`/candidate/access-requests/${requestId}/${decision}`, { method: "POST", token });
+}
+
+export async function listNativeCandidates(token: string, query = "", limit = 20): Promise<{ native_candidates: NativeCandidateSummary[] }> {
+  const params = new URLSearchParams();
+  if (query.trim()) params.set("query", query.trim());
+  params.set("limit", String(limit));
+  return request(`/native-candidates?${params.toString()}`, { token });
+}
+
+export async function requestNativeCandidateAccess(token: string, candidateUserId: string, message = "", resumeVersionId?: string | null): Promise<{ access_request: CandidateAccessRequest }> {
+  return request(`/native-candidates/${candidateUserId}/access-requests`, {
+    method: "POST",
+    token,
+    body: JSON.stringify({ message, resume_version_id: resumeVersionId || null }),
+  });
+}
+
+export function candidateResumeVersionHtmlPath(versionId: string, template = "atlas") {
+  const params = new URLSearchParams({ template });
+  return `/api/backend/candidate/resume-versions/${encodeURIComponent(versionId)}/cv-html?${params.toString()}`;
+}
+
+export function candidateResumeVersionPdfPath(versionId: string, template = "atlas") {
+  const params = new URLSearchParams({ template });
+  return `/api/backend/candidate/resume-versions/${encodeURIComponent(versionId)}/cv.pdf?${params.toString()}`;
+}
+
+export async function matchCandidatePortalRequirement(token: string, versionId: string, requirementText: string): Promise<{ match: CandidateSelfMatch }> {
+  return request(`/candidate/resume-versions/${versionId}/match-requirement`, {
+    method: "POST",
+    token,
+    body: JSON.stringify({ requirement_text: requirementText }),
+  });
 }
 
 export async function selectTenantWorkspace(token: string, tenantId: string): Promise<{ user: CurrentUser }> {

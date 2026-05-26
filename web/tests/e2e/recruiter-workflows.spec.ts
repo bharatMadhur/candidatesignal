@@ -10,7 +10,7 @@ test("public entry keeps login on the homepage and removes legacy login pages", 
   const loginPanel = page.locator(".loginPanel");
   await expect(page.getByText(/candidateSignal\.ai/i).first()).toBeVisible();
   await expect(page.getByText(/recruiter login|recruiter workspace/i).first()).toBeVisible();
-  await expect(page.getByText(/applicant login|applicant portal/i).first()).toBeVisible();
+  await expect(page.getByText(/candidate access|candidate portal/i).first()).toBeVisible();
   await page.getByRole("button", { name: /create a recruiter workspace/i }).click();
   await expect(page.getByRole("heading", { name: /create recruiter workspace/i })).toBeVisible();
   await expect(loginPanel.getByLabel(/company name/i)).toBeVisible();
