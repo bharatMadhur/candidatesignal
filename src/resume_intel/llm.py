@@ -56,6 +56,22 @@ JSON_PASS_SCHEMAS: dict[str, JsonSchemaSpec] = {
         "search_keywords": "list",
         "wow_factor": "list",
     },
+    "resume_record": {
+        "document_id": "string",
+        "source_file": "string",
+        "contact": "dict",
+        "skills": "list",
+        "experience": "list",
+        "education": "list",
+        "projects": "list",
+        "certifications": "list",
+        "awards": "list",
+        "publications": "list",
+        "languages": "list",
+        "notes": "list",
+        "other_sections": "dict",
+        "derived": "dict",
+    },
     "requirement_profile": {
         "title": "nullable_string",
         "role_intent": "nullable_string",
@@ -139,7 +155,7 @@ RESUME_TEXT
         settings=settings,
         max_tokens=4096,
     )
-    return _validate_json_pass_output("requirement_profile", _load_json_object(content))
+    return _validate_json_pass_output("resume_record", _load_json_object(content))
 
 
 def extract_resume_json_with_usage(
@@ -175,7 +191,7 @@ RESUME_TEXT
         "output_tokens": result.output_tokens,
         "finish_reason": result.finish_reason,
     }
-    return _validate_json_pass_output("campaign_llm_match_judge", _load_json_object(result.content)), usage
+    return _validate_json_pass_output("resume_record", _load_json_object(result.content)), usage
 
 
 def run_deep_resume_intelligence(

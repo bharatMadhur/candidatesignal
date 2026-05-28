@@ -61,6 +61,37 @@ class LlmPromptSecurityTests(unittest.TestCase):
         with self.assertRaisesRegex(LlmJsonShapeError, "must_have_skills"):
             _validate_json_pass_output("requirement_profile", profile)
 
+    def test_resume_record_accepts_resume_shape_not_campaign_shape(self) -> None:
+        resume = {
+            "document_id": "doc-1",
+            "source_file": "resume.pdf",
+            "name": "Candidate Name",
+            "contact": {"email": None, "phone": None, "location": None, "links": []},
+            "summary": None,
+            "skills": [],
+            "experience": [],
+            "education": [],
+            "projects": [],
+            "certifications": [],
+            "awards": [],
+            "publications": [],
+            "languages": [],
+            "notes": [],
+            "other_sections": {},
+            "derived": {},
+        }
+
+        self.assertIs(_validate_json_pass_output("resume_record", resume), resume)
+
+        with self.assertRaisesRegex(LlmJsonShapeError, "document_id"):
+            _validate_json_pass_output(
+                "resume_record",
+                {
+                    "candidate_judgements": [],
+                    "pairwise_calibration": {"rank_order": [], "ranking_notes": []},
+                },
+            )
+
     def test_campaign_judge_accepts_required_shape(self) -> None:
         payload = {
             "candidate_judgements": [],
