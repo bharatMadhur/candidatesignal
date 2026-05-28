@@ -23,6 +23,11 @@ export const auth = betterAuth({
   basePath: "/api/auth",
   trustedOrigins: resolveTrustedOrigins(),
   socialProviders: resolveSocialProviders(),
+  advanced: {
+    database: {
+      generateId: "uuid",
+    },
+  },
   emailAndPassword: {
     enabled: true,
     disableSignUp: true,

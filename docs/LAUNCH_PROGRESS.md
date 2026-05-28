@@ -42,6 +42,7 @@ Updated: 2026-05-28
 - Tightened newly extracted frontend helper modules to avoid broad `any` signatures in matching, candidate-portal, evidence, and timeline helpers.
 - Ignored generated local visual-QA artifacts so screenshots and temporary revert patches do not enter git.
 - Removed obsolete candidate-version test coverage for retired `entity-resolution` route aliases after confirming the API only exposes candidate-version routes.
+- Fixed Better Auth Google OAuth user creation by forcing UUID ID generation to match the production `users.id` UUID schema.
 
 ## In Progress
 - Continued frontend decomposition of the monolithic `web/app/page.tsx`.
@@ -75,5 +76,6 @@ Updated: 2026-05-28
 - Candidate-version cleanup passed focused tests.
 - Full backend test suite passed after cleanup: 196 tests and 10 subtests.
 - Python compile, frontend lint, Next.js production build, and public smoke passed after cleanup.
+- Google OAuth Better Auth adapter probe passed against production schema after UUID ID generation fix.
 - Playwright public smoke passed.
 - Playwright authenticated smoke is present but intentionally blocked unless dedicated recruiter and candidate E2E credentials are provided.
