@@ -962,7 +962,6 @@ def migrate() -> None:
                        )
                 from users
                 where lower(users.email)=lower(%s)
-                  and users.role='candidate'
                 on conflict (user_id) do nothing
                 """,
                 (LOCAL_DEV_CANDIDATE_EMAIL,),

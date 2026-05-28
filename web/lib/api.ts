@@ -1052,6 +1052,14 @@ export async function finalizeCandidateGoogleOAuth(token: string, newUser: boole
   });
 }
 
+export async function setWorkspaceAccess(token: string, workspaceAccess: "candidate" | "tenant_member" | "platform_admin"): Promise<{ user: CurrentUser }> {
+  return request("/auth/workspace-access", {
+    method: "POST",
+    token,
+    body: JSON.stringify({ workspace_access: workspaceAccess }),
+  });
+}
+
 export async function me(token: string) {
   return request("/auth/me", { token });
 }

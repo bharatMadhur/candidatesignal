@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from fastapi import HTTPException
 
 from resume_intel import web
-from resume_intel.auth import _better_auth_secret, _session_token_from_bearer
+from resume_intel.auth import _better_auth_secret, _session_token_from_bearer, _user_context
 from resume_intel.routers import health as health_router
 from resume_intel.tenancy import _is_platform_role, normalize_email, require_tenant_admin, require_tenant_write, validate_tenant_creation_request
 from resume_intel.web import _can_view_pii, _redact_campaign_pii, _redact_copilot_thread_pii, _redact_summary_pii
@@ -44,6 +44,22 @@ class _HealthDb:
 
     def __exit__(self, *args: object) -> None:
         return None
+
+
+class _SingleRowResult:
+    def __init__(self, row):
+        self.row = row
+
+    def fetchone(self):
+        return self.row
+
+
+class _SingleRowConnection:
+    def __init__(self, row):
+        self.row = row
+
+    def execute(self, *_args, **_kwargs):
+        return _SingleRowResult(self.row)
 
 
 class BetterAuthSecurityTests(unittest.TestCase):
@@ -84,6 +100,57 @@ class BetterAuthSecurityTests(unittest.TestCase):
             secret_file.flush()
             with patch.dict(os.environ, {"BETTER_AUTH_SECRET": "", "BETTER_AUTH_SECRET_FILE": secret_file.name}, clear=False):
                 self.assertEqual(_better_auth_secret(), "file-backed-secret-value")
+
+    def test_candidate_workspace_persona_keeps_recruiter_role_intact(self) -> None:
+        row = {
+            "id": "user-1",
+            "email": "person@example.com",
+            "platform_role": "recruiter",
+            "name": "Person",
+            "active_tenant_id": None,
+            "active_workspace_access": "candidate",
+            "has_candidate_profile": True,
+            "member_tenant_role": "recruiter",
+            "member_membership_status": "active",
+            "member_tenant_id": "tenant-1",
+            "member_tenant_name": "Acme",
+            "member_tenant_status": "active",
+            "active_tenant_id": None,
+            "active_tenant_name": None,
+            "active_tenant_status": None,
+        }
+
+        user = _user_context(_SingleRowConnection(row), "session-token")
+
+        self.assertEqual(user["workspace_access"], "candidate")
+        self.assertEqual(user["role"], "candidate")
+        self.assertEqual(user["platform_role"], "recruiter")
+        self.assertIsNone(user["tenant_id"])
+
+    def test_recruiter_workspace_persona_remains_tenant_scoped(self) -> None:
+        row = {
+            "id": "user-1",
+            "email": "person@example.com",
+            "platform_role": "recruiter",
+            "name": "Person",
+            "active_tenant_id": None,
+            "active_workspace_access": None,
+            "has_candidate_profile": True,
+            "member_tenant_role": "recruiter",
+            "member_membership_status": "active",
+            "member_tenant_id": "tenant-1",
+            "member_tenant_name": "Acme",
+            "member_tenant_status": "active",
+            "active_tenant_name": None,
+            "active_tenant_status": None,
+        }
+
+        user = _user_context(_SingleRowConnection(row), "session-token")
+
+        self.assertEqual(user["workspace_access"], "tenant_member")
+        self.assertEqual(user["role"], "recruiter")
+        self.assertEqual(user["platform_role"], "recruiter")
+        self.assertEqual(user["tenant_id"], "tenant-1")
 
     def test_platform_admin_cannot_satisfy_tenant_permissions(self) -> None:
         platform_admin = {"platform_role": "platform_admin", "role": "platform_admin", "tenant_role": None}

@@ -27,7 +27,16 @@ from docx.text.paragraph import Paragraph
 from psycopg.types.json import Jsonb
 
 from .analytics import tenant_workspace_analytics
-from .auth import bootstrap_platform_admin, clear_platform_tenant_workspace, current_user, login, logout, security, select_platform_tenant_workspace
+from .auth import (
+    bootstrap_platform_admin,
+    clear_platform_tenant_workspace,
+    current_user,
+    login,
+    logout,
+    security,
+    select_platform_tenant_workspace,
+    set_session_workspace_access,
+)
 from .campaigns import (
     attach_campaign_requirement,
     create_campaign,
@@ -322,6 +331,10 @@ class CandidateOAuthFinalizeRequest(BaseModel):
     new_user: bool = False
 
 
+class WorkspaceAccessRequest(BaseModel):
+    workspace_access: str
+
+
 class CandidatePortalProfileUpdateRequest(BaseModel):
     display_name: str | None = None
     headline: str | None = None
@@ -603,8 +616,25 @@ def auth_candidate_signup(request: CandidateSignupRequest) -> dict:
 
 
 @app.post("/auth/candidate-oauth/finalize")
-def auth_candidate_oauth_finalize(request: CandidateOAuthFinalizeRequest, user: dict = Depends(current_user)) -> dict:
-    return finalize_candidate_oauth_account(user, new_user=request.new_user)
+def auth_candidate_oauth_finalize(
+    request: CandidateOAuthFinalizeRequest,
+    user: dict = Depends(current_user),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> dict:
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="missing bearer token")
+    finalize_candidate_oauth_account(user, new_user=request.new_user)
+    return set_session_workspace_access(credentials.credentials, "candidate")
+
+
+@app.post("/auth/workspace-access")
+def auth_workspace_access(
+    request: WorkspaceAccessRequest,
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> dict:
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="missing bearer token")
+    return set_session_workspace_access(credentials.credentials, request.workspace_access)
 
 
 @app.post("/auth/login")

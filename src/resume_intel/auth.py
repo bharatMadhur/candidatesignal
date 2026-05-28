@@ -157,6 +157,43 @@ def clear_platform_tenant_workspace(token: str) -> dict[str, Any]:
     return {"user": user}
 
 
+def set_session_workspace_access(token: str, workspace_access: str) -> dict[str, Any]:
+    if workspace_access not in {"candidate", "tenant_member", "platform_admin"}:
+        raise HTTPException(status_code=400, detail="invalid workspace access")
+    session_token = _session_token_from_bearer(token)
+    with db() as conn:
+        session = conn.execute(
+            """
+            select sessions.user_id, users.role,
+                   exists (
+                     select 1 from candidate_profiles
+                     where candidate_profiles.user_id=users.id
+                   ) as has_candidate_profile
+            from sessions
+            join users on users.id = sessions.user_id
+            where sessions.token=%s and sessions.expires_at > now()
+              and sessions.revoked_at is null
+            """,
+            (session_token,),
+        ).fetchone()
+        if not session:
+            raise HTTPException(status_code=401, detail="invalid or expired session")
+        role = session["role"]
+        if workspace_access == "platform_admin" and role not in {"admin", "platform_admin"}:
+            raise HTTPException(status_code=403, detail="platform admin permission required")
+        if workspace_access == "candidate" and not session["has_candidate_profile"]:
+            raise HTTPException(status_code=403, detail="candidate profile required")
+        conn.execute(
+            "update sessions set active_workspace_access=%s, updated_at=now() where token=%s",
+            (workspace_access, session_token),
+        )
+        user = _user_context(conn, session_token)
+        conn.commit()
+    if not user:
+        raise HTTPException(status_code=401, detail="invalid or expired session")
+    return {"user": user}
+
+
 def current_user(credentials: HTTPAuthorizationCredentials | None = Depends(security)) -> dict[str, Any]:
     if credentials is None:
         raise HTTPException(status_code=401, detail="missing bearer token")
@@ -242,6 +279,11 @@ def _user_context(conn: Any, token: str) -> dict[str, Any] | None:
         """
         select users.id, users.email, users.role as platform_role, users.name,
                sessions.active_tenant_id,
+               sessions.active_workspace_access,
+               exists (
+                 select 1 from candidate_profiles
+                 where candidate_profiles.user_id=users.id
+               ) as has_candidate_profile,
                member_tenant_memberships.role as member_tenant_role,
                member_tenant_memberships.status as member_membership_status,
                member_tenants.id as member_tenant_id,
@@ -268,7 +310,8 @@ def _user_context(conn: Any, token: str) -> dict[str, Any] | None:
     if not row:
         return None
     is_platform_admin = row["platform_role"] in {"admin", "platform_admin"}
-    is_candidate = row["platform_role"] == "candidate"
+    candidate_persona_selected = row["active_workspace_access"] == "candidate" and bool(row["has_candidate_profile"])
+    is_candidate = not is_platform_admin and (row["platform_role"] == "candidate" or candidate_persona_selected)
     tenant_id = None if is_platform_admin else row["member_tenant_id"]
     tenant_name = None if is_platform_admin else row["member_tenant_name"]
     tenant_status = None if is_platform_admin else row["member_tenant_status"]

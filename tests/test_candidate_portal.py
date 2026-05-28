@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -16,6 +17,7 @@ from resume_intel.candidate_portal import (
     _normalize_application_status,
     _normalize_privacy_settings,
     _resume_for_external_share,
+    finalize_candidate_oauth_account,
     render_cv_pdf,
     profile_from_parsed_resume,
     render_cv_html,
@@ -26,7 +28,70 @@ from resume_intel.candidate_portal import (
 )
 
 
+class _QueuedResult:
+    def __init__(self, row=None):
+        self.row = row
+
+    def fetchone(self):
+        return self.row
+
+
+class _CandidateOAuthConnection:
+    def __init__(self):
+        self.executed_sql: list[str] = []
+        self.rows = [
+            {
+                "id": "user-1",
+                "email": "recruiter@example.com",
+                "name": "Recruiter Candidate",
+                "role": "recruiter",
+                "email_verified": True,
+                "created_at": None,
+            },
+            {
+                "id": "user-1",
+                "email": "recruiter@example.com",
+                "name": "Recruiter Candidate",
+                "role": "recruiter",
+                "email_verified": True,
+                "created_at": None,
+            },
+        ]
+
+    def execute(self, sql, *_args, **_kwargs):
+        self.executed_sql.append(sql)
+        if sql.strip().lower().startswith("select"):
+            return _QueuedResult(self.rows.pop(0))
+        return _QueuedResult()
+
+    def commit(self):
+        return None
+
+
+class _CandidateOAuthDb:
+    def __init__(self, conn):
+        self.conn = conn
+
+    def __enter__(self):
+        return self.conn
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+
 class CandidatePortalTests(unittest.TestCase):
+    def test_google_candidate_finalize_allows_recruiter_candidate_persona(self) -> None:
+        conn = _CandidateOAuthConnection()
+
+        with patch("resume_intel.candidate_portal.db", return_value=_CandidateOAuthDb(conn)):
+            result = finalize_candidate_oauth_account({"id": "user-1"}, new_user=False)
+
+        self.assertEqual(result["user"]["workspace_access"], "candidate")
+        self.assertEqual(result["user"]["email"], "recruiter@example.com")
+        executed = "\n".join(conn.executed_sql).lower()
+        self.assertNotIn("set role='candidate'", executed)
+        self.assertIn("insert into candidate_profiles", executed)
+
     def test_build_resume_from_profile_preserves_candidate_owned_links_without_verification(self) -> None:
         resume = build_resume_from_profile(
             {

@@ -163,12 +163,12 @@ def create_candidate_account(*, name: str, email: str, password: str) -> dict[st
 
 
 def finalize_candidate_oauth_account(user: dict[str, Any], *, new_user: bool = False) -> dict[str, Any]:
-    """Convert a fresh Better Auth Google user into a candidate workspace.
+    """Ensure the signed-in Google user has a candidate workspace.
 
-    Recruiter and platform-admin accounts must never be silently converted into
-    candidate accounts. Only brand-new OAuth users with no active tenant
-    membership can be converted; existing candidate users are just repaired if
-    their candidate profile row is missing.
+    Candidate access is now a persona, not a destructive user-role conversion.
+    A recruiter can also maintain a candidate-owned profile under the same
+    identity, while platform-admin accounts remain isolated from candidate
+    workspaces.
     """
 
     user_id = user.get("id")
@@ -177,12 +177,9 @@ def finalize_candidate_oauth_account(user: dict[str, Any], *, new_user: bool = F
     with db() as conn:
         row = conn.execute(
             """
-            select users.id, users.email, users.name, users.role, users.created_at,
-                   count(tenant_memberships.id) filter (where tenant_memberships.status='active') as active_tenant_count
+            select users.id, users.email, users.name, users.role, users.email_verified, users.created_at
             from users
-            left join tenant_memberships on tenant_memberships.user_id = users.id
             where users.id=%s
-            group by users.id
             """,
             (user_id,),
         ).fetchone()
@@ -191,21 +188,17 @@ def finalize_candidate_oauth_account(user: dict[str, Any], *, new_user: bool = F
         role = row["role"]
         if role in {"admin", "platform_admin"}:
             raise HTTPException(status_code=403, detail="Google account belongs to the platform admin system")
-        if role != "candidate":
-            if not new_user:
-                raise HTTPException(status_code=403, detail="Google account is not a candidate account. Use Recruiter Access or create a candidate profile.")
-            if int(row.get("active_tenant_count") or 0) > 0:
-                raise HTTPException(status_code=409, detail="Google account already belongs to a recruiter workspace")
+        if not row.get("email_verified"):
             conn.execute(
                 """
                 update users
-                set role='candidate', email_verified=true, updated_at=now()
+                set email_verified=true, updated_at=now()
                 where id=%s
                 """,
                 (row["id"],),
             )
             row = conn.execute(
-                "select id, email, name, role, created_at from users where id=%s",
+                "select id, email, name, role, email_verified, created_at from users where id=%s",
                 (user_id,),
             ).fetchone()
         _ensure_candidate_profile(conn, row)
@@ -576,7 +569,7 @@ def list_native_candidates(user: dict[str, Any], *, query: str = "", limit: int 
                    ) as approved_snapshot_json
             from users
             join candidate_profiles on candidate_profiles.user_id=users.id
-            where users.role='candidate'
+            where users.role not in ('admin', 'platform_admin')
               and coalesce((candidate_profiles.privacy_settings->>'candidate_signal_native_search_enabled')::boolean, false)=true
             order by candidate_profiles.updated_at desc
             limit 300
@@ -603,7 +596,8 @@ def request_native_candidate_access(user: dict[str, Any], candidate_user_id: str
             select candidate_profiles.profile_json, candidate_profiles.privacy_settings
             from users
             join candidate_profiles on candidate_profiles.user_id=users.id
-            where users.id=%s and users.role='candidate'
+            where users.id=%s
+              and users.role not in ('admin', 'platform_admin')
             """,
             (candidate_user_id,),
         ).fetchone()

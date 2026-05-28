@@ -116,6 +116,7 @@ import {
   compareLatestRequirementMatchRuns,
   finalizeRequirement,
   finalizeCandidateGoogleOAuth,
+  setWorkspaceAccess,
   getParseBatch,
   getWorkerStatus,
   inviteTeamMember,
@@ -876,6 +877,13 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
       const loginEmail = resolveLoginIdentifier(email, loginMode);
       const result = await signInWithBetterAuth(loginEmail, password);
       const nextToken = result.token || COOKIE_SESSION_TOKEN;
+      if (loginMode === "company") {
+        await setWorkspaceAccess(nextToken, "tenant_member");
+      } else if (loginMode === "candidate") {
+        await setWorkspaceAccess(nextToken, "candidate");
+      } else if (loginMode === "admin") {
+        await setWorkspaceAccess(nextToken, "platform_admin");
+      }
       const current = await me(nextToken) as { user: CurrentUser };
       const platform = isPlatformAdmin(current.user);
       const candidateAccount = isCandidateUser(current.user);
