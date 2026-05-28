@@ -649,7 +649,7 @@ def get_worker_status(tenant_id: str | None = None, *, online_seconds: int = 30)
             """,
             (online_seconds, tenant_id, tenant_id),
         ).fetchall()
-        counts = conn.execute(
+        parse_counts = conn.execute(
             """
             select
               count(*) filter (where status in ('queued', 'retrying')) as queued_count,
@@ -660,6 +660,29 @@ def get_worker_status(tenant_id: str | None = None, *, online_seconds: int = 30)
             """,
             (tenant_id, tenant_id),
         ).fetchone()
+        campaign_match_counts = conn.execute(
+            """
+            select
+              count(*) filter (where status in ('queued', 'retrying')) as queued_count,
+              count(*) filter (where status='running') as running_count,
+              count(*) filter (where status='failed') as failed_count
+            from campaign_match_jobs
+            where (%s::uuid is null or tenant_id=%s)
+            """,
+            (tenant_id, tenant_id),
+        ).fetchone()
+        if tenant_id is None:
+            candidate_upload_counts = conn.execute(
+                """
+                select
+                  count(*) filter (where status in ('queued', 'retrying')) as queued_count,
+                  count(*) filter (where status='running') as running_count,
+                  count(*) filter (where status='failed') as failed_count
+                from candidate_resume_uploads
+                """
+            ).fetchone()
+        else:
+            candidate_upload_counts = {"queued_count": 0, "running_count": 0, "failed_count": 0}
         dead_letters = conn.execute(
             """
             select count(*) as dead_letter_count
@@ -670,12 +693,30 @@ def get_worker_status(tenant_id: str | None = None, *, online_seconds: int = 30)
             (tenant_id, tenant_id),
         ).fetchone()
     worker_rows = [_worker_row(row) | {"online": bool(row["online"])} for row in workers]
+    parse_queued_count = int(parse_counts["queued_count"] or 0)
+    parse_running_count = int(parse_counts["running_count"] or 0)
+    parse_failed_count = int(parse_counts["failed_count"] or 0)
+    campaign_match_queued_count = int(campaign_match_counts["queued_count"] or 0)
+    campaign_match_running_count = int(campaign_match_counts["running_count"] or 0)
+    campaign_match_failed_count = int(campaign_match_counts["failed_count"] or 0)
+    candidate_upload_queued_count = int(candidate_upload_counts["queued_count"] or 0)
+    candidate_upload_running_count = int(candidate_upload_counts["running_count"] or 0)
+    candidate_upload_failed_count = int(candidate_upload_counts["failed_count"] or 0)
     return {
         "online": any(row["online"] for row in worker_rows),
         "workers": worker_rows,
-        "queued_count": int(counts["queued_count"] or 0),
-        "running_count": int(counts["running_count"] or 0),
-        "failed_count": int(counts["failed_count"] or 0),
+        "queued_count": parse_queued_count + campaign_match_queued_count + candidate_upload_queued_count,
+        "running_count": parse_running_count + campaign_match_running_count + candidate_upload_running_count,
+        "failed_count": parse_failed_count + campaign_match_failed_count + candidate_upload_failed_count,
+        "parse_queued_count": parse_queued_count,
+        "parse_running_count": parse_running_count,
+        "parse_failed_count": parse_failed_count,
+        "campaign_match_queued_count": campaign_match_queued_count,
+        "campaign_match_running_count": campaign_match_running_count,
+        "campaign_match_failed_count": campaign_match_failed_count,
+        "candidate_upload_queued_count": candidate_upload_queued_count,
+        "candidate_upload_running_count": candidate_upload_running_count,
+        "candidate_upload_failed_count": candidate_upload_failed_count,
         "dead_letter_count": int(dead_letters["dead_letter_count"] or 0),
         "online_window_seconds": online_seconds,
     }
@@ -969,9 +1010,9 @@ def _maybe_run_completed_campaign_batch_match(batch_id: str | None, tenant_id: s
         match_payload = _completed_campaign_batch_match_payload(batch_id, tenant_id)
         if not match_payload:
             return
-        from .campaigns import run_campaign_match
+        from .matching_service import run_campaign_matching
 
-        result = run_campaign_match(
+        result = run_campaign_matching(
             match_payload["campaign_id"],
             tenant_id,
             user_id,

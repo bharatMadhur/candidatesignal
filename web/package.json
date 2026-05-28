@@ -9,9 +9,14 @@
     "start": "next start",
     "smoke": "node tests/smoke.mjs",
     "e2e": "playwright test",
-    "e2e:auth-required": "node tests/require-auth-e2e-env.mjs && playwright test"
+    "e2e:auth-required": "node tests/require-auth-e2e-env.mjs && playwright test",
+    "launch:check": "npm run lint && npm run build && npm run e2e:auth-required"
   },
   "dependencies": {
+    "@floating-ui/dom": "^1.7.6",
+    "@tiptap/extension-placeholder": "^3.23.6",
+    "@tiptap/react": "^3.23.6",
+    "@tiptap/starter-kit": "^3.23.6",
     "better-auth": "^1.6.9",
     "lucide-react": "0.468.0",
     "next": "^16.2.4",
@@ -24,8 +29,8 @@
     "postcss": "^8.5.10"
   },
   "devDependencies": {
-    "@types/node": "22.10.2",
     "@playwright/test": "^1.57.0",
+    "@types/node": "22.10.2",
     "@types/pg": "^8.20.0",
     "@types/react": "19.0.2",
     "@types/react-dom": "19.0.2",

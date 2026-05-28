@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import html
+import json
 import logging
 import os
+import re
 import shutil
 import tempfile
 import time
@@ -74,7 +76,9 @@ from .candidate_versions import candidate_version_requirements, decide_match, fi
 from .candidate_portal import (
     archive_resume_version as archive_candidate_resume_version,
     create_candidate_application,
+    create_candidate_ai_learning_event,
     create_candidate_account,
+    finalize_candidate_oauth_account,
     create_resume_share as create_candidate_resume_share,
     create_resume_upload as create_candidate_resume_upload,
     create_resume_version as create_candidate_resume_version,
@@ -84,6 +88,7 @@ from .candidate_portal import (
     get_resume_upload as get_candidate_resume_upload,
     get_resume_version as get_candidate_resume_version,
     list_candidate_access_requests,
+    list_candidate_ai_learning_events,
     list_candidate_applications,
     list_native_candidates as list_native_candidate_portal_candidates,
     list_resume_uploads as list_candidate_resume_uploads,
@@ -94,8 +99,9 @@ from .candidate_portal import (
     render_resume_version_html,
     render_resume_version_pdf,
     request_native_candidate_access,
+    retry_resume_upload as retry_candidate_resume_upload,
     revoke_resume_share as revoke_candidate_resume_share,
-    run_resume_upload_parse as run_candidate_resume_upload_parse,
+    update_resume_version as update_candidate_resume_version,
     update_candidate_profile as update_candidate_portal_profile,
     update_candidate_application,
     update_candidate_privacy_settings as update_candidate_portal_privacy_settings,
@@ -147,6 +153,7 @@ from .match_jobs import (
     list_campaign_match_jobs,
     retry_campaign_match_job,
 )
+from .matching_service import match_requirement_against_candidates, semantic_scores_for_query
 from .parse_jobs import cancel_batch, cancel_job, create_parse_batch, create_reparse_job_for_candidate, get_parse_batch, get_parse_job, get_worker_status, list_parse_batches, retry_job, run_job, run_next_job
 from .pii import redact_contact_pii_payload, redact_contact_pii_text
 from .pipeline import SUPPORTED_EXTENSIONS
@@ -161,7 +168,6 @@ from .requirements import (
     get_requirement,
     list_match_runs,
     list_requirements,
-    match_requirement,
     set_match_status,
 )
 from .routers.health import router as health_router
@@ -190,7 +196,7 @@ from .tenancy import (
     validate_tenant_creation_request,
 )
 from .storage import document_storage, validate_tenant_storage_key
-from .vector_search import candidate_search as hybrid_candidate_search, semantic_candidate_scores, semantic_candidate_search
+from .vector_search import candidate_search as hybrid_candidate_search, semantic_candidate_search
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -312,6 +318,10 @@ class CandidateSignupRequest(BaseModel):
     password: str
 
 
+class CandidateOAuthFinalizeRequest(BaseModel):
+    new_user: bool = False
+
+
 class CandidatePortalProfileUpdateRequest(BaseModel):
     display_name: str | None = None
     headline: str | None = None
@@ -344,6 +354,12 @@ class CandidatePortalPrivacySettingsRequest(BaseModel):
 
 class CandidateResumeVersionRequest(BaseModel):
     title: str
+    target_role: str | None = None
+    resume_json: dict[str, Any] | None = None
+
+
+class CandidateResumeVersionUpdateRequest(BaseModel):
+    title: str | None = None
     target_role: str | None = None
     resume_json: dict[str, Any] | None = None
 
@@ -383,6 +399,25 @@ class NativeCandidateAccessRequest(BaseModel):
 
 class CandidateRequirementSelfMatchRequest(BaseModel):
     requirement_text: str
+
+
+class CandidateAiEditorRequest(BaseModel):
+    action: str = Field(..., pattern="^(coach|rewrite_selection|tailor_section|gap_check)$")
+    selected_text: str | None = None
+    instruction: str | None = None
+    profile: dict[str, Any] | None = None
+    resume_html: str | None = None
+    target_role: str | None = None
+    requirement_text: str | None = None
+
+
+class CandidateAiLearningEventRequest(BaseModel):
+    event_type: str
+    source: str = "candidate_editor"
+    original_text: str | None = None
+    suggested_text: str | None = None
+    accepted: bool | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class TenantRequest(BaseModel):
@@ -567,6 +602,11 @@ def auth_candidate_signup(request: CandidateSignupRequest) -> dict:
     return create_candidate_account(name=request.name, email=request.email, password=request.password)
 
 
+@app.post("/auth/candidate-oauth/finalize")
+def auth_candidate_oauth_finalize(request: CandidateOAuthFinalizeRequest, user: dict = Depends(current_user)) -> dict:
+    return finalize_candidate_oauth_account(user, new_user=request.new_user)
+
+
 @app.post("/auth/login")
 def auth_login(request: AuthRequest) -> dict:
     if (os.getenv("RESUME_INTEL_ENABLE_LEGACY_AUTH") or "").lower() not in {"1", "true", "yes"}:
@@ -643,7 +683,6 @@ def candidate_portal_resume_preview(file: UploadFile = File(...), user: dict = D
 
 @app.post("/candidate/resume-uploads", status_code=202)
 def candidate_portal_upload_resume(
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     target_role: str = Form(""),
     note: str = Form(""),
@@ -658,9 +697,7 @@ def candidate_portal_upload_resume(
         target_role=target_role,
         note=note,
     )
-    upload = result["upload"]
-    background_tasks.add_task(run_candidate_resume_upload_parse, upload["id"], user["id"])
-    return result | {"message": "resume queued for candidate-side parsing"}
+    return result | {"message": "resume queued for candidate-side parsing worker"}
 
 
 @app.get("/candidate/resume-uploads")
@@ -671,6 +708,11 @@ def candidate_portal_resume_uploads(user: dict = Depends(current_user)) -> dict:
 @app.get("/candidate/resume-uploads/{upload_id}")
 def candidate_portal_resume_upload(upload_id: str, user: dict = Depends(current_user)) -> dict:
     return get_candidate_resume_upload(user, upload_id)
+
+
+@app.post("/candidate/resume-uploads/{upload_id}/retry")
+def candidate_portal_retry_resume_upload(upload_id: str, user: dict = Depends(current_user)) -> dict:
+    return retry_candidate_resume_upload(user, upload_id)
 
 
 @app.get("/candidate/resume-versions")
@@ -691,6 +733,17 @@ def candidate_portal_create_resume_version(request: CandidateResumeVersionReques
 @app.get("/candidate/resume-versions/{version_id}")
 def candidate_portal_resume_version(version_id: str, user: dict = Depends(current_user)) -> dict:
     return get_candidate_resume_version(user, version_id)
+
+
+@app.patch("/candidate/resume-versions/{version_id}")
+def candidate_portal_update_resume_version(version_id: str, request: CandidateResumeVersionUpdateRequest, user: dict = Depends(current_user)) -> dict:
+    return update_candidate_resume_version(
+        user,
+        version_id,
+        title=request.title,
+        target_role=request.target_role,
+        resume_json=request.resume_json,
+    )
 
 
 @app.post("/candidate/resume-versions/{version_id}/archive")
@@ -786,6 +839,23 @@ def candidate_portal_match_requirement(version_id: str, request: CandidateRequir
     return match_resume_version_to_requirement(user, version_id, request.requirement_text)
 
 
+@app.post("/candidate/ai/editor-suggest")
+def candidate_portal_ai_editor_suggest(request: CandidateAiEditorRequest, user: dict = Depends(current_user)) -> dict:
+    current_profile = get_candidate_portal_profile(user)
+    profile = request.profile if isinstance(request.profile, dict) else current_profile.get("profile", {})
+    return {"suggestion": _candidate_ai_editor_suggestion(request, profile)}
+
+
+@app.get("/candidate/ai/learning-events")
+def candidate_portal_ai_learning_events(limit: int = Query(30), user: dict = Depends(current_user)) -> dict:
+    return list_candidate_ai_learning_events(user, limit=limit)
+
+
+@app.post("/candidate/ai/learning-events")
+def candidate_portal_create_ai_learning_event(request: CandidateAiLearningEventRequest, user: dict = Depends(current_user)) -> dict:
+    return create_candidate_ai_learning_event(user, request.model_dump(exclude_unset=True))
+
+
 @app.get("/candidate-shares/{access_token}")
 def candidate_portal_public_resume_share(access_token: str) -> dict:
     return public_resume_share(access_token)
@@ -825,7 +895,7 @@ def candidates(user: dict = Depends(current_user)) -> dict:
 def semantic_search(request: SemanticSearchRequest, user: dict = Depends(current_user)) -> dict:
     if not request.query.strip():
         raise HTTPException(status_code=400, detail="query is required")
-    return {"results": semantic_candidate_scores(request.query, request.limit, tenant_id=_tenant_id(user)), "user": user}
+    return {"results": semantic_scores_for_query(request.query, limit=request.limit, tenant_id=_tenant_id(user)), "user": user}
 
 
 @app.post("/candidates/search")
@@ -1527,14 +1597,6 @@ def collaboration_saved_view_delete(view_id: str, user: dict = Depends(current_u
         raise HTTPException(status_code=404, detail="saved view not found") from exc
 
 
-@app.get("/candidates/{document_id}/entity-resolution")
-def candidate_versions_for_candidate_legacy(document_id: str, user: dict = Depends(current_user)) -> dict:
-    raise HTTPException(
-        status_code=410,
-        detail="entity resolution is retired; use /candidates/{document_id}/candidate-versions",
-    )
-
-
 @app.get("/candidates/{document_id}/candidate-versions")
 def candidate_versions_for_candidate(document_id: str, user: dict = Depends(current_user)) -> dict:
     try:
@@ -1550,54 +1612,14 @@ def candidate_versions_for_candidate(document_id: str, user: dict = Depends(curr
     return {"matches": matches, "requirements": candidate_version_requirements(), "user": user}
 
 
-@app.get("/entity-resolution/requirements")
-def resolution_requirements(user: dict = Depends(current_user)) -> dict:
-    raise HTTPException(
-        status_code=410,
-        detail="entity resolution is retired; use /candidate-versions/requirements",
-    )
-
-
 @app.get("/candidate-versions/requirements")
 def version_requirements(user: dict = Depends(current_user)) -> dict:
     return candidate_version_requirements()
 
 
-@app.get("/entity-resolution/clusters")
-def resolution_clusters(user: dict = Depends(current_user)) -> dict:
-    raise HTTPException(
-        status_code=410,
-        detail="entity resolution is retired; use /candidate-versions/clusters",
-    )
-
-
 @app.get("/candidate-versions/clusters")
 def version_clusters(user: dict = Depends(current_user)) -> dict:
     return {"clusters": list_clusters(_tenant_id(user)), "user": user}
-
-
-@app.post("/entity-resolution/{match_id}/same-person")
-def same_person(match_id: str, user: dict = Depends(current_user)) -> dict:
-    raise HTTPException(
-        status_code=410,
-        detail="same-person decisions are retired; use /candidate-versions/{match_id}/versioned",
-    )
-
-
-@app.post("/entity-resolution/{match_id}/not-same-person")
-def not_same_person(match_id: str, user: dict = Depends(current_user)) -> dict:
-    raise HTTPException(
-        status_code=410,
-        detail="not-same-person decisions are retired; use /candidate-versions/{match_id}/separate",
-    )
-
-
-@app.post("/entity-resolution/{match_id}/versioned")
-def versioned_candidate(match_id: str, user: dict = Depends(current_user)) -> dict:
-    raise HTTPException(
-        status_code=410,
-        detail="entity resolution is retired; use /candidate-versions/{match_id}/versioned",
-    )
 
 
 @app.post("/candidate-versions/{match_id}/versioned")
@@ -1608,14 +1630,6 @@ def mark_candidate_versions(match_id: str, user: dict = Depends(current_user)) -
         raise HTTPException(status_code=404, detail="match not found") from exc
 
 
-@app.post("/entity-resolution/{match_id}/separate")
-def separate_candidate_versions(match_id: str, user: dict = Depends(current_user)) -> dict:
-    raise HTTPException(
-        status_code=410,
-        detail="entity resolution is retired; use /candidate-versions/{match_id}/separate",
-    )
-
-
 @app.post("/candidate-versions/{match_id}/separate")
 def keep_candidate_versions_separate(match_id: str, user: dict = Depends(current_user)) -> dict:
     try:
@@ -1624,28 +1638,12 @@ def keep_candidate_versions_separate(match_id: str, user: dict = Depends(current
         raise HTTPException(status_code=404, detail="match not found") from exc
 
 
-@app.post("/entity-resolution/{match_id}/review-later")
-def review_later(match_id: str, user: dict = Depends(current_user)) -> dict:
-    raise HTTPException(
-        status_code=410,
-        detail="entity resolution is retired; use /candidate-versions/{match_id}/review-later",
-    )
-
-
 @app.post("/candidate-versions/{match_id}/review-later")
 def review_candidate_versions_later(match_id: str, user: dict = Depends(current_user)) -> dict:
     try:
         return decide_match(match_id, "review_later", user["id"], _tenant_id(user))
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="match not found") from exc
-
-
-@app.post("/entity-resolution/{match_id}/merge")
-def merge_entity(match_id: str, user: dict = Depends(current_user)) -> dict:
-    raise HTTPException(
-        status_code=410,
-        detail="candidate merging is disabled; upload copies are preserved as candidate versions",
-    )
 
 
 @app.post("/candidate-versions/{match_id}/merge")
@@ -1711,7 +1709,7 @@ def finalize(requirement_id: str, request: ClarifyRequest, user: dict = Depends(
 @app.post("/requirements/{requirement_id}/match")
 def match(requirement_id: str, user: dict = Depends(current_user)) -> dict:
     try:
-        return {"matches": match_requirement(requirement_id, _tenant_id(user))}
+        return {"matches": match_requirement_against_candidates(requirement_id, _tenant_id(user))}
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="requirement not found") from exc
 
@@ -2527,6 +2525,193 @@ def _audit_search_pii_access(user: dict, action: str, query: str, results: list[
             action=action,
             metadata={"query_preview": query[:160], "result_count": len(results)},
         )
+
+
+def _candidate_ai_editor_suggestion(request: CandidateAiEditorRequest, profile: dict[str, Any]) -> dict[str, Any]:
+    settings = load_settings()
+    if not settings.llm_api_key and settings.llm_base_url.startswith("https://api.openai.com"):
+        return _candidate_ai_fallback_suggestion(
+            request,
+            status="disabled",
+            warning="LLM API key is not configured for candidate editor suggestions.",
+        )
+
+    provider = NormalizedProvider(
+        model=settings.llm_model,
+        api_key=settings.llm_api_key,
+        base_url=settings.llm_base_url,
+        timeout_seconds=min(settings.llm_timeout_seconds, 60),
+        temperature=0,
+        max_tokens=min(settings.llm_max_tokens, 1800),
+        max_retries=1,
+        retry_base_delay_ms=settings.llm_retry_base_delay_ms,
+    )
+    prompt = {
+        "action": request.action,
+        "instruction": _truncate_text(request.instruction, 2500),
+        "selected_text": _truncate_text(request.selected_text, 2500),
+        "target_role": _truncate_text(request.target_role, 500),
+        "requirement_text": _truncate_text(request.requirement_text, 4500),
+        "resume_html_text": _truncate_text(_strip_html_text(request.resume_html or ""), 7000),
+        "approved_profile": _compact_candidate_profile(profile),
+    }
+    try:
+        result = provider.generate(
+            system_prompt=CANDIDATE_AI_EDITOR_SYSTEM_PROMPT,
+            messages=[Message(role="user", content=json.dumps(prompt, ensure_ascii=False))],
+            response_format={"type": "json_object"},
+            max_tokens=1800,
+        )
+        payload = _safe_json_object(result.content)
+        suggestion = _normalize_candidate_ai_suggestion(payload, request)
+        suggestion["usage"] = {
+            "model": result.model or settings.llm_model,
+            "input_tokens": result.input_tokens,
+            "output_tokens": result.output_tokens,
+            "total_tokens": result.input_tokens + result.output_tokens,
+        }
+        return suggestion
+    except Exception as exc:
+        http_logger.warning(
+            "candidate_ai_editor_fallback",
+            extra={"action": request.action, "error_type": exc.__class__.__name__},
+        )
+        return _candidate_ai_fallback_suggestion(
+            request,
+            status="fallback",
+            warning=f"AI suggestion unavailable; using safe local guidance. {exc.__class__.__name__}",
+        )
+
+
+CANDIDATE_AI_EDITOR_SYSTEM_PROMPT = """You are candidateSignal.ai's candidate-side resume coach.
+
+You help candidates improve resumes, but every suggestion must be grounded in the supplied candidate profile, selected text, resume text, or job requirement.
+
+Rules:
+- Never invent employers, titles, dates, locations, degrees, tools, metrics, publications, or certifications.
+- If a fact is missing, say it is missing or ask for it. Do not fill it.
+- Preserve the candidate's factual meaning.
+- Prefer concise, ATS-safe language and evidence-rich bullets.
+- For rewrite_selection, return a replacement for only the selected text.
+- For coach, answer as a practical editor with concrete next actions.
+- For tailor_section or gap_check, identify what to emphasize, what is missing, and what should not be claimed.
+
+Return strict JSON:
+{
+  "status": "ok",
+  "assistant_message": "short practical explanation",
+  "suggested_text": "candidate-approved replacement text if applicable, otherwise empty",
+  "rationale": ["why this helps"],
+  "missing_facts": ["facts the candidate must provide before claiming"],
+  "warnings": ["risk or guardrail notes"],
+  "learning_tags": ["style or preference signals"]
+}
+"""
+
+
+def _normalize_candidate_ai_suggestion(payload: dict[str, Any], request: CandidateAiEditorRequest) -> dict[str, Any]:
+    status = str(payload.get("status") or "ok").strip().lower()
+    if status not in {"ok", "needs_more_context", "disabled", "fallback", "error"}:
+        status = "ok"
+    suggestion = {
+        "status": status,
+        "assistant_message": str(payload.get("assistant_message") or payload.get("message") or "").strip(),
+        "suggested_text": str(payload.get("suggested_text") or "").strip(),
+        "rationale": _text_list(payload.get("rationale"))[:6],
+        "missing_facts": _text_list(payload.get("missing_facts"))[:6],
+        "warnings": _text_list(payload.get("warnings"))[:6],
+        "learning_tags": _text_list(payload.get("learning_tags"))[:8],
+        "action": request.action,
+    }
+    if not suggestion["assistant_message"]:
+        suggestion["assistant_message"] = _candidate_ai_default_message(request)
+    return suggestion
+
+
+def _candidate_ai_fallback_suggestion(request: CandidateAiEditorRequest, *, status: str, warning: str) -> dict[str, Any]:
+    selected = (request.selected_text or "").strip()
+    suggested = ""
+    if request.action == "rewrite_selection" and selected:
+        suggested = selected
+        if not selected.endswith("."):
+            suggested = f"{selected}."
+    return {
+        "status": status,
+        "assistant_message": _candidate_ai_default_message(request),
+        "suggested_text": suggested,
+        "rationale": ["Fallback keeps the original facts intact instead of inventing claims."],
+        "missing_facts": [],
+        "warnings": [warning],
+        "learning_tags": ["safe_fallback"],
+        "action": request.action,
+        "usage": {"model": "", "input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+    }
+
+
+def _candidate_ai_default_message(request: CandidateAiEditorRequest) -> str:
+    if request.action == "rewrite_selection":
+        return "I can tighten the selected text, but only with facts already present. Add metrics or scope first if you want a stronger rewrite."
+    if request.action == "gap_check":
+        return "Compare the resume against the job requirement, mark missing facts as unclear, and do not claim skills that are not evidenced."
+    if request.action == "tailor_section":
+        return "Tailor this version by emphasizing relevant existing evidence, not by changing the master facts."
+    return "Ask for a concrete resume edit: summary, bullet rewrite, missing evidence, job fit, or export readiness."
+
+
+def _safe_json_object(value: str) -> dict[str, Any]:
+    try:
+        parsed = json.loads(value or "{}")
+    except json.JSONDecodeError:
+        start = (value or "").find("{")
+        end = (value or "").rfind("}")
+        if start < 0 or end <= start:
+            return {}
+        try:
+            parsed = json.loads(value[start:end + 1])
+        except json.JSONDecodeError:
+            return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _compact_candidate_profile(profile: dict[str, Any]) -> dict[str, Any]:
+    clean = dict(profile or {})
+    for key in list(clean):
+        if key not in {
+            "display_name",
+            "headline",
+            "summary",
+            "current_location",
+            "skills",
+            "skill_groups",
+            "experience",
+            "education",
+            "certifications",
+            "awards",
+            "publications",
+            "languages",
+            "projects",
+            "links",
+            "other_sections",
+        }:
+            clean.pop(key, None)
+    return json.loads(json.dumps(clean, default=str)) if clean else {}
+
+
+def _text_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str):
+        return [item.strip() for item in value.split("\n") if item.strip()]
+    return []
+
+
+def _truncate_text(value: str | None, limit: int) -> str:
+    text = str(value or "").strip()
+    return text if len(text) <= limit else text[:limit] + "\n[truncated]"
+
+
+def _strip_html_text(value: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", value or "")).strip()
 
 
 def _validate_upload_size(file: UploadFile) -> None:

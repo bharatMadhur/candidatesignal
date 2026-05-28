@@ -4,8 +4,9 @@ from typing import Any
 
 from psycopg.types.json import Jsonb
 
-from .campaigns import get_campaign, run_campaign_match
+from .campaigns import get_campaign
 from .db import db
+from .matching_service import run_campaign_matching
 
 
 ACTIVE_MATCH_JOB_STATUSES = {"queued", "retrying", "running"}
@@ -148,7 +149,7 @@ def run_campaign_match_job(job_id: str, tenant_id: str) -> dict[str, Any]:
         return job
     try:
         _set_match_stage(job_id, tenant_id, "running", "retrieving_candidates")
-        campaign = run_campaign_match(
+        campaign = run_campaign_matching(
             job["campaign_id"],
             tenant_id,
             job["created_by_user_id"],

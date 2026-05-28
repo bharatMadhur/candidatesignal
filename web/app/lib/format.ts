@@ -2,6 +2,10 @@ export function domainLabel(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+export function humanizeLabel(value: string) {
+  return value.split("_").map((item) => item.charAt(0).toUpperCase() + item.slice(1)).join(" ");
+}
+
 export function formatDateTime(value?: string | null) {
   if (!value) return "Not recorded";
   const date = new Date(value);

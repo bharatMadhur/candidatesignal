@@ -120,8 +120,24 @@ Better Auth is the primary login path:
 
 ```text
 POST /api/auth/sign-in/email
+POST /api/auth/sign-in/social
 POST /api/auth/sign-out
 ```
+
+Candidate Google login is also handled by Better Auth. Add these to enable it:
+
+```env
+GOOGLE_CLIENT_ID=your-google-oauth-client-id
+GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret
+```
+
+The Google OAuth redirect URI must be:
+
+```text
+https://your-ui-host/api/auth/callback/google
+```
+
+Fresh Google users are finalized through `POST /auth/candidate-oauth/finalize`, which converts only new OAuth users with no tenant membership into candidate accounts. Existing recruiter/admin Google accounts are not silently converted.
 
 FastAPI validates the Better Auth bearer token against the shared `sessions` table. Legacy FastAPI password login is disabled by default and returns `410` unless `RESUME_INTEL_ENABLE_LEGACY_AUTH=1` is set for local debugging.
 
@@ -194,14 +210,16 @@ retrying
 cancelled
 ```
 
-For production, keep API and worker as separate processes. Bulk upload only queues jobs by default; run the worker separately for imports.
+For production, keep API and worker as separate processes. Recruiter bulk upload, campaign matching, and candidate-side resume uploads only queue jobs by default; run the worker separately for parsing and matching work.
 
-The worker writes heartbeats to Postgres so the UI can show online/offline state, queued/running/failed counts, current worker status, last heartbeat, and last error:
+The worker writes heartbeats to Postgres so the UI can show online/offline state, queued/running/failed counts, current worker status, last heartbeat, and last error. Worker health counts include recruiter resume parsing and campaign matching. Global worker checks also include candidate-portal resume uploads; tenant workspace checks intentionally do not mix candidate-owned uploads into a company queue.
 
 ```bash
 .venv/bin/python scripts/run_parse_worker.py
 .venv/bin/python scripts/run_parse_worker.py --once --worker-id smoke-worker
 ```
+
+Worker priority order is recruiter parse jobs, candidate resume uploads, then campaign match jobs. Candidate uploads are durable rows in Postgres and can be retried from the candidate workspace if parsing fails.
 
 If historical smoke jobs or interrupted jobs need cleanup, reconcile them explicitly:
 
@@ -219,7 +237,7 @@ GET /operational-alert-deliveries
 
 Alert sources:
 
-- parse worker offline while resumes are queued
+- processing worker offline while parsing or matching work is queued
 - parse jobs moved into file-review after exhausting retries
 - stale/missing semantic embeddings
 - OCR or extraction quality warnings
@@ -274,6 +292,8 @@ Production requirements:
 ```env
 BETTER_AUTH_SECRET=use-a-long-random-secret-shared-by-ui-and-api
 BETTER_AUTH_URL=https://your-ui-host
+GOOGLE_CLIENT_ID=your-google-oauth-client-id
+GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret
 RESUME_INTEL_ENABLE_LEGACY_AUTH=0
 RESUME_INTEL_ALLOW_UNSIGNED_BETTER_AUTH_BEARER=0
 ```
@@ -500,15 +520,18 @@ cd web
 npm run build
 npm run smoke
 npm run e2e
+npm run launch:check
 ```
 
 `npm run smoke` expects the Next.js UI to be running and defaults to `http://127.0.0.1:3001`. Override with `SMOKE_BASE_URL=https://your-host`.
 
-`npm run e2e` runs Playwright. The public homepage/legacy-route check always runs. Authenticated recruiter workflow checks are skipped unless these are provided:
+`npm run e2e` runs Playwright. The public homepage/legacy-route check always runs. `npm run launch:check` is stricter: it runs lint, build, and authenticated Playwright, and fails if the dedicated recruiter/candidate test credentials are missing.
 
 ```env
 E2E_COMPANY_EMAIL=recruiter@example.com
 E2E_COMPANY_PASSWORD=resume-intel
+E2E_CANDIDATE_EMAIL=candidate@example.com
+E2E_CANDIDATE_PASSWORD=resume-intel
 ```
 
 Use `E2E_BASE_URL=https://your-host` to run the same suite against an already-running local or deployed UI.

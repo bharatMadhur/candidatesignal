@@ -65,6 +65,17 @@ async function proxyToBackend(request: NextRequest, context: RouteContext) {
   }
   headers.set("x-request-id", requestId);
   const body = ["GET", "HEAD"].includes(request.method) ? undefined : await request.arrayBuffer();
+  if (body && body.byteLength > proxyMaxBodyBytes()) {
+    return NextResponse.json({
+      detail: "Request is too large for the application proxy.",
+      code: "request_too_large",
+      retryable: false,
+      request_id: requestId,
+    }, {
+      status: 413,
+      headers: { "x-request-id": requestId },
+    });
+  }
   const controller = new AbortController();
   const timeoutMs = proxyTimeoutMs();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -121,4 +132,9 @@ function backendBase() {
 function proxyTimeoutMs() {
   const configured = Number(process.env.BACKEND_PROXY_TIMEOUT_MS || "");
   return Number.isFinite(configured) && configured > 0 ? configured : 60_000;
+}
+
+function proxyMaxBodyBytes() {
+  const configured = Number(process.env.BACKEND_PROXY_MAX_BODY_BYTES || "");
+  return Number.isFinite(configured) && configured > 0 ? configured : 35 * 1024 * 1024;
 }

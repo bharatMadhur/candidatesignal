@@ -5,9 +5,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from fastapi import HTTPException
-
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from resume_intel import web
@@ -45,23 +42,6 @@ class CandidateVersionDiffTests(unittest.TestCase):
     def test_candidate_merge_helper_is_disabled(self) -> None:
         with self.assertRaises(RuntimeError):
             merge_match("match-id", "user-id", "tenant-id")
-
-    def test_legacy_entity_resolution_routes_are_retired(self) -> None:
-        user = {"id": "user-1", "tenant_id": "tenant-1", "tenant_role": "recruiter"}
-
-        for call in (
-            lambda: web.candidate_versions_for_candidate_legacy("doc-1", user),
-            lambda: web.resolution_requirements(user),
-            lambda: web.resolution_clusters(user),
-            lambda: web.same_person("match-1", user),
-            lambda: web.not_same_person("match-1", user),
-            lambda: web.versioned_candidate("match-1", user),
-            lambda: web.separate_candidate_versions("match-1", user),
-            lambda: web.review_later("match-1", user),
-        ):
-            with self.assertRaises(HTTPException) as error:
-                call()
-            self.assertEqual(error.exception.status_code, 410)
 
     def test_candidate_detail_persists_live_version_matches(self) -> None:
         user = {"id": "user-1", "tenant_id": "tenant-1", "tenant_role": "recruiter"}

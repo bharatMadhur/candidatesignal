@@ -17,7 +17,6 @@ import {
   Search,
   Settings,
   ShieldCheck,
-  Sparkles,
   UploadCloud,
   Users,
 } from "lucide-react";
@@ -29,10 +28,11 @@ import {
   CandidateProfileUpdate,
   CandidateResumeUpload,
   CandidateResumeVersion,
+  CandidateAiLearningEvent,
+  CandidateAiSuggestion,
   CandidateApplication,
   CandidateAccessRequest,
   CandidateSelfMatch,
-  NativeCandidateSummary,
   CampaignPipelineStatus,
   CampaignScorecard,
   CandidateMaintenanceJob,
@@ -46,7 +46,6 @@ import {
   CandidateVersionMatch,
   GovernancePolicy,
   JobCampaign,
-  JobCampaignCandidate,
   OperationalAlert,
   OperationalAlertDelivery,
   MailMessage,
@@ -82,6 +81,7 @@ import {
   createCandidatePortalTargetedVersion,
   createCandidatePortalResumeShare,
   createCandidatePortalApplication,
+  createCandidateAiLearningEvent,
   createCampaign,
   createCampaignRequirement,
   createCandidateRederiveJob,
@@ -115,6 +115,7 @@ import {
   listRequirementMatchRuns,
   compareLatestRequirementMatchRuns,
   finalizeRequirement,
+  finalizeCandidateGoogleOAuth,
   getParseBatch,
   getWorkerStatus,
   inviteTeamMember,
@@ -125,6 +126,7 @@ import {
   listCandidatePortalResumeVersions,
   listCandidatePortalResumeUploads,
   listCandidatePortalResumeShares,
+  listCandidateAiLearningEvents,
   listCampaigns,
   listCopilotThreads,
   listAuditLogs,
@@ -140,7 +142,6 @@ import {
   listRecruiterTasks,
   listRequirements,
   listTenants,
-  listNativeCandidates,
   me,
   matchRequirement,
   matchCampaign,
@@ -151,7 +152,7 @@ import {
   resendInvitation,
   resolveParseDeadLetter,
   revokeCandidatePortalResumeShare,
-  requestNativeCandidateAccess,
+  retryCandidatePortalResumeUpload,
   retryCandidateMaintenanceJob,
   retryMailMessage,
   retryParseJob,
@@ -159,11 +160,13 @@ import {
   searchCandidates,
   shortlistMatch,
   matchCandidatePortalRequirement,
+  suggestCandidateAiEdit,
   updateMemberRole,
   updateNote,
   updateCandidatePortalProfile,
   updateCandidatePortalApplication,
   updateCandidatePortalPrivacySettings,
+  updateCandidatePortalResumeVersion,
   uploadRequirement,
   uploadResume,
   uploadCampaignResumes,
@@ -181,10 +184,38 @@ import {
   disableMember,
   COOKIE_SESSION_TOKEN,
 } from "../lib/api";
-import { authClient, signInWithBetterAuth } from "../lib/auth-client";
+import { authClient, signInCandidateWithGoogle, signInWithBetterAuth } from "../lib/auth-client";
 import { BrandMark } from "./components/brand";
+import { CandidateCoachChat, CandidateEditorCoachTools, CandidateJobAiEditor, CandidateVisibilityPanel } from "./components/candidate-coach-panels";
+import { CandidateHomeCommandCenter } from "./components/candidate-home-command-center";
+import { CandidatePreParsePreview } from "./components/candidate-pre-parse-preview";
+import { CandidateResumeDocumentEditor, candidateStarterResumeProfile } from "./components/candidate-resume-document-editor";
+import { CandidateAtsConfidencePanel, CandidateCvPreview, CandidateTemplateSelector, CandidateVersionDiffPanel } from "./components/candidate-resume-export-panels";
+import { CandidateResumeGuidedForm } from "./components/candidate-resume-guided-form";
+import { CandidateAccessRequestsPanel, CandidateApplicationTracker, CandidateSharePanel } from "./components/candidate-sharing-panels";
+import { CandidatePracticalJobBoard, CandidateScratchBuilderGuide } from "./components/candidate-job-board";
+import { CandidateTable } from "./components/candidate-table";
+import { CandidateUploadList } from "./components/candidate-upload-list";
+import { CandidateVersionDatabase } from "./components/candidate-version-database";
+import { CandidateVersionEditorOverlay } from "./components/candidate-version-editor-overlay";
 import { EmptyPanel, Metric, ProgressBar } from "./components/primitives";
 import { RECRUITER_COPY, WORKSPACE_NAV_LABELS } from "./components/recruiter-language";
+import {
+  campaignCandidateVisibleInPipeline,
+  campaignGapItems,
+  campaignHardFilterFailures,
+  campaignProgressStats,
+  campaignReasonItems,
+  campaignScoreBreakdownItems,
+  campaignScorecardCompleteness,
+  campaignScorecardForm,
+  campaignScorecardPayload,
+  campaignTimelineItems,
+  emptyCampaignScorecardForm,
+  mergeCampaignCandidateUpdate,
+  stageCandidateStatus,
+  type CampaignScorecardForm,
+} from "./lib/campaign-workflow";
 import {
   candidateVersionCompareRows,
   candidateVersionDocumentLabel,
@@ -193,6 +224,66 @@ import {
   normalizeCandidateVersionStatus,
   versionStatusLabel,
 } from "./lib/candidate-versions";
+import {
+  candidateCoachReply,
+  candidatePortalCompleteness,
+  candidatePortalSectionCopy,
+  candidatePortalSectionFromSearch,
+  candidateUploadPreviewKind,
+  normalizeEditableProfileItems,
+  normalizedAiEnhancement,
+  splitLineList,
+  type CandidatePortalSection,
+} from "./lib/candidate-portal";
+import {
+  candidateCorrectionForm,
+  candidateCorrectionPayload,
+  coverageGapReasons,
+  emptyEducationCorrection,
+  emptyExperienceCorrection,
+  type CandidateCorrectionEducation,
+  type CandidateCorrectionExperience,
+  type CandidateCorrectionForm,
+} from "./lib/candidate-corrections";
+import {
+  buildTimelineRows,
+  candidateEducationRows,
+  candidateEducationTimelineEvents,
+  dedupeTimelineEvents,
+  educationDateLabel,
+  isEducationTimelineEvent,
+  normalizeComparableText,
+  timelineDateRangeLabel,
+  timelineYearMarkers,
+} from "./lib/candidate-timeline";
+import {
+  applyDatabaseFilters,
+  candidateNoteSignalDisplay,
+  candidateNoteSignalKey,
+  candidateNoteSignalLabels,
+  candidateProfileFreshnessLabel,
+  candidateProfileFreshnessNeedsReview,
+  candidateReviewSignalDone,
+  candidateRoleFactsNeedReview,
+  profileFreshnessBadgeClass,
+  topDomainCounts,
+  type CandidateReviewSignal,
+} from "./lib/candidate-database";
+import {
+  gapItems,
+  hasMatchGaps,
+  matchDistribution,
+  matchFilterHit,
+  matchNextAction,
+  profileAnswerValue,
+  requirementStructuredFields,
+  type MatchFilter,
+} from "./lib/matching-display";
+import {
+  buildRecruiterEvidenceRows,
+  evidenceSourceLabel,
+  evidenceTerms,
+} from "./lib/candidate-evidence";
 import {
   COPILOT_GREETING,
   buildCopilotQueryInsights,
@@ -203,17 +294,17 @@ import {
   locationRequirementLabel,
   normalizeCopilotQueryIntent,
   normalizedCopilotScoreBreakdown,
-  percentScore,
   rewriteCopilotLocationPreference,
   scoreBreakdownItems,
   type CopilotFilters,
   type WorkspaceChatMessage,
 } from "./lib/copilot";
-import { domainLabel, formatBytes, formatDateTime, shortHash, splitCommaList, textValue, toTextList, uniqueTextList } from "./lib/format";
+import { inferTargetRoleFromRequirement } from "./lib/candidate-job-fit";
+import { candidateProfileHasContent, candidateResumeFromProfile } from "./lib/candidate-resume-profile";
+import { domainLabel, formatBytes, formatDateTime, humanizeLabel, shortHash, splitCommaList, textValue, toTextList } from "./lib/format";
 import { DOCUMENT_FILE_ACCEPT, DOCUMENT_FORMAT_LABEL, resolveLoginIdentifier } from "./lib/login";
 import { copyCurrentUrl, parseWorkspaceRoute, routeHasDeepLink, type CampaignDetailTab, type CandidateDetailTab, type View, type WorkspaceRoute } from "./lib/workspace-route";
 
-type CandidateReviewSignal = "low_coverage" | "role_fact_review" | "profile_freshness_review";
 type ReviewCenterItem = {
   title: string;
   body: string;
@@ -243,18 +334,16 @@ type HomeAppProps = {
 
 const DEPLOY_ENV = (process.env.NEXT_PUBLIC_DEPLOY_ENV ?? "production").toLowerCase();
 const IS_STAGING_ENV = DEPLOY_ENV === "staging";
-const CANDIDATE_RESUME_TEMPLATES = [
-  { id: "atlas", name: "Atlas", tone: "Balanced", note: "Clean professional default for most roles." },
-  { id: "classic", name: "Classic", tone: "Traditional", note: "Best for conservative HR and academic-style readers." },
-  { id: "modern", name: "Modern", tone: "Sharp", note: "Stronger hierarchy without breaking ATS safety." },
-  { id: "compact", name: "Compact", tone: "Dense", note: "For longer careers that need tight spacing." },
-  { id: "executive", name: "Executive", tone: "Senior", note: "For leadership, strategy, and client-facing profiles." },
-  { id: "technical", name: "Technical", tone: "Engineering", note: "For software, data, infra, and technical roles." },
-  { id: "academic", name: "Academic", tone: "Research", note: "For publications, education, and research-heavy profiles." },
-  { id: "startup", name: "Startup", tone: "Builder", note: "For founding, product, and high-ownership resumes." },
-  { id: "consulting", name: "Consulting", tone: "Client-ready", note: "For business, transformation, and advisory roles." },
-  { id: "minimal", name: "Minimal", tone: "ATS-first", note: "Maximum simplicity for strict ATS parsing." },
-] as const;
+function GoogleMark() {
+  return (
+    <svg className="googleMark" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#4285F4" d="M21.8 12.2c0-.7-.1-1.3-.2-1.9H12v3.6h5.5c-.2 1.2-.9 2.3-2 3v2.3h3.2c1.9-1.7 3.1-4.2 3.1-7z" />
+      <path fill="#34A853" d="M12 22c2.7 0 5-.9 6.7-2.5l-3.2-2.3c-.9.6-2 .9-3.5.9-2.7 0-4.9-1.8-5.7-4.2H3v2.4C4.7 19.7 8.1 22 12 22z" />
+      <path fill="#FBBC05" d="M6.3 13.9c-.2-.6-.3-1.2-.3-1.9s.1-1.3.3-1.9V7.7H3C2.4 9 2 10.5 2 12s.4 3 1 4.3l3.3-2.4z" />
+      <path fill="#EA4335" d="M12 5.9c1.5 0 2.8.5 3.8 1.5l2.8-2.8C17 3 14.7 2 12 2 8.1 2 4.7 4.3 3 7.7l3.3 2.4C7.1 7.7 9.3 5.9 12 5.9z" />
+    </svg>
+  );
+}
 
 export default function Home() {
   return <HomeApp showPublicHome />;
@@ -345,8 +434,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   const [candidateResumeShares, setCandidateResumeShares] = useState<CandidateResumeShare[]>([]);
   const [candidateApplications, setCandidateApplications] = useState<CandidateApplication[]>([]);
   const [candidateAccessRequests, setCandidateAccessRequests] = useState<CandidateAccessRequest[]>([]);
-  const [nativeCandidateQuery, setNativeCandidateQuery] = useState("");
-  const [nativeCandidates, setNativeCandidates] = useState<NativeCandidateSummary[]>([]);
+  const [candidateAiLearningEvents, setCandidateAiLearningEvents] = useState<CandidateAiLearningEvent[]>([]);
   const [loginMode, setLoginMode] = useState<"company" | "admin" | "candidate">(initialLoginMode ?? "company");
   const [applicantLoginSelected, setApplicantLoginSelected] = useState(false);
   const [loginError, setLoginError] = useState("");
@@ -367,7 +455,23 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     const params = new URLSearchParams(window.location.search);
     const invite = params.get("invite");
     const login = params.get("login");
+    const candidateOauth = params.get("candidate_oauth");
+    const candidateOauthError = params.get("candidate_oauth_error");
     if (!lockedLoginMode && (login === "company" || login === "candidate")) setLoginMode(login);
+    if (candidateOauthError) {
+      setLoginMode("candidate");
+      setApplicantLoginSelected(true);
+      setLoginError(params.get("error_description") || params.get("error") || "Google login failed. Try again.");
+      setStatus("Google login failed");
+      window.history.replaceState(null, "", "/?login=candidate");
+      return;
+    }
+    if (candidateOauth === "1") {
+      setLoginMode("candidate");
+      setApplicantLoginSelected(true);
+      void handleCandidateGoogleReturn(params.get("new") === "1");
+      return;
+    }
     if (invite) {
       setInviteToken(invite);
       setInviteMode(true);
@@ -510,13 +614,14 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     setCurrentUser(user);
     if (isCandidate) {
       setWorkspaceMode("candidate");
-      const [profileResult, versionResult, uploadResult, shareResult, applicationResult, accessResult] = await Promise.all([
+      const [profileResult, versionResult, uploadResult, shareResult, applicationResult, accessResult, aiLearningResult] = await Promise.all([
         getCandidatePortalProfile(activeToken),
         listCandidatePortalResumeVersions(activeToken),
         listCandidatePortalResumeUploads(activeToken),
         listCandidatePortalResumeShares(activeToken),
         listCandidatePortalApplications(activeToken),
         listCandidatePortalAccessRequests(activeToken),
+        listCandidateAiLearningEvents(activeToken),
       ]);
       setCandidatePortalProfile(profileResult);
       setCandidateResumeVersions(versionResult.versions ?? []);
@@ -524,6 +629,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
       setCandidateResumeShares(shareResult.shares ?? []);
       setCandidateApplications(applicationResult.applications ?? []);
       setCandidateAccessRequests(accessResult.access_requests ?? []);
+      setCandidateAiLearningEvents(aiLearningResult.events ?? []);
       setCandidates([]);
       setRequirements([]);
       setCampaigns([]);
@@ -884,6 +990,53 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     }
   }
 
+  async function handleCandidateGoogleSignIn() {
+    setBusy(true);
+    setStatus("Opening Google...");
+    setLoginError("");
+    try {
+      await signInCandidateWithGoogle();
+    } catch (error) {
+      setLoginError(readableError(error));
+      setStatus("Google login failed");
+      setBusy(false);
+    }
+  }
+
+  async function handleCandidateGoogleReturn(newUser: boolean) {
+    setBusy(true);
+    setStatus("Finishing Google login...");
+    setLoginError("");
+    try {
+      await finalizeCandidateGoogleOAuth(COOKIE_SESSION_TOKEN, newUser);
+      const current = await me(COOKIE_SESSION_TOKEN) as { user: CurrentUser };
+      if (!isCandidateUser(current.user)) {
+        throw new Error("This Google account is not a candidate account. Use Recruiter Access.");
+      }
+      setToken(COOKIE_SESSION_TOKEN);
+      setCurrentUser(current.user);
+      setWorkspaceMode("candidate");
+      setCandidateSignupMode(false);
+      setApplicantLoginSelected(false);
+      setView("dashboard");
+      setStatus("Candidate login successful");
+      window.history.replaceState(null, "", "/?login=candidate");
+      await refresh(COOKIE_SESSION_TOKEN, "candidate");
+    } catch (error) {
+      setToken("");
+      setCurrentUser(null);
+      setWorkspaceMode("candidate");
+      setView("dashboard");
+      setLoginMode("candidate");
+      setApplicantLoginSelected(true);
+      setLoginError(readableError(error));
+      setStatus("Google login failed");
+      window.history.replaceState(null, "", "/?login=candidate");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleAcceptInvitation() {
     if (!inviteToken.trim() || !inviteName.trim() || !invitePassword.trim()) return;
     await run("Accepting invite", () => acceptInvitation(inviteToken, inviteName, invitePassword));
@@ -936,8 +1089,6 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     setCandidateResumeShares([]);
     setCandidateApplications([]);
     setCandidateAccessRequests([]);
-    setNativeCandidateQuery("");
-    setNativeCandidates([]);
     setCandidateSignupMode(false);
     setRequirement(null);
     setCampaign(null);
@@ -1638,6 +1789,16 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     return result;
   }
 
+  async function handleUpdateCandidatePortalVersion(
+    versionId: string,
+    payload: { title?: string; target_role?: string | null; resume_json?: Record<string, any> },
+  ) {
+    const result = await run("Saving resume version", () => updateCandidatePortalResumeVersion(token, versionId, payload));
+    if (!result) return null;
+    setCandidateResumeVersions((items) => [result.version, ...items.filter((item) => item.id !== result.version.id)]);
+    return result.version;
+  }
+
   async function handleArchiveCandidatePortalVersion(versionId: string) {
     const result = await run("Archiving resume version", () => archiveCandidatePortalResumeVersion(token, versionId));
     if (!result) return null;
@@ -1720,20 +1881,46 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     return result.upload;
   }
 
+  async function handleRetryCandidatePortalUpload(uploadId: string) {
+    const result = await run("Retrying candidate resume parse", () => retryCandidatePortalResumeUpload(token, uploadId));
+    if (!result) return null;
+    setCandidateResumeUploads((items) => [result.upload, ...items.filter((item) => item.id !== uploadId)]);
+    return result.upload;
+  }
+
   async function handleCandidatePortalRequirementMatch(versionId: string, requirementText: string) {
     const result = await run("Matching resume version", () => matchCandidatePortalRequirement(token, versionId, requirementText));
     return result?.match ?? null;
   }
 
-  async function handleSearchNativeCandidates(searchText = nativeCandidateQuery) {
-    const result = await run("Searching candidateSignal native candidates", () => listNativeCandidates(token, searchText, 20));
-    if (result) setNativeCandidates(result.native_candidates ?? []);
+  async function handleSuggestCandidateAiEdit(payload: {
+    action: "coach" | "rewrite_selection" | "tailor_section" | "gap_check";
+    selected_text?: string;
+    instruction?: string;
+    profile?: CandidatePortalProfile["profile"];
+    resume_html?: string;
+    target_role?: string;
+    requirement_text?: string;
+  }) {
+    const result = await run("Getting AI resume suggestion", () => suggestCandidateAiEdit(token, payload));
+    return result?.suggestion ?? null;
   }
 
-  async function handleRequestNativeCandidateAccess(candidateUserId: string, resumeVersionId?: string | null) {
-    const result = await run("Requesting candidate PII access", () => requestNativeCandidateAccess(token, candidateUserId, "Recruiter is interested in this candidate for a role and requests permission to view contact details.", resumeVersionId));
-    if (!result) return;
-    setNativeCandidates((items) => items.map((item) => item.candidate_user_id === candidateUserId ? { ...item, request_status: result.access_request.status } : item));
+  async function handleCreateCandidateAiLearningEvent(payload: {
+    event_type: string;
+    source?: string;
+    original_text?: string;
+    suggested_text?: string;
+    accepted?: boolean;
+    metadata?: Record<string, any>;
+  }) {
+    try {
+      const result = await createCandidateAiLearningEvent(token, payload);
+      if (result?.event) setCandidateAiLearningEvents((items) => [result.event, ...items.filter((item) => item.id !== result.event.id)].slice(0, 30));
+      return result?.event ?? null;
+    } catch {
+      return null;
+    }
   }
 
   const filteredCandidates = useMemo(() => {
@@ -1886,6 +2073,10 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                 </>
               ) : showCandidateSignup ? (
                 <>
+                  <button className="googleAuthButton" type="button" onClick={handleCandidateGoogleSignIn} disabled={busy}>
+                    <GoogleMark /> Continue with Google
+                  </button>
+                  <div className="authDivider"><span>or create with email</span></div>
                   <input
                     value={candidateSignupName}
                     onChange={(event) => {
@@ -1933,6 +2124,14 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
                 </>
               ) : (
                 <>
+                  {isCandidateLogin ? (
+                    <>
+                      <button className="googleAuthButton" type="button" onClick={handleCandidateGoogleSignIn} disabled={busy}>
+                        <GoogleMark /> Continue with Google
+                      </button>
+                      <div className="authDivider"><span>or sign in with email</span></div>
+                    </>
+                  ) : null}
                   <input
                     value={email}
                     onChange={(event) => {
@@ -2303,12 +2502,6 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               query={query}
               setQuery={setQuery}
               open={handleOpenCandidate}
-              nativeQuery={nativeCandidateQuery}
-              setNativeQuery={setNativeCandidateQuery}
-              nativeCandidates={nativeCandidates}
-              searchNativeCandidates={handleSearchNativeCandidates}
-              requestNativeAccess={handleRequestNativeCandidateAccess}
-              busy={busy}
             />
           ) : null}
 
@@ -2498,15 +2691,18 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               shares={candidateResumeShares}
               applications={candidateApplications}
               accessRequests={candidateAccessRequests}
+              aiLearningEvents={candidateAiLearningEvents}
               status={status}
               busy={busy}
               previewResume={handlePreviewCandidatePortalResume}
               uploadResume={handleUploadCandidatePortalResume}
               refreshUpload={handleRefreshCandidatePortalUpload}
+              retryUpload={handleRetryCandidatePortalUpload}
               saveProfile={handleSaveCandidatePortalProfile}
               savePrivacySettings={handleSaveCandidatePortalPrivacySettings}
               createVersion={handleCreateCandidatePortalVersion}
               createTargetedVersion={handleCreateCandidatePortalTargetedVersion}
+              updateVersion={handleUpdateCandidatePortalVersion}
               archiveVersion={handleArchiveCandidatePortalVersion}
               createShare={handleCreateCandidatePortalShare}
               revokeShare={handleRevokeCandidatePortalShare}
@@ -2515,6 +2711,8 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               decideAccessRequest={handleCandidateAccessDecision}
               loadVersion={handleLoadCandidatePortalVersion}
               matchRequirement={handleCandidatePortalRequirementMatch}
+              suggestAiEdit={handleSuggestCandidateAiEdit}
+              recordAiLearningEvent={handleCreateCandidateAiLearningEvent}
               logout={handleLogout}
             />
           ) : null}
@@ -2538,55 +2736,6 @@ function EnvironmentBanner() {
   );
 }
 
-type CandidatePortalSection = "dashboard" | "upload" | "review" | "profile" | "match";
-
-const CANDIDATE_PORTAL_SECTIONS: CandidatePortalSection[] = ["dashboard", "upload", "review", "profile", "match"];
-
-function candidatePortalSectionFromSearch(search: string, fallback: CandidatePortalSection = "dashboard"): CandidatePortalSection {
-  const params = new URLSearchParams(search);
-  const value = params.get("candidate_view") || params.get("section");
-  if (value === "versions" || value === "export") return "review";
-  if (value === "editor") return "profile";
-  if (value === "job_board") return "match";
-  return CANDIDATE_PORTAL_SECTIONS.includes(value as CandidatePortalSection) ? value as CandidatePortalSection : fallback;
-}
-
-function candidatePortalSectionCopy(section: CandidatePortalSection, latestUpload: CandidateResumeUpload | null, versionCount: number) {
-  if (section === "upload") {
-    return {
-      eyebrow: "Upload",
-      title: "Bring in your existing resume.",
-      body: "Preview the file first, then turn it into an editable master profile you control.",
-    };
-  }
-  if (section === "review") {
-    return {
-      eyebrow: "Resume",
-      title: versionCount ? "Manage your resume versions." : "Create your first clean resume version.",
-      body: "Open a version to edit, preview, export as PDF, share safely, or tailor it to a job.",
-    };
-  }
-  if (section === "profile") {
-    return {
-      eyebrow: "Editor",
-      title: "Shape the resume people will actually read.",
-      body: "Update facts, improve bullets, add sections, and keep the master profile clean before creating role-specific versions.",
-    };
-  }
-  if (section === "match") {
-    return {
-      eyebrow: "Jobs",
-      title: "Tailor one version to one job.",
-      body: "Paste a job requirement, choose a resume version, and get a clear fit read before applying.",
-    };
-  }
-  return {
-    eyebrow: "Candidate workspace",
-    title: latestUpload ? "Own the resume you send." : "Start from the resume you already have.",
-    body: "Maintain one approved profile, create targeted versions, export clean PDFs, and track where every version was shared.",
-  };
-}
-
 function CandidatePortalWorkspace({
   user,
   profile,
@@ -2600,10 +2749,12 @@ function CandidatePortalWorkspace({
   previewResume,
   uploadResume,
   refreshUpload,
+  retryUpload,
   saveProfile,
   savePrivacySettings,
   createVersion,
   createTargetedVersion,
+  updateVersion,
   archiveVersion,
   createShare,
   revokeShare,
@@ -2612,6 +2763,8 @@ function CandidatePortalWorkspace({
   decideAccessRequest,
   loadVersion,
   matchRequirement,
+  suggestAiEdit,
+  recordAiLearningEvent,
   logout,
 }: {
   user: CurrentUser | null;
@@ -2621,15 +2774,18 @@ function CandidatePortalWorkspace({
   shares: CandidateResumeShare[];
   applications: CandidateApplication[];
   accessRequests: CandidateAccessRequest[];
+  aiLearningEvents: CandidateAiLearningEvent[];
   status: string;
   busy: boolean;
   previewResume: (file: File) => Promise<{ filename: string; source_type: string; html: string }>;
   uploadResume: (file: File, targetRole?: string, note?: string) => Promise<CandidateResumeUpload | null>;
   refreshUpload: (uploadId: string) => Promise<CandidateResumeUpload>;
+  retryUpload: (uploadId: string) => Promise<CandidateResumeUpload | null>;
   saveProfile: (profile: CandidatePortalProfile["profile"]) => Promise<void>;
   savePrivacySettings: (settings: CandidatePortalPrivacySettings) => Promise<void>;
   createVersion: (title: string, targetRole?: string, resumeJson?: Record<string, any>) => Promise<CandidateResumeVersion | null>;
   createTargetedVersion: (versionId: string, payload: { requirement_text: string; title?: string; target_role?: string }) => Promise<{ version: CandidateResumeVersion; match: CandidateSelfMatch } | null>;
+  updateVersion: (versionId: string, payload: { title?: string; target_role?: string | null; resume_json?: Record<string, any> }) => Promise<CandidateResumeVersion | null>;
   archiveVersion: (versionId: string) => Promise<CandidateResumeVersion | null>;
   createShare: (versionId: string, label: string, includePii?: boolean) => Promise<CandidateResumeShare | null>;
   revokeShare: (shareId: string) => Promise<void>;
@@ -2648,6 +2804,23 @@ function CandidatePortalWorkspace({
   decideAccessRequest: (requestId: string, decision: "approve" | "deny") => Promise<void>;
   loadVersion: (versionId: string) => Promise<CandidateResumeVersion>;
   matchRequirement: (versionId: string, requirementText: string) => Promise<CandidateSelfMatch | null>;
+  suggestAiEdit: (payload: {
+    action: "coach" | "rewrite_selection" | "tailor_section" | "gap_check";
+    selected_text?: string;
+    instruction?: string;
+    profile?: CandidatePortalProfile["profile"];
+    resume_html?: string;
+    target_role?: string;
+    requirement_text?: string;
+  }) => Promise<CandidateAiSuggestion | null>;
+  recordAiLearningEvent: (payload: {
+    event_type: string;
+    source?: string;
+    original_text?: string;
+    suggested_text?: string;
+    accepted?: boolean;
+    metadata?: Record<string, any>;
+  }) => Promise<CandidateAiLearningEvent | null>;
   logout: () => void;
 }) {
   const [draft, setDraft] = useState<CandidatePortalProfile["profile"]>({});
@@ -2685,6 +2858,10 @@ function CandidatePortalWorkspace({
   const [selectedVersionId, setSelectedVersionId] = useState("");
   const [selectedVersion, setSelectedVersion] = useState<CandidateResumeVersion | null>(null);
   const [versionDetailOpen, setVersionDetailOpen] = useState(false);
+  const [versionEditorOpen, setVersionEditorOpen] = useState(false);
+  const [editingVersionId, setEditingVersionId] = useState("");
+  const [editingVersionTitle, setEditingVersionTitle] = useState("");
+  const [editingVersionTargetRole, setEditingVersionTargetRole] = useState("");
   const [versionQuery, setVersionQuery] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("atlas");
   const [requirementText, setRequirementText] = useState("");
@@ -2693,13 +2870,18 @@ function CandidatePortalWorkspace({
   const [coachMessages, setCoachMessages] = useState<Array<{ role: "assistant" | "user"; content: string }>>([
     { role: "assistant", content: "I can help improve positioning, tighten bullets, suggest missing evidence, and decide which resume version/template fits a job." },
   ]);
+  const [coachBusy, setCoachBusy] = useState(false);
+  const [, setLocalAiLearningEvents] = useState<Array<{ type: string; detail: string; created_at: string }>>([]);
   const [scratchMode, setScratchMode] = useState(false);
+  const [candidateEditorMode, setCandidateEditorMode] = useState<"guided" | "canvas">("canvas");
+  const [editorHeaderAlign, setEditorHeaderAlign] = useState<"left" | "center">("center");
+  const [editorDensity, setEditorDensity] = useState<"comfortable" | "compact">("comfortable");
   const [localError, setLocalError] = useState("");
   const candidateUrlReadyRef = useRef(false);
 
   const latestUpload = uploads[0] ?? null;
   const activeUpload = uploads.find((item) => item.id === activeUploadId) ?? latestUpload;
-  const uploadInProgress = Boolean(activeUpload && ["queued", "running"].includes(activeUpload.status));
+  const uploadInProgress = Boolean(activeUpload && ["queued", "retrying", "running"].includes(activeUpload.status));
   const profileCompleteness = candidatePortalCompleteness(profile?.profile ?? {});
   const needsReview = activeUpload?.needs_review_json ?? [];
   const resumePreviewKind = candidateUploadPreviewKind(resumeFile);
@@ -2790,7 +2972,7 @@ function CandidatePortalWorkspace({
   }, [activeUploadId, latestUpload]);
 
   useEffect(() => {
-    if (!activeUpload || !["queued", "running"].includes(activeUpload.status)) return;
+    if (!activeUpload || !["queued", "retrying", "running"].includes(activeUpload.status)) return;
     const timer = window.setInterval(() => {
       void refreshUpload(activeUpload.id).catch((error) => setLocalError(readableError(error)));
     }, 2500);
@@ -2829,8 +3011,38 @@ function CandidatePortalWorkspace({
     setDraft((current) => ({ ...current, [key]: value }));
   }
 
+  function applyStarterResume(skipConfirm = false) {
+    if (!skipConfirm && candidateProfileHasContent(draft)) {
+      const confirmed = window.confirm("Replace the current editor draft with the sample resume? Save first if you want to keep your current edits.");
+      if (!confirmed) return;
+    }
+    const starter = candidateStarterResumeProfile();
+    setScratchMode(true);
+    setDraft(starter);
+    setSkillsText((starter.skills ?? []).join(", "));
+    setCertificationsText((starter.certifications ?? []).join("\n"));
+    setAwardsText((starter.awards ?? []).join("\n"));
+    setPublicationsText((starter.publications ?? []).join("\n"));
+    setLanguagesText((starter.languages ?? []).join(", "));
+    setLinksText((starter.links ?? []).join("\n"));
+    setReferencesText(toTextList((starter.other_sections ?? {}).references).join("\n"));
+    setExperienceItems(starter.experience ?? []);
+    setEducationItems(starter.education ?? []);
+    setProjectItems(starter.projects ?? []);
+    setVersionTitle("Software Engineer Starter Resume");
+    setTargetRole(starter.headline ?? "Software Engineer");
+    setCoachMessages((items) => [
+      ...items,
+      {
+        role: "assistant",
+        content: "I loaded a sample resume into the editor. Replace every line with your real facts, then save and create a version. Do not keep sample claims that are not true.",
+      },
+    ]);
+  }
+
   function handleStartFromScratch() {
     setScratchMode(true);
+    if (!candidateProfileHasContent(draft) && !versions.length && !latestUpload) applyStarterResume(true);
     if (!versionTitle.trim()) setVersionTitle("General Resume");
     if (!draft.summary && !draft.headline) {
       setCoachMessages((items) => [
@@ -2878,6 +3090,26 @@ function CandidatePortalWorkspace({
           references: splitLineList(referencesText),
         },
       });
+    } catch (error) {
+      setLocalError(readableError(error));
+    }
+  }
+
+  async function handleSaveEditorProfile(nextProfile: CandidatePortalProfile["profile"]) {
+    setLocalError("");
+    try {
+      setDraft(nextProfile);
+      setSkillsText((nextProfile.skills ?? []).join(", "));
+      setCertificationsText((nextProfile.certifications ?? []).join("\n"));
+      setAwardsText((nextProfile.awards ?? []).join("\n"));
+      setPublicationsText((nextProfile.publications ?? []).join("\n"));
+      setLanguagesText((nextProfile.languages ?? []).join(", "));
+      setLinksText((nextProfile.links ?? []).join("\n"));
+      setReferencesText(toTextList((nextProfile.other_sections ?? {}).references).join("\n"));
+      setExperienceItems(nextProfile.experience ?? []);
+      setEducationItems(nextProfile.education ?? []);
+      setProjectItems(nextProfile.projects ?? []);
+      await saveProfile(nextProfile);
     } catch (error) {
       setLocalError(readableError(error));
     }
@@ -3062,12 +3294,53 @@ function CandidatePortalWorkspace({
     window.open(candidateResumeVersionHtmlPath(selectedVersionId, selectedTemplateId), "_blank", "noopener,noreferrer");
   }
 
-  function sendCoachMessage() {
+  async function sendCoachMessage() {
     const message = coachInput.trim();
     if (!message) return;
-    const reply = candidateCoachReply(profile?.profile ?? {}, message);
-    setCoachMessages((items) => [...items, { role: "user", content: message }, { role: "assistant", content: reply }]);
     setCoachInput("");
+    setCoachBusy(true);
+    setCoachMessages((items) => [...items, { role: "user", content: message }]);
+    try {
+      const suggestion = await suggestAiEdit({
+        action: "coach",
+        instruction: message,
+        profile: draft,
+        target_role: targetRole,
+        requirement_text: requirementText,
+      });
+      const fallback = candidateCoachReply(profile?.profile ?? {}, message);
+      const reply = suggestion?.assistant_message || fallback;
+      setCoachMessages((items) => [...items, { role: "assistant", content: reply }]);
+      recordAiLearning("coach_prompt", `Asked coach: ${message.slice(0, 90)}`, {
+        original_text: message,
+        suggested_text: reply,
+        metadata: { status: suggestion?.status, learning_tags: suggestion?.learning_tags ?? [] },
+      });
+    } catch (error) {
+      setCoachMessages((items) => [...items, { role: "assistant", content: readableError(error) || candidateCoachReply(profile?.profile ?? {}, message) }]);
+    } finally {
+      setCoachBusy(false);
+    }
+  }
+
+  function recordAiLearning(type: string, detail: string, event: Partial<{
+    original_text: string;
+    suggested_text: string;
+    accepted: boolean;
+    metadata: Record<string, any>;
+  }> = {}) {
+    setLocalAiLearningEvents((items) => [
+      { type, detail, created_at: new Date().toISOString() },
+      ...items,
+    ].slice(0, 8));
+    void recordAiLearningEvent({
+      event_type: type,
+      source: "candidate_editor",
+      suggested_text: event.suggested_text ?? detail,
+      original_text: event.original_text,
+      accepted: event.accepted,
+      metadata: event.metadata,
+    });
   }
 
   async function handleToggleNativeSearch(enabled: boolean) {
@@ -3094,15 +3367,40 @@ function CandidatePortalWorkspace({
     setActiveSection("review");
   }
 
+  function openVersionEditor(versionId: string) {
+    const version = versions.find((item) => item.id === versionId) || (selectedVersion?.id === versionId ? selectedVersion : null);
+    setSelectedVersionId(versionId);
+    setEditingVersionId(versionId);
+    setEditingVersionTitle(version?.title || "Resume version");
+    setEditingVersionTargetRole(version?.target_role || "");
+    setVersionEditorOpen(true);
+    setActiveSection("review");
+  }
+
+  async function handleSaveVersionEditorProfile(nextProfile: CandidatePortalProfile["profile"]) {
+    if (!editingVersionId) return;
+    const saved = await updateVersion(editingVersionId, {
+      title: editingVersionTitle.trim() || "Resume version",
+      target_role: editingVersionTargetRole.trim() || null,
+      resume_json: candidateResumeFromProfile(nextProfile),
+    });
+    if (saved) {
+      setSelectedVersion(saved);
+      setSelectedVersionId(saved.id);
+      setEditingVersionTitle(saved.title);
+      setEditingVersionTargetRole(saved.target_role || "");
+    }
+  }
+
   function renderProfileEditor(context: "review" | "profile", showCoachTools = true) {
     const isReview = context === "review";
     return (
       <>
         <div className="candidatePortalSectionHead">
           <div>
-            <span className="eyebrow">{isReview ? "Editable resume data" : "Resume sections"}</span>
-            <h2>{isReview ? "Review and edit what was extracted" : "Edit resume content"}</h2>
-            {isReview ? <p>Correct names, dates, links, bullets, projects, education, and skills. Saving updates the profile used for versions, matching, and exports.</p> : null}
+            <span className="eyebrow">{isReview ? "Editable resume data" : "Master resume"}</span>
+            <h2>{isReview ? "Review and edit what was extracted" : "Edit the resume content"}</h2>
+            <p>{isReview ? "Correct names, dates, links, bullets, projects, education, and skills. Saving updates every future version." : "Use the canvas as the main writing surface. Switch to facts only when structured fields need cleanup."}</p>
           </div>
           <button className="primary" type="button" onClick={handleSave} disabled={busy}>{isReview ? "Save corrections" : "Save resume"}</button>
         </div>
@@ -3111,83 +3409,80 @@ function CandidatePortalWorkspace({
           applyHeadline={(value) => updateDraft("headline", value)}
           applySummary={(value) => updateDraft("summary", value)}
         /> : null}
-        <div className="candidateFormGrid" data-candidate-editor-section="Identity">
-          <label>Full name<input value={draft.display_name ?? ""} onChange={(event) => updateDraft("display_name", event.target.value)} /></label>
-          <label>Headline<input value={draft.headline ?? ""} onChange={(event) => updateDraft("headline", event.target.value)} /></label>
-          <label>Current location<input value={draft.current_location ?? ""} onChange={(event) => updateDraft("current_location", event.target.value)} /></label>
-          <label>Email<input value={draft.email ?? ""} onChange={(event) => updateDraft("email", event.target.value)} /></label>
-          <label>Phone<input value={draft.phone ?? ""} onChange={(event) => updateDraft("phone", event.target.value)} /></label>
-          <label>LinkedIn URL<input value={draft.linkedin_url ?? ""} onChange={(event) => updateDraft("linkedin_url", event.target.value)} placeholder="Stored only. No candidate-side verification." /></label>
-          <label>Portfolio URL<input value={draft.portfolio_url ?? ""} onChange={(event) => updateDraft("portfolio_url", event.target.value)} /></label>
-          <label>GitHub URL<input value={draft.github_url ?? ""} onChange={(event) => updateDraft("github_url", event.target.value)} /></label>
-        </div>
-        <label className="candidateWideField" data-candidate-editor-section="Summary">Summary<textarea value={draft.summary ?? ""} onChange={(event) => updateDraft("summary", event.target.value)} rows={4} /></label>
-        <label className="candidateWideField" data-candidate-editor-section="Skills">Skills<textarea value={skillsText} onChange={(event) => setSkillsText(event.target.value)} rows={3} placeholder="Python, Spark, Azure, Reliability Engineering" /></label>
-        <div data-candidate-editor-section="Experience">
-          <EditableProfileList
-            title="Work experience"
-            addLabel="Add role"
-            items={experienceItems}
-            setItems={setExperienceItems}
-            detailsKey="bullets"
-            enableWorkstreams
-            fields={[
-              { key: "title", label: "Title" },
-              { key: "company", label: "Company" },
-              { key: "location", label: "Location" },
-              { key: "start_date", label: "Start" },
-              { key: "end_date", label: "End" },
-            ]}
-            detailsLabel="Bullets"
-          />
-        </div>
-        <div data-candidate-editor-section="Education">
-          <EditableProfileList
-            title="Education"
-            addLabel="Add education"
-            items={educationItems}
-            setItems={setEducationItems}
-            detailsKey="details"
-            fields={[
-              { key: "degree", label: "Degree" },
-              { key: "school", label: "School" },
-              { key: "field", label: "Field" },
-              { key: "location", label: "Location" },
-              { key: "start_date", label: "Start" },
-              { key: "end_date", label: "End" },
-            ]}
-            detailsLabel="Details"
-          />
-        </div>
-        <div data-candidate-editor-section="Projects">
-          <EditableProfileList
-            title="Projects"
-            addLabel="Add project"
-            items={projectItems}
-            setItems={setProjectItems}
-            detailsKey="bullets"
-            fields={[
-              { key: "name", label: "Project" },
-              { key: "role", label: "Role" },
-              { key: "start_date", label: "Start" },
-              { key: "end_date", label: "End" },
-            ]}
-            detailsLabel="Project bullets"
-          />
-        </div>
-        <section className="candidateOptionalSections" data-candidate-editor-section="Optional">
+        <div className="candidateEditorModeBar">
           <div>
-            <span className="eyebrow">Optional sections</span>
-            <h3>Add what this candidate actually has</h3>
-            <p>Portfolio, references, publications, languages, awards, and extra links stay blank unless the candidate adds them.</p>
+            <span className="eyebrow">Editing surface</span>
+            <strong>{candidateEditorMode === "canvas" ? "Resume Canvas is what you export" : "Facts keep the data clean"}</strong>
+            <small>{candidateEditorMode === "canvas" ? "Write like a document. Select text for AI help." : "Use this when parsing missed a date, link, project, or section."}</small>
           </div>
-          <label className="candidateWideField">Certifications<textarea value={certificationsText} onChange={(event) => setCertificationsText(event.target.value)} rows={4} placeholder="One certification per line" /></label>
-          <label className="candidateWideField">Awards<textarea value={awardsText} onChange={(event) => setAwardsText(event.target.value)} rows={3} placeholder="One award per line" /></label>
-          <label className="candidateWideField">Publications<textarea value={publicationsText} onChange={(event) => setPublicationsText(event.target.value)} rows={3} placeholder="One publication per line" /></label>
-          <label className="candidateWideField">Languages<input value={languagesText} onChange={(event) => setLanguagesText(event.target.value)} placeholder="English, Hindi, Spanish" /></label>
-          <label className="candidateWideField">Additional links<textarea value={linksText} onChange={(event) => setLinksText(event.target.value)} rows={3} placeholder="Portfolio, blog, publication, project, or other URLs. One per line." /></label>
-          <label className="candidateWideField">References<textarea value={referencesText} onChange={(event) => setReferencesText(event.target.value)} rows={3} placeholder="Available on request, or named references only if you want them stored and exported." /></label>
-        </section>
+          <div className="candidateEditorModeToggle" role="tablist" aria-label="Resume editor mode">
+            <button type="button" role="tab" aria-selected={candidateEditorMode === "canvas"} className={candidateEditorMode === "canvas" ? "active" : ""} onClick={() => setCandidateEditorMode("canvas")}>Resume Canvas</button>
+            <button type="button" role="tab" aria-selected={candidateEditorMode === "guided"} className={candidateEditorMode === "guided" ? "active" : ""} onClick={() => setCandidateEditorMode("guided")}>Edit Facts</button>
+          </div>
+        </div>
+        {candidateEditorMode === "canvas" ? (
+          <CandidateResumeDocumentEditor
+            draft={draft}
+            updateDraft={updateDraft}
+            skillsText={skillsText}
+            setSkillsText={setSkillsText}
+            certificationsText={certificationsText}
+            setCertificationsText={setCertificationsText}
+            awardsText={awardsText}
+            setAwardsText={setAwardsText}
+            publicationsText={publicationsText}
+            setPublicationsText={setPublicationsText}
+            languagesText={languagesText}
+            setLanguagesText={setLanguagesText}
+            linksText={linksText}
+            setLinksText={setLinksText}
+            referencesText={referencesText}
+            setReferencesText={setReferencesText}
+            experienceItems={experienceItems}
+            setExperienceItems={setExperienceItems}
+            educationItems={educationItems}
+            setEducationItems={setEducationItems}
+            projectItems={projectItems}
+            setProjectItems={setProjectItems}
+            headerAlign={editorHeaderAlign}
+            setHeaderAlign={setEditorHeaderAlign}
+            density={editorDensity}
+            setDensity={setEditorDensity}
+            loadStarterResume={applyStarterResume}
+            saveEditorProfile={handleSaveEditorProfile}
+            requestAiSuggestion={(payload) => suggestAiEdit({ ...payload, profile: draft, target_role: targetRole, requirement_text: requirementText })}
+            onLearn={recordAiLearning}
+            busy={busy}
+          />
+        ) : (
+          <CandidateResumeGuidedForm
+            draft={draft}
+            updateDraft={updateDraft}
+            skillsText={skillsText}
+            setSkillsText={setSkillsText}
+            certificationsText={certificationsText}
+            setCertificationsText={setCertificationsText}
+            awardsText={awardsText}
+            setAwardsText={setAwardsText}
+            publicationsText={publicationsText}
+            setPublicationsText={setPublicationsText}
+            languagesText={languagesText}
+            setLanguagesText={setLanguagesText}
+            linksText={linksText}
+            setLinksText={setLinksText}
+            referencesText={referencesText}
+            setReferencesText={setReferencesText}
+            experienceItems={experienceItems}
+            setExperienceItems={setExperienceItems}
+            educationItems={educationItems}
+            setEducationItems={setEducationItems}
+            projectItems={projectItems}
+            setProjectItems={setProjectItems}
+            loadStarterResume={applyStarterResume}
+            save={handleSave}
+            busy={busy}
+          />
+        )}
       </>
     );
   }
@@ -3207,8 +3502,7 @@ function CandidatePortalWorkspace({
       <nav className="candidatePortalNav" aria-label="Candidate workspace sections">
         {[
           ["dashboard", "Home"],
-          ["review", "Resume"],
-          ["profile", "Editor"],
+          ["review", "My Resumes"],
           ["match", "Jobs"],
           ["upload", "Upload"],
         ].map(([id, label]) => (
@@ -3220,7 +3514,7 @@ function CandidatePortalWorkspace({
           </button>
         ))}
       </nav>
-      {activeSection !== "dashboard" ? (
+      {activeSection !== "dashboard" && activeSection !== "profile" ? (
         <section className="candidatePortalHero compact">
           <div>
             <span className="eyebrow">{sectionCopy.eyebrow}</span>
@@ -3255,7 +3549,11 @@ function CandidatePortalWorkspace({
           uploadInProgress={uploadInProgress}
           openUpload={() => setActiveSection("upload")}
           startFromScratch={handleStartFromScratch}
-          openEditor={() => setActiveSection("profile")}
+          openEditor={() => {
+            const versionId = selectedVersionId || versions[0]?.id || "";
+            if (versionId) openVersionEditor(versionId);
+            else setActiveSection("upload");
+          }}
           openVersions={() => {
             setVersionDetailOpen(false);
             setActiveSection("review");
@@ -3271,12 +3569,15 @@ function CandidatePortalWorkspace({
       ) : null}
 
       {activeSection === "upload" ? (
-        <section className="candidatePortalGrid">
-          <article className="candidatePortalCard candidateUploadDrop">
-            <div>
-              <span className="eyebrow">Secure resume upload</span>
-              <h2>Upload an existing resume</h2>
-              <p>PDF, DOCX, TXT, and image resumes become an editable profile. You review the details before using them in any exported version.</p>
+        <section className="candidateUploadWorkspace">
+          <article className="candidatePortalCard candidateUploadPrimary">
+            <div className="candidateUploadPrimaryHead">
+              <div>
+                <span className="eyebrow">Upload</span>
+                <h2>Start from a real resume</h2>
+                <p>Choose a file, preview it, then parse it into an editable resume profile.</p>
+              </div>
+              <button className="secondary" type="button" onClick={handleStartFromScratch}>Start from scratch</button>
             </div>
             <label className="candidateFilePicker">
               <FileUp size={24} />
@@ -3284,27 +3585,46 @@ function CandidatePortalWorkspace({
               <span>{DOCUMENT_FORMAT_LABEL}</span>
               <input type="file" accept={DOCUMENT_FILE_ACCEPT} onChange={(event) => setResumeFile(event.target.files?.[0] ?? null)} />
             </label>
-            <CandidatePreParsePreview
-              file={resumeFile}
-              previewUrl={resumePreviewUrl}
-              previewKind={resumePreviewKind}
-              documentHtml={resumePreviewHtml}
-              loading={resumePreviewLoading}
-              error={resumePreviewError}
-              clear={() => setResumeFile(null)}
-            />
-            <div className="candidateFormGrid">
-              <label>Target role<input value={uploadTargetRole} onChange={(event) => setUploadTargetRole(event.target.value)} placeholder="Data Engineer, Reliability Engineer..." /></label>
-              <label>Upload note<input value={uploadNote} onChange={(event) => setUploadNote(event.target.value)} placeholder="Optional context for this resume" /></label>
+            {resumeFile ? (
+              <div className="candidateUploadPreviewBlock">
+                <div className="candidateUploadPreviewHead">
+                  <div>
+                    <span className="eyebrow">Preview before parse</span>
+                    <strong>{resumeFile.name}</strong>
+                  </div>
+                  <button className="plain small" type="button" onClick={() => setResumeFile(null)}>Remove</button>
+                </div>
+                <CandidatePreParsePreview
+                  file={resumeFile}
+                  previewUrl={resumePreviewUrl}
+                  previewKind={resumePreviewKind}
+                  documentHtml={resumePreviewHtml}
+                  loading={resumePreviewLoading}
+                  error={resumePreviewError}
+                  clear={() => setResumeFile(null)}
+                />
+              </div>
+            ) : (
+              <div className="candidateUploadQuietHint">
+                <span>Preview is shown after selection. Nothing is parsed until you confirm.</span>
+              </div>
+            )}
+            <details className="candidateUploadOptional">
+              <summary>Add target role or note <span>Optional</span></summary>
+              <div className="candidateFormGrid">
+                <label>Target role<input value={uploadTargetRole} onChange={(event) => setUploadTargetRole(event.target.value)} placeholder="Data Engineer, Reliability Engineer..." /></label>
+                <label>Upload note<input value={uploadNote} onChange={(event) => setUploadNote(event.target.value)} placeholder="Context for this resume" /></label>
+              </div>
+            </details>
+            <div className="candidateUploadSubmitRow">
+              <button className="primary" type="button" disabled={!resumeFile || busy} onClick={handleUploadResume}>
+                {busy ? <Loader2 size={15} className="spin" /> : <UploadCloud size={15} />} Confirm and parse resume
+              </button>
+              <span>After parsing, review facts in Resume before creating versions.</span>
             </div>
-            <button className="primary" type="button" disabled={!resumeFile || busy} onClick={handleUploadResume}>
-              {busy ? <Loader2 size={15} className="spin" /> : <UploadCloud size={15} />} Confirm and parse resume
-            </button>
-            <div className="candidateStartScratchInline">
-              <span>No resume file yet?</span>
-              <button className="secondary" type="button" onClick={handleStartFromScratch}>Start from scratch instead</button>
-            </div>
-            {activeUpload ? (
+          </article>
+          <aside className="candidateUploadSideRail">
+            {activeUpload && ["queued", "running", "failed"].includes(activeUpload.status) ? (
               <div className="candidateUploadStatusCard">
                 <span>{humanizeLabel(activeUpload.status)}</span>
                 <strong>{activeUpload.original_filename}</strong>
@@ -3314,16 +3634,27 @@ function CandidatePortalWorkspace({
                   {activeUpload.status === "succeeded" ? "Review extracted facts" : "Open resume workspace"}
                 </button>
               </div>
-            ) : null}
-          </article>
-          <aside className="candidatePortalCard">
+            ) : (
+              <article className="candidatePortalCard candidateUploadNextCard">
+                <span className="eyebrow">Next</span>
+                <strong>Parse once, edit forever.</strong>
+                <p>Your resume becomes a profile, a resume editor, versions, exports, and job-specific tailoring.</p>
+              </article>
+            )}
+            <article className="candidatePortalCard candidateUploadHistoryCard">
             <div className="candidatePortalSectionHead">
               <div>
                 <span className="eyebrow">Upload history</span>
                 <h2>Recent uploads</h2>
               </div>
             </div>
-            <CandidateUploadList uploads={uploads} activeUploadId={activeUpload?.id ?? ""} selectUpload={(id) => { setActiveUploadId(id); setActiveSection("review"); }} />
+            <CandidateUploadList
+              uploads={uploads}
+              activeUploadId={activeUpload?.id ?? ""}
+              selectUpload={(id) => { setActiveUploadId(id); setActiveSection("review"); }}
+              retryUpload={retryUpload}
+            />
+            </article>
           </aside>
         </section>
       ) : null}
@@ -3345,7 +3676,7 @@ function CandidatePortalWorkspace({
             busy={busy}
             createVersion={handleCreateVersion}
             openVersion={openVersionDetail}
-            editFacts={() => setActiveSection("profile")}
+            editVersion={openVersionEditor}
           />
         ) : (
           <section className="candidateResumeWorkspace">
@@ -3462,13 +3793,13 @@ function CandidatePortalWorkspace({
           <article className="candidateAiEditorMain">
             <header className="candidateAiEditorHero">
               <div>
-                <span className="eyebrow">AI resume editor</span>
-                <h1>Edit the resume people will actually read.</h1>
-                <p>Change the resume directly, use the coach to improve positioning, then preview the exact version before exporting.</p>
+                <span className="eyebrow">Master resume</span>
+                <h1>Edit once. Create versions when you apply.</h1>
+                <p>Write in the resume canvas, ask the coach for sharper wording, and keep facts clean before export.</p>
               </div>
               <div>
-                <button className="secondary" type="button" onClick={() => setActiveSection("review")}>Preview resume</button>
-                <button className="secondary" type="button" onClick={() => document.querySelector(".candidateJobAiEditor")?.scrollIntoView({ behavior: "smooth", block: "start" })}>Job editor</button>
+                <button className="secondary" type="button" onClick={() => setActiveSection("review")}>Versions</button>
+                <button className="secondary" type="button" onClick={() => setActiveSection("match")}>Jobs</button>
                 <button className="primary" type="button" onClick={handleSave} disabled={busy}>Save changes</button>
               </div>
             </header>
@@ -3480,54 +3811,35 @@ function CandidatePortalWorkspace({
               />
             ) : null}
             <div className="candidateAiEditorBody">
-              <aside className="candidateEditorSectionNav" aria-label="Resume sections">
-                {[
-                  ["Identity", "Name, links, location"],
-                  ["Summary", "Career positioning"],
-                  ["Experience", "Roles and bullets"],
-                  ["Projects", "Proof of work"],
-                  ["Education", "Schools and degrees"],
-                  ["Skills", "Keywords and tools"],
-                  ["Optional", "Links, awards, references"],
-                ].map(([title, body]) => (
-                  <button key={title} type="button" onClick={() => document.querySelector(`[data-candidate-editor-section="${title}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" })}>
-                    <strong>{title}</strong>
-                    <span>{body}</span>
-                  </button>
-                ))}
-              </aside>
               <div className="candidateEditorFormSurface">
                 {renderProfileEditor("profile", false)}
               </div>
             </div>
           </article>
           <aside className="candidateAiEditorRail">
-            <CandidateBulletRewriteCard
-              experienceItems={experienceItems}
-              setExperienceItems={setExperienceItems}
-            />
-            <CandidateJobAiEditor
-              versions={versions}
-          selectedVersionId={selectedVersionId}
-          setSelectedVersionId={setSelectedVersionId}
-          targetRole={targetRole}
-          setTargetRole={setTargetRole}
-          requirementText={requirementText}
-          setRequirementText={updateRequirementText}
-          match={selfMatch}
-          busy={busy}
-              analyze={handleMatchRequirement}
-              createTargetedVersion={handleCreateTargetedVersion}
-              openJobBoard={() => setActiveSection("match")}
-            />
             <CandidateCoachChat
               messages={coachMessages}
               input={coachInput}
               setInput={setCoachInput}
               send={sendCoachMessage}
+              busy={coachBusy}
               enhancement={normalizedAiEnhancement(draft.ai_enhancement)}
               applyHeadline={(value) => updateDraft("headline", value)}
               applySummary={(value) => updateDraft("summary", value)}
+            />
+            <CandidateJobAiEditor
+              versions={versions}
+              selectedVersionId={selectedVersionId}
+              setSelectedVersionId={setSelectedVersionId}
+              targetRole={targetRole}
+              setTargetRole={setTargetRole}
+              requirementText={requirementText}
+              setRequirementText={updateRequirementText}
+              match={selfMatch}
+              busy={busy}
+              analyze={handleMatchRequirement}
+              createTargetedVersion={handleCreateTargetedVersion}
+              openJobBoard={() => setActiveSection("match")}
             />
             <article className="candidatePortalCard">
               <div className="candidatePortalSectionHead">
@@ -3595,1704 +3907,28 @@ function CandidatePortalWorkspace({
         </article>
         </section>
       ) : null}
-    </section>
-  );
-}
 
-function CandidateHomeCommandCenter({
-  profile,
-  latestUpload,
-  activeUpload,
-  versions,
-  applications,
-  accessRequests,
-  profileCompleteness,
-  needsReview,
-  resume,
-  selectedVersion,
-  selectedTemplateId,
-  busy,
-  uploadInProgress,
-  openUpload,
-  startFromScratch,
-  openEditor,
-  openVersions,
-  openCreateVersion,
-  openVersion,
-  openJobBoard,
-  openSubmissionTracker,
-}: {
-  profile: CandidatePortalProfile["profile"];
-  latestUpload: CandidateResumeUpload | null;
-  activeUpload: CandidateResumeUpload | null;
-  versions: CandidateResumeVersion[];
-  applications: CandidateApplication[];
-  accessRequests: CandidateAccessRequest[];
-  profileCompleteness: number;
-  needsReview: Array<Record<string, any>>;
-  resume: Record<string, any>;
-  selectedVersion: CandidateResumeVersion | null;
-  selectedTemplateId: string;
-  busy: boolean;
-  uploadInProgress: boolean;
-  openUpload: () => void;
-  startFromScratch: () => void;
-  openEditor: () => void;
-  openVersions: () => void;
-  openCreateVersion: () => void;
-  openVersion: (versionId: string) => void;
-  openJobBoard: () => void;
-  openSubmissionTracker: (versionId?: string) => void;
-}) {
-  const displayName = textValue(profile.display_name) || "Your resume";
-  const firstName = displayName === "Your resume" ? "Build" : displayName.split(/\s+/)[0];
-  const headline = textValue(profile.headline) || "Upload a resume to build your candidate-owned profile.";
-  const latestVersion = selectedVersion ?? versions[0] ?? null;
-  const pendingAccessCount = accessRequests.filter((request) => request.status === "pending").length;
-  const recentApplication = applications[0] ?? null;
-  const visibleFixes = needsReview.filter((item) => !candidateReviewItemAlreadyResolved(profile, item)).slice(0, 3);
-  const readinessLabel = profileCompleteness >= 90 ? "Ready to apply" : profileCompleteness >= 70 ? "Almost ready" : "Needs review";
-  const versionSummary = latestVersion ? `${latestVersion.title} · ${latestVersion.target_role || "General"}` : "Create the first resume version after upload.";
-  const nextActionTitle = uploadInProgress ? "Parsing your resume" : visibleFixes.length ? "Review the extracted facts" : versions.length ? "Tailor this resume to a job" : "Start your resume";
-  const nextActionBody = uploadInProgress
-    ? `${activeUpload?.stage_label ?? "Parsing"} · ${activeUpload?.progress ?? 0}%`
-    : visibleFixes.length
-      ? visibleFixes[0]?.reason ?? "Verify the extracted fields before exporting."
-      : versions.length
-        ? "Use AI to compare this version against a job brief and create a sharper application copy."
-        : "Upload an existing file or start from scratch with a guided builder. You approve every fact before export.";
-  const nextAction = visibleFixes.length ? openEditor : versions.length ? openJobBoard : openUpload;
-  const nextActionLabel = visibleFixes.length ? "Review now" : versions.length ? "Match to a job" : "Upload resume";
-
-  return (
-    <section className="candidateCommandCenter candidateHomeStudio">
-      <article className="candidateHomeResumeStage">
-        <header>
-          <div>
-            <span className="eyebrow">My resume</span>
-            <h1>{displayName === "Your resume" ? "Build a resume you can actually control." : `${firstName}, this is the resume you control.`}</h1>
-            <p>Edit it, tailor it, export it, and track where each version goes.</p>
-          </div>
-          <div className="candidateHomeStageActions">
-            <button className="primary" type="button" onClick={latestUpload ? openEditor : openUpload}>
-              {latestUpload ? "Edit resume" : "Upload resume"}
-            </button>
-            <button className="secondary" type="button" onClick={startFromScratch}>
-              Start from scratch
-            </button>
-            <button className="secondary" type="button" onClick={openCreateVersion}>
-              Create version
-            </button>
-            <button className="secondary" type="button" disabled={!latestVersion} onClick={() => latestVersion ? openVersion(latestVersion.id) : undefined}>
-              Preview
-            </button>
-          </div>
-        </header>
-        <article className="candidateHomeResumePaper" aria-label="Scrollable resume preview">
-          <CandidateCvPreview resume={resume} templateId={selectedTemplateId} />
-        </article>
-      </article>
-
-      <aside className="candidateHomeSide">
-        <section className="candidateHomeCoachCard">
-          <span className="eyebrow">AI coach</span>
-          <h2>{nextActionTitle}</h2>
-          <p>{nextActionBody}</p>
-          {uploadInProgress && activeUpload ? <ProgressBar value={activeUpload.progress} /> : null}
-          <button className="primary fullWidth" type="button" disabled={busy && !uploadInProgress} onClick={nextAction}>{nextActionLabel}</button>
-          {!versions.length ? <button className="secondary fullWidth" type="button" onClick={startFromScratch}>Start from scratch</button> : null}
-        </section>
-
-        <section className="candidateHomeSimpleCard candidateHomeControlCard">
-          <span className="eyebrow">Resume control</span>
-          <h2>{readinessLabel}</h2>
-          <p>{headline}</p>
-          <div className="candidateHomeControlRows">
-            <button type="button" onClick={openEditor}>
-              <strong>Master profile</strong>
-              <span>{profileCompleteness}% complete · {profile.current_location || "location unclear"}</span>
-            </button>
-            <button type="button" disabled={!latestVersion} onClick={() => latestVersion ? openVersion(latestVersion.id) : undefined}>
-              <strong>Current version</strong>
-              <span>{versionSummary}</span>
-            </button>
-            <button type="button" disabled={!latestVersion} onClick={() => latestVersion ? openSubmissionTracker(latestVersion.id) : undefined}>
-              <strong>Submission memory</strong>
-              <span>{recentApplication ? `${recentApplication.destination_name} · ${humanizeLabel(recentApplication.status)}` : "Nothing logged yet"}</span>
-            </button>
-          </div>
-          <div className="candidateHomeMiniActions">
-            <button className="secondary" type="button" onClick={openCreateVersion}>Create version</button>
-            <button className="secondary" type="button" onClick={openVersions} disabled={!versions.length}>All versions</button>
-            <button className="secondary" type="button" disabled={!latestVersion} onClick={() => latestVersion ? openSubmissionTracker(latestVersion.id) : undefined}>Log submission</button>
-            <button
-              className="secondary"
-              type="button"
-              disabled={!latestVersion}
-              onClick={() => {
-                if (latestVersion) window.location.href = candidateResumeVersionPdfPath(latestVersion.id, selectedTemplateId);
-              }}
-            >
-              Download PDF
-            </button>
-          </div>
-          {pendingAccessCount ? <p>{pendingAccessCount} recruiter access request{pendingAccessCount === 1 ? "" : "s"} waiting for your decision.</p> : null}
-        </section>
-
-        <CandidateAtsConfidencePanel profile={profile} resume={resume} selectedTemplateId={selectedTemplateId} versions={versions} applications={applications} />
-
-        {recentApplication ? (
-          <section className="candidateHomeSimpleCard candidateSubmissionSnapshot">
-            <span className="eyebrow">Last shared</span>
-            <h2>{recentApplication.destination_name}</h2>
-            <p>{[recentApplication.job_title, humanizeLabel(recentApplication.status)].filter(Boolean).join(" · ")}</p>
-            <button className="secondary" type="button" onClick={() => openSubmissionTracker(recentApplication.resume_version_id || undefined)}>View submission history</button>
-          </section>
-        ) : (
-          <section className="candidateHomeSimpleCard candidateSubmissionSnapshot">
-            <span className="eyebrow">Submission tracker</span>
-            <h2>Know what you sent where</h2>
-            <p>Log each company, recruiter, job board, or LinkedIn conversation against the exact resume version used.</p>
-            <button className="secondary" type="button" disabled={!latestVersion} onClick={() => latestVersion ? openSubmissionTracker(latestVersion.id) : undefined}>Log first submission</button>
-          </section>
-        )}
-      </aside>
-    </section>
-  );
-}
-
-function candidateReviewItemAlreadyResolved(profile: CandidatePortalProfile["profile"], item: Record<string, any>) {
-  const label = String(item.field ?? item.label ?? "").toLowerCase();
-  const hasValue = (value: unknown) => Boolean(textValue(value).trim());
-  if (label.includes("location")) return hasValue(profile.current_location);
-  if (label.includes("email")) return hasValue(profile.email);
-  if (label.includes("phone")) return hasValue(profile.phone);
-  if (label.includes("linkedin")) return hasValue(profile.linkedin_url);
-  if (label.includes("portfolio")) return hasValue(profile.portfolio_url) || hasValue(profile.github_url);
-  if (label.includes("github")) return hasValue(profile.github_url);
-  if (label.includes("name")) return hasValue(profile.display_name);
-  if (label.includes("headline") || label.includes("title")) return hasValue(profile.headline);
-  if (label.includes("summary")) return hasValue(profile.summary);
-  if (label.includes("skill")) return toTextList(profile.skills).length > 0;
-  if (label.includes("experience") || label.includes("role")) return Array.isArray(profile.experience) && profile.experience.length > 0;
-  if (label.includes("education")) return Array.isArray(profile.education) && profile.education.length > 0;
-  return false;
-}
-
-function CandidatePreParsePreview({
-  file,
-  previewUrl,
-  previewKind,
-  documentHtml,
-  loading,
-  error,
-  clear,
-}: {
-  file: File | null;
-  previewUrl: string;
-  previewKind: "pdf" | "image" | "document" | "none";
-  documentHtml: string;
-  loading: boolean;
-  error: string;
-  clear: () => void;
-}) {
-  if (!file) {
-    return (
-      <div className="candidatePreParsePreview empty">
-        <FileSearch size={18} />
-        <div>
-          <strong>Preview before extraction</strong>
-          <span>Select the file first. Nothing is parsed until you confirm.</span>
-        </div>
-      </div>
-    );
-  }
-  const sizeLabel = formatBytes(file.size);
-  return (
-    <article className="candidatePreParsePreview">
-      <header>
-        <div>
-          <span className="eyebrow">Confirm file before parsing</span>
-          <strong>{file.name}</strong>
-          <small>{sizeLabel} · {file.type || "Unknown type"}</small>
-        </div>
-        <button className="plain small" type="button" onClick={clear}>Replace file</button>
-      </header>
-      {previewKind === "pdf" ? (
-        <iframe src={previewUrl} title="Selected resume preview before extraction" />
-      ) : null}
-      {previewKind === "image" ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={previewUrl} alt="Selected resume preview before extraction" />
-      ) : null}
-      {previewKind === "document" ? (
-        loading ? (
-          <div className="candidatePreParseFallback">
-            <Loader2 size={20} className="spin" />
-            <strong>Building safe document preview</strong>
-            <span>This does not extract the resume into your profile yet.</span>
-          </div>
-        ) : error ? (
-          <div className="candidatePreParseFallback">
-            <AlertTriangle size={20} />
-            <strong>Preview unavailable</strong>
-            <span>{error}</span>
-          </div>
-        ) : documentHtml ? (
-          <div className="docxPreview candidatePreParseDocHtml" dangerouslySetInnerHTML={{ __html: documentHtml }} />
-        ) : (
-          <div className="candidatePreParseFallback">
-            <FileSearch size={20} />
-            <strong>Document selected</strong>
-            <span>Confirm this is the right file before extraction.</span>
-          </div>
-        )
-      ) : null}
-    </article>
-  );
-}
-
-function CandidateVersionDatabase({
-  versions,
-  selectedVersionId,
-  query,
-  setQuery,
-  shares,
-  applications,
-  accessRequests,
-  versionTitle,
-  setVersionTitle,
-  targetRole,
-  setTargetRole,
-  busy,
-  createVersion,
-  openVersion,
-  editFacts,
-}: {
-  versions: CandidateResumeVersion[];
-  selectedVersionId: string;
-  query: string;
-  setQuery: (value: string) => void;
-  shares: CandidateResumeShare[];
-  applications: CandidateApplication[];
-  accessRequests: CandidateAccessRequest[];
-  versionTitle: string;
-  setVersionTitle: (value: string) => void;
-  targetRole: string;
-  setTargetRole: (value: string) => void;
-  busy: boolean;
-  createVersion: () => Promise<void>;
-  openVersion: (versionId: string) => void;
-  editFacts: () => void;
-}) {
-  const normalizedQuery = query.trim().toLowerCase();
-  const filteredVersions = versions.filter((version) => {
-    if (!normalizedQuery) return true;
-    const resume = version.resume_json ?? {};
-    const haystack = [
-      version.title,
-      version.target_role,
-      version.status,
-      resume.headline,
-      resume.summary,
-      ...toTextList(resume.skills),
-      ...(Array.isArray(resume.experience) ? resume.experience.flatMap((item) => [item.title, item.company, ...(toTextList(item.bullets))]) : []),
-    ].filter(Boolean).join(" ").toLowerCase();
-    return haystack.includes(normalizedQuery);
-  });
-  const roleCount = new Set(versions.map((version) => version.target_role).filter(Boolean)).size;
-  const activeShareCount = shares.filter((share) => share.status === "active").length;
-  const destinationCount = new Set(applications.map((item) => item.destination_name).filter(Boolean)).size;
-  const pendingAccessCount = accessRequests.filter((request) => request.status === "pending").length;
-  return (
-    <section className="databasePage candidateVersionDatabasePage">
-      <header className="profilesHeader">
-        <div>
-          <span className="eyebrow">Resume versions</span>
-          <h2>Application Vault</h2>
-          <p>Search, open, edit, export, and track every resume version from one place.</p>
-        </div>
-        <div className="profilesResultCount">
-          <strong>{filteredVersions.length}</strong>
-          <span>shown of {versions.length}</span>
-        </div>
-      </header>
-
-      <div className="profilesMetricStrip">
-        <article>
-          <div className="profileMetricCardHead"><span>Total Versions</span></div>
-          <strong>{versions.length}</strong>
-          <em>Exportable resumes</em>
-        </article>
-        <article>
-          <div className="profileMetricCardHead"><span>Target Roles</span></div>
-          <strong>{roleCount}</strong>
-          <em>Application directions</em>
-        </article>
-        <article>
-          <div className="profileMetricCardHead"><span>Shared To</span></div>
-          <strong>{destinationCount}</strong>
-          <em>{activeShareCount} active links</em>
-        </article>
-        <article className={pendingAccessCount ? "attention" : ""}>
-          <div className="profileMetricCardHead">
-            <span>Access Requests</span>
-            {pendingAccessCount ? <i className="profileMetricHazard" aria-label="Needs attention"><AlertTriangle size={14} /></i> : null}
-          </div>
-          <strong>{pendingAccessCount}</strong>
-          <em>Awaiting approval</em>
-        </article>
-      </div>
-
-      <CandidateVersionWorkflowCard createVersion={createVersion} editFacts={editFacts} busy={busy} hasVersions={versions.length > 0} />
-
-      <section className="candidateVersionDatabaseGrid">
-        <div>
-          <section className="profileSearchPanel">
-            <form className="semanticSearch" onSubmit={(event) => event.preventDefault()}>
-              <Search size={20} />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search versions by role, skill, company, or resume content" />
-              <button type="submit">Search</button>
-            </form>
-            <div className="filterRow">
-              <button className="filterChip" onClick={() => setQuery("")}>Clear</button>
-              <button className="filterChip" onClick={editFacts}>Edit resume</button>
-            </div>
-          </section>
-          <div className="table candidateVersionTable">
-            <div className="tableRow header">
-              <span>Version</span>
-              <span>Target</span>
-              <span>Evidence</span>
-              <span>Status</span>
-              <span>Updated</span>
-            </div>
-            {!filteredVersions.length ? (
-              <div className="tableEmpty">
-                <strong>No resume versions match this view.</strong>
-                <span>Create a version from the approved master profile, or clear the search.</span>
-              </div>
-            ) : null}
-            {filteredVersions.map((version) => {
-              const resume = version.resume_json ?? {};
-              const evidence = versionEvidenceSummary(resume);
-              return (
-                <button className={selectedVersionId === version.id ? "tableRow active" : "tableRow"} key={version.id} onClick={() => openVersion(version.id)}>
-                  <span className="truncateCell candidateListNameCell" title={version.title}>
-                    <span>{version.title}</span>
-                    <small>{resume.headline || "Resume version"}</small>
-                  </span>
-                  <span className="truncateCell" title={version.target_role || "General"}>{version.target_role || "General"}</span>
-                  <span className="truncateCell" title={evidence}>{evidence}</span>
-                  <span><b className="riskBadge">{humanizeLabel(version.status || "ready")}</b></span>
-                  <span>{version.updated_at ? new Date(version.updated_at).toLocaleDateString() : "N/A"}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <aside className="candidatePortalCard candidateVersionCreateCard">
-          <div className="candidatePortalSectionHead">
-            <div>
-              <span className="eyebrow">Create version</span>
-              <h2>New application resume</h2>
-              <p>Use your approved resume content, then export or tailor this version.</p>
-            </div>
-          </div>
-          <label>Version title<input value={versionTitle} onChange={(event) => setVersionTitle(event.target.value)} /></label>
-          <label>Target role<input value={targetRole} onChange={(event) => setTargetRole(event.target.value)} placeholder="Data Engineer, Reliability Engineer..." /></label>
-          <button className="primary fullWidth" type="button" onClick={createVersion} disabled={busy || !versionTitle.trim()}>Create and open</button>
-          <button className="secondary fullWidth" type="button" onClick={editFacts}>Edit resume first</button>
-        </aside>
-      </section>
-      <CandidateSubmissionHistory applications={applications} versions={versions} openVersion={openVersion} />
-    </section>
-  );
-}
-
-function CandidateVersionWorkflowCard({
-  createVersion,
-  editFacts,
-  busy,
-  hasVersions,
-}: {
-  createVersion: () => Promise<void>;
-  editFacts: () => void;
-  busy: boolean;
-  hasVersions: boolean;
-}) {
-  return (
-    <section className="candidateVersionWorkflowCard">
-      <div>
-        <span className="eyebrow">How versions work</span>
-        <h3>One master profile. Many application resumes.</h3>
-        <p>Keep the facts in one place, create a focused version for each role, export a clean PDF, then log where that version was sent.</p>
-      </div>
-      <div>
-        <span>1. Review facts</span>
-        <span>2. Create version</span>
-        <span>3. Tailor to job</span>
-        <span>4. Export and track</span>
-      </div>
-      <footer>
-        <button className="secondary" type="button" onClick={editFacts}>Edit master profile</button>
-        <button className="primary" type="button" disabled={busy} onClick={createVersion}>{hasVersions ? "Create another version" : "Create first version"}</button>
-      </footer>
-    </section>
-  );
-}
-
-function CandidateSubmissionHistory({
-  applications,
-  versions,
-  openVersion,
-}: {
-  applications: CandidateApplication[];
-  versions: CandidateResumeVersion[];
-  openVersion: (versionId: string) => void;
-}) {
-  const versionById = new Map(versions.map((version) => [version.id, version]));
-  return (
-    <section className="candidateSubmissionHistory">
-      <div className="candidatePortalSectionHead">
-        <div>
-          <span className="eyebrow">Submission history</span>
-          <h2>Which resume went where</h2>
-          <p>Each application points to the exact resume version used, so later edits do not rewrite old submissions.</p>
-        </div>
-      </div>
-      <div className="candidateSubmissionRows">
-        {applications.length ? applications.slice(0, 10).map((application) => {
-          const versionId = application.resume_version_id || "";
-          const version = versionById.get(versionId);
-          return (
-            <article key={application.id}>
-              <div>
-                <strong>{application.destination_name}</strong>
-                <span>{[application.job_title, humanizeLabel(application.destination_type), humanizeLabel(application.status)].filter(Boolean).join(" · ")}</span>
-                <small>{version?.title || application.version_title || "Resume version"} · {formatDateTime(application.shared_at)}</small>
-              </div>
-              <button className="secondary small" type="button" disabled={!versionId} onClick={() => openVersion(versionId)}>Open version</button>
-            </article>
-          );
-        }) : <EmptyPanel title="No submissions logged yet" body="Open a resume version and use “Log submission” when you send it to a company, recruiter, job board, or LinkedIn contact." />}
-      </div>
-    </section>
-  );
-}
-
-function CandidateScratchBuilderGuide({
-  busy,
-  saveProfile,
-  createVersion,
-}: {
-  busy: boolean;
-  saveProfile: () => Promise<void>;
-  createVersion: () => Promise<void>;
-}) {
-  const steps = [
-    ["Identity", "Add name, contact, location, LinkedIn, GitHub, or portfolio only if you have them."],
-    ["Direction", "Write the target role and a rough summary. The coach can tighten it after facts exist."],
-    ["Evidence", "Add education, roles, projects, skills, certifications, publications, or references as needed."],
-    ["Version", "Save the profile, then create a version for the first application."],
-  ];
-  return (
-    <section className="candidateScratchGuide">
-      <div>
-        <span className="eyebrow">Start from scratch</span>
-        <h2>No resume file needed.</h2>
-        <p>Use the structured editor below as the source of truth. Add only facts you can defend, then create a resume version and export it.</p>
-      </div>
-      <ol>
-        {steps.map(([title, body]) => (
-          <li key={title}>
-            <strong>{title}</strong>
-            <span>{body}</span>
-          </li>
-        ))}
-      </ol>
-      <div>
-        <button className="primary" type="button" disabled={busy} onClick={saveProfile}>Save profile</button>
-        <button className="secondary" type="button" disabled={busy} onClick={createVersion}>Save and create first version</button>
-      </div>
-    </section>
-  );
-}
-
-function CandidatePracticalJobBoard({
-  profile,
-  versions,
-  selectedVersionId,
-  setSelectedVersionId,
-  setRequirementText,
-}: {
-  profile: CandidatePortalProfile["profile"];
-  versions: CandidateResumeVersion[];
-  selectedVersionId: string;
-  setSelectedVersionId: (versionId: string) => void;
-  setRequirementText: (value: string) => void;
-}) {
-  const cards = practicalJobCardsForCandidate(profile, versions);
-  return (
-    <section className="candidateJobBoardPanel">
-      <div className="candidatePortalSectionHead">
-        <div>
-          <span className="eyebrow">Practical job board</span>
-          <h2>Roles worth testing</h2>
-          <p>These are not random jobs. They are practical targets inferred from the approved profile, skills, projects, and existing versions.</p>
-        </div>
-      </div>
-      <div className="candidateJobCards">
-        {cards.length ? cards.map((card) => (
-          <article key={card.role}>
-            <div>
-              <strong>{card.role}</strong>
-              <span>{card.fit}</span>
-            </div>
-            <p>{card.reason}</p>
-            <div className="nativeCandidateTags">
-              {card.keywords.slice(0, 6).map((keyword) => <span key={keyword}>{keyword}</span>)}
-            </div>
-            <footer>
-              <small>{card.versionTitle || "Use any version"}</small>
-              <button className="secondary small" type="button" onClick={() => {
-                if (card.versionId && card.versionId !== selectedVersionId) setSelectedVersionId(card.versionId);
-                setRequirementText(card.requirementText);
-              }}>Use as job brief</button>
-            </footer>
-          </article>
-        )) : (
-          <EmptyPanel title="No practical roles yet" body="Upload and parse a resume first. The job board should only show practical roles after the profile has evidence." />
-        )}
-      </div>
-    </section>
-  );
-}
-
-function CandidateTemplateSelector({
-  selectedTemplateId,
-  setSelectedTemplateId,
-}: {
-  selectedTemplateId: string;
-  setSelectedTemplateId: (value: string) => void;
-}) {
-  return (
-    <article className="candidatePortalCard candidateTemplateSelector">
-      <div className="candidatePortalSectionHead">
-        <div>
-          <span className="eyebrow">PDF templates</span>
-          <h2>Choose export style</h2>
-          <p>All templates are standardized and ATS-safe. The candidate verifies the look before downloading.</p>
-        </div>
-      </div>
-      <div className="candidateTemplateGrid">
-        {CANDIDATE_RESUME_TEMPLATES.map((template) => (
-          <button
-            key={template.id}
-            className={selectedTemplateId === template.id ? "active" : ""}
-            type="button"
-            onClick={() => setSelectedTemplateId(template.id)}
-          >
-            <i />
-            <strong>{template.name}</strong>
-            <span>{template.tone}</span>
-            <small>{template.note}</small>
-          </button>
-        ))}
-      </div>
-      <p className="candidateTemplateActiveLabel">Preview is using {selectedTemplateLabel(selectedTemplateId)}.</p>
-    </article>
-  );
-}
-
-function CandidateAtsConfidencePanel({
-  profile,
-  resume,
-  selectedTemplateId,
-  versions,
-  applications,
-}: {
-  profile: CandidatePortalProfile["profile"];
-  resume: Record<string, any>;
-  selectedTemplateId: string;
-  versions: CandidateResumeVersion[];
-  applications: CandidateApplication[];
-}) {
-  const checks = candidateAtsSignals(profile, resume, selectedTemplateId, versions, applications);
-  const passed = checks.filter((item) => item.ok).length;
-  const score = Math.round((passed / checks.length) * 100);
-  return (
-    <article className="candidatePortalCard candidateAtsPanel">
-      <div className="candidatePortalSectionHead">
-        <div>
-          <span className="eyebrow">ATS confidence</span>
-          <h2>{score}% ready</h2>
-          <p>Checks for the practical things that usually break resume screening before export.</p>
-        </div>
-        <strong>{selectedTemplateLabel(selectedTemplateId)}</strong>
-      </div>
-      <div className="candidateAtsMeter"><i style={{ width: `${score}%` }} /></div>
-      <div className="candidateAtsChecks">
-        {checks.map((item) => (
-          <span key={item.label} className={item.ok ? "ok" : "warn"}>
-            {item.ok ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
-            {item.label}
-          </span>
-        ))}
-      </div>
-    </article>
-  );
-}
-
-function CandidateVersionDiffPanel({
-  baseResume,
-  version,
-  resume,
-}: {
-  baseResume: Record<string, any>;
-  version: CandidateResumeVersion | null;
-  resume: Record<string, any>;
-}) {
-  const baseSkills = toTextList(baseResume.skills).map((item) => item.toLowerCase());
-  const versionSkills = toTextList(resume.skills);
-  const prioritizedSkills = versionSkills.filter((item) => !baseSkills.includes(item.toLowerCase())).slice(0, 8);
-  const targetRole = textValue(resume.job_tailoring?.target_role || version?.target_role || resume.headline);
-  const matchedTerms = toTextList(resume.job_tailoring?.matched_terms).slice(0, 8);
-  const missingTerms = toTextList(resume.job_tailoring?.missing_or_unclear_terms).slice(0, 8);
-  const changes = [
-    {
-      label: "Headline",
-      value: textValue(baseResume.headline) === textValue(resume.headline) ? "Same as master profile" : `${textValue(baseResume.headline) || "No master headline"} -> ${textValue(resume.headline) || "No version headline"}`,
-    },
-    {
-      label: "Experience",
-      value: `${Array.isArray(resume.experience) ? resume.experience.length : 0} roles carried into this version`,
-    },
-    {
-      label: "Projects",
-      value: `${Array.isArray(resume.projects) ? resume.projects.length : 0} projects carried into this version`,
-    },
-  ];
-  return (
-    <article className="candidatePortalCard candidateVersionDiffPanel">
-      <div className="candidatePortalSectionHead">
-        <div>
-          <span className="eyebrow">Version changes</span>
-          <h2>{targetRole ? `Tailored for ${targetRole}` : "Compared with master profile"}</h2>
-          <p>Shows what this version emphasizes without hiding missing or unclear evidence.</p>
-        </div>
-      </div>
-      <div className="candidateVersionDiffRows">
-        {changes.map((item) => (
-          <span key={item.label}><strong>{item.label}</strong>{item.value}</span>
-        ))}
-      </div>
-      {prioritizedSkills.length || matchedTerms.length ? (
-        <div className="candidateDiffTags">
-          {[...prioritizedSkills, ...matchedTerms].slice(0, 12).map((item) => <span key={item}>{item}</span>)}
-        </div>
-      ) : null}
-      {missingTerms.length ? (
-        <div className="candidateMissingTerms">
-          <strong>Missing or unclear</strong>
-          <p>{missingTerms.join(", ")}</p>
-        </div>
-      ) : null}
-    </article>
-  );
-}
-
-function CandidateCoachChat({
-  messages,
-  input,
-  setInput,
-  send,
-  enhancement,
-  applyHeadline,
-  applySummary,
-}: {
-  messages: Array<{ role: "assistant" | "user"; content: string }>;
-  input: string;
-  setInput: (value: string) => void;
-  send: () => void;
-  enhancement: Record<string, any>;
-  applyHeadline: (value: string) => void;
-  applySummary: (value: string) => void;
-}) {
-  const prompts = [
-    "Make my summary sharper without adding fake facts.",
-    "Rewrite my latest role bullets with stronger impact.",
-    "What is missing before I apply to data engineer roles?",
-    "Suggest a cleaner version for startup AI roles.",
-  ];
-  return (
-    <article className="candidatePortalCard candidateCoachChat">
-      <div className="candidatePortalSectionHead">
-        <div>
-          <span className="eyebrow">AI resume coach</span>
-          <h2>Improve the resume with AI</h2>
-          <p>Ask for rewrites, gaps, stronger bullets, or role-specific positioning. You approve every edit.</p>
-        </div>
-      </div>
-      <CandidateEditorCoachTools enhancement={enhancement} applyHeadline={applyHeadline} applySummary={applySummary} />
-      <div className="candidateCoachPrompts">
-        {prompts.map((prompt) => (
-          <button key={prompt} className="plain" type="button" onClick={() => setInput(prompt)}>{prompt}</button>
-        ))}
-      </div>
-      <div className="candidateCoachMessages">
-        {messages.map((message, index) => (
-          <div key={`${message.role}-${index}`} className={message.role}>
-            <span>{message.role === "assistant" ? "Coach" : "You"}</span>
-            <p>{message.content}</p>
-          </div>
-        ))}
-      </div>
-      <div className="candidateCoachComposer">
-        <textarea value={input} onChange={(event) => setInput(event.target.value)} rows={3} placeholder="Ask: make my summary stronger, what template should I use, what is missing for data engineer roles..." />
-        <button className="primary fullWidth" type="button" onClick={send}>Send to coach</button>
-      </div>
-    </article>
-  );
-}
-
-function CandidateBulletRewriteCard({
-  experienceItems,
-  setExperienceItems,
-}: {
-  experienceItems: Array<Record<string, any>>;
-  setExperienceItems: (items: Array<Record<string, any>>) => void;
-}) {
-  const firstEditable = experienceItems.findIndex((item) => toTextList(item.bullets).length > 0);
-  const role = firstEditable >= 0 ? experienceItems[firstEditable] : null;
-  const originalBullet = role ? toTextList(role.bullets)[0] ?? "" : "";
-  const suggestion = originalBullet ? strengthenResumeBullet(originalBullet, role) : "";
-
-  function applySuggestion() {
-    if (firstEditable < 0 || !suggestion) return;
-    setExperienceItems(experienceItems.map((item, index) => {
-      if (index !== firstEditable) return item;
-      const bullets = toTextList(item.bullets);
-      return { ...item, bullets: [suggestion, ...bullets.slice(1)] };
-    }));
-  }
-
-  return (
-    <article className="candidatePortalCard candidateBulletRewriteCard">
-      <div className="candidatePortalSectionHead">
-        <div>
-          <span className="eyebrow">Bullet editor</span>
-          <h2>Make one bullet sharper</h2>
-          <p>Rewrites use only the selected bullet and role context. Add metrics manually only when they are true.</p>
-        </div>
-      </div>
-      {originalBullet ? (
-        <>
-          <div className="candidateBulletCompare">
-            <span><strong>Current</strong>{originalBullet}</span>
-            <span><strong>Suggested</strong>{suggestion}</span>
-          </div>
-          <button className="secondary fullWidth" type="button" onClick={applySuggestion}>Apply rewrite to editor</button>
-        </>
-      ) : (
-        <EmptyPanel title="No bullet available" body="Add a work experience bullet first. The editor can then help make it clearer and stronger." />
-      )}
-    </article>
-  );
-}
-
-function CandidateJobAiEditor({
-  versions,
-  selectedVersionId,
-  setSelectedVersionId,
-  targetRole,
-  setTargetRole,
-  requirementText,
-  setRequirementText,
-  match,
-  busy,
-  analyze,
-  createTargetedVersion,
-  openJobBoard,
-}: {
-  versions: CandidateResumeVersion[];
-  selectedVersionId: string;
-  setSelectedVersionId: (versionId: string) => void;
-  targetRole: string;
-  setTargetRole: (value: string) => void;
-  requirementText: string;
-  setRequirementText: (value: string) => void;
-  match: CandidateSelfMatch | null;
-  busy: boolean;
-  analyze: () => Promise<void>;
-  createTargetedVersion: () => Promise<void>;
-  openJobBoard: () => void;
-}) {
-  const inferredRole = targetRole.trim() || inferTargetRoleFromRequirement(requirementText);
-  const enoughRequirement = requirementText.trim().length >= 20;
-  const editPlan = candidateJobEditPlan(match, inferredRole);
-  return (
-    <article className="candidatePortalCard candidateJobAiEditor">
-      <div className="candidatePortalSectionHead">
-        <div>
-          <span className="eyebrow">Job-level AI editor</span>
-          <h2>Tailor this resume to one job</h2>
-          <p>Paste the job brief, analyze fit, then create a targeted version without changing the master facts.</p>
-        </div>
-      </div>
-      <label>Resume version
-        <select value={selectedVersionId} onChange={(event) => setSelectedVersionId(event.target.value)}>
-          <option value="">Select version</option>
-          {versions.map((version) => <option value={version.id} key={version.id}>{version.title} · {version.target_role || "General"}</option>)}
-        </select>
-      </label>
-      <label>Target role
-        <input value={targetRole} onChange={(event) => setTargetRole(event.target.value)} placeholder={inferredRole || "Senior Data Engineer"} />
-      </label>
-      <label>Job requirement
-        <textarea value={requirementText} onChange={(event) => setRequirementText(event.target.value)} rows={5} placeholder="Paste the exact job description. The editor will identify keywords, gaps, and what to emphasize." />
-      </label>
-      <div className="candidateJobAiActions">
-        <button className="primary" type="button" disabled={busy || !selectedVersionId || !enoughRequirement} onClick={analyze}>
-          {busy ? <Loader2 size={15} className="spin" /> : <Sparkles size={15} />} Analyze job fit
-        </button>
-        <button className="secondary" type="button" disabled={busy || !selectedVersionId || !enoughRequirement || !inferredRole} onClick={createTargetedVersion}>
-          <Plus size={15} /> Create targeted version
-        </button>
-      </div>
-      {match ? (
-        <section className="candidateJobEditPlan">
-          <header>
-            <strong>{match.score}% · {humanizeLabel(match.fit_label)}</strong>
-            <span>{match.recommended_next_action}</span>
-          </header>
-          <div>
-            {editPlan.map((item) => (
-              <article key={item.title}>
-                <strong>{item.title}</strong>
-                <p>{item.body}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-      ) : (
-        <section className="candidateJobEditPlan empty">
-          <strong>What the AI editor will produce</strong>
-          <p>Role positioning, missing keywords, skills to emphasize, bullet edits to consider, and whether this deserves a separate resume version.</p>
-        </section>
-      )}
-      <button className="plain small" type="button" onClick={openJobBoard}>Open full job board</button>
-    </article>
-  );
-}
-
-function CandidateCvPreview({ resume, templateId = "atlas" }: { resume: Record<string, any>; templateId?: string }) {
-  const contact = resume.contact ?? {};
-  const skills = toTextList(resume.skills);
-  const summaryHighlights = toTextList(resume.summary_highlights);
-  const skillGroups = skillGroupEntries(resume.skill_groups, skills);
-  const experience = Array.isArray(resume.experience) ? resume.experience : [];
-  const education = Array.isArray(resume.education) ? resume.education : [];
-  const projects = Array.isArray(resume.projects) ? resume.projects : [];
-  const certifications = toTextList(resume.certifications);
-  const awards = toTextList(resume.awards);
-  const publications = toTextList(resume.publications);
-  const languages = toTextList(resume.languages);
-  const otherSections = resumeOtherSectionEntries(resume.other_sections);
-  const links = uniqueTextList(toTextList(resume.links).filter((link) => !toTextList([contact.linkedin_url, contact.portfolio_url, contact.github_url]).includes(link)));
-  const normalizedTemplate = CANDIDATE_RESUME_TEMPLATES.some((template) => template.id === templateId) ? templateId : "atlas";
-  return (
-    <div className={`candidateCvPreview candidateCvTemplate-${normalizedTemplate}`}>
-      <h1>{textValue(resume.name) || "Candidate Name"}</h1>
-      <p className="cvHeadline">{textValue(resume.headline)}</p>
-      <p className="cvMeta">{toTextList([contact.location, contact.email, contact.phone, contact.linkedin_url, contact.portfolio_url, contact.github_url]).join(" | ")}</p>
-      {resume.summary ? <p>{textValue(resume.summary)}</p> : null}
-      {summaryHighlights.length ? <TextListSection title="Summary Highlights" items={summaryHighlights} /> : null}
-      {skillGroups.length ? <section><h2>Skills</h2><SkillGroups groups={skillGroups} /></section> : skills.length ? <section><h2>Skills</h2><div className="cvSkills">{skills.map((skill) => <span key={skill}>{skill}</span>)}</div></section> : null}
-      {experience.length ? <section><h2>Experience</h2>{experience.map((item, index) => <CvItem key={`${item.company || item.title || "experience"}-${index}`} item={item} />)}</section> : null}
-      {projects.length ? <section><h2>Projects</h2>{projects.map((item, index) => <CvItem key={`${item.name || item.role || "project"}-${index}`} item={item} />)}</section> : null}
-      {education.length ? <section><h2>Education</h2>{education.map((item, index) => <CvItem key={`${item.school || item.degree || "education"}-${index}`} item={item} />)}</section> : null}
-      <TextListSection title="Certifications" items={certifications} />
-      <TextListSection title="Awards" items={awards} />
-      <TextListSection title="Publications" items={publications} />
-      <TextListSection title="Languages" items={languages} />
-      {otherSections.map((section) => <TextListSection key={section.title} title={section.title} items={section.items} />)}
-      <TextListSection title="Additional Links" items={links} />
-    </div>
-  );
-}
-
-function CandidateVisibilityPanel({
-  settings,
-  busy,
-  toggleNativeSearch,
-}: {
-  settings: Record<string, any>;
-  busy: boolean;
-  toggleNativeSearch: (enabled: boolean) => Promise<void>;
-}) {
-  const nativeSearchEnabled = Boolean(settings.candidate_signal_native_search_enabled);
-  return (
-    <article className="candidatePortalCard candidateVisibilityCard">
-      <div className="candidatePortalSectionHead">
-        <div>
-          <span className="eyebrow">Recruiter visibility</span>
-          <h2>{nativeSearchEnabled ? "Searchable, PII locked" : "Private"}</h2>
-          <p>Candidates can opt into recruiter discovery without exposing email, phone, LinkedIn, portfolio, or GitHub until they approve access.</p>
-        </div>
-      </div>
-      <div className="candidateVisibilityRows">
-        <span><ShieldCheck size={15} /> PII permission required</span>
-        <span><Database size={15} /> Candidate-owned profile</span>
-        <span><FileSearch size={15} /> Resume versions stay controlled</span>
-      </div>
-      <button className={nativeSearchEnabled ? "secondary fullWidth" : "primary fullWidth"} type="button" disabled={busy} onClick={() => toggleNativeSearch(!nativeSearchEnabled)}>
-        {nativeSearchEnabled ? "Turn recruiter discovery off" : "Make searchable without PII"}
-      </button>
-    </article>
-  );
-}
-
-function CandidateEditorCoachTools({
-  enhancement,
-  applyHeadline,
-  applySummary,
-}: {
-  enhancement: Record<string, any>;
-  applyHeadline: (value: string) => void;
-  applySummary: (value: string) => void;
-}) {
-  const [ignoredHeadline, setIgnoredHeadline] = useState(false);
-  const [ignoredSummary, setIgnoredSummary] = useState(false);
-  const headline = textValue(enhancement.headline_suggestion);
-  const summary = textValue(enhancement.career_narrative || enhancement.profile_read);
-  const bestFitRoles = cvTextList(enhancement.best_fit_roles);
-  const questions = cvTextList(enhancement.screening_questions || enhancement.likely_missed_details);
-  if (!headline && !summary && !bestFitRoles.length && !questions.length) {
-    return (
-      <section className="candidateEditorCoachTools">
-        <div>
-          <span className="eyebrow">AI resume coach</span>
-          <h3>Start improving the resume</h3>
-          <p>Use the editor to add facts, sharpen bullets, and prepare a clean version. Coaching suggestions appear here when enough resume context is available.</p>
-        </div>
-      </section>
-    );
-  }
-  return (
-    <section className="candidateEditorCoachTools">
-      <div>
-        <span className="eyebrow">AI resume coach</span>
-        <h3>Improve positioning without changing facts</h3>
-        <p>The coach suggests better positioning. You approve every change before it becomes part of the resume.</p>
-      </div>
-      {headline && !ignoredHeadline ? (
-        <article>
-          <strong>Suggested headline</strong>
-          <span>{headline}</span>
-          <div className="candidateCoachSuggestionActions">
-            <button className="secondary small" type="button" onClick={() => applyHeadline(headline)}>Accept</button>
-            <button className="plain small" type="button" onClick={() => setIgnoredHeadline(true)}>Ignore</button>
-          </div>
-        </article>
-      ) : null}
-      {summary && !ignoredSummary ? (
-        <article>
-          <strong>Suggested summary direction</strong>
-          <span>{summary}</span>
-          <div className="candidateCoachSuggestionActions">
-            <button className="secondary small" type="button" onClick={() => applySummary(summary)}>Accept</button>
-            <button className="plain small" type="button" onClick={() => setIgnoredSummary(true)}>Ignore</button>
-          </div>
-        </article>
-      ) : null}
-      {bestFitRoles.length ? (
-        <article>
-          <strong>Best-fit roles to target</strong>
-          <span>{bestFitRoles.slice(0, 6).join(", ")}</span>
-        </article>
-      ) : null}
-      {questions.length ? (
-        <article>
-          <strong>Missing details to confirm</strong>
-          <span>{questions.slice(0, 4).join(" · ")}</span>
-        </article>
+      {versionEditorOpen ? (
+        <CandidateVersionEditorOverlay
+          version={selectedVersionId === editingVersionId ? selectedVersion : null}
+          fallbackProfile={profile?.profile ?? {}}
+          title={editingVersionTitle}
+          setTitle={setEditingVersionTitle}
+          targetRole={editingVersionTargetRole}
+          setTargetRole={setEditingVersionTargetRole}
+          selectedTemplateId={selectedTemplateId}
+          setSelectedTemplateId={setSelectedTemplateId}
+          close={() => setVersionEditorOpen(false)}
+          saveVersionProfile={handleSaveVersionEditorProfile}
+          previewVersion={handlePreviewSelectedVersion}
+          exportVersion={handleExportSelectedVersion}
+          requestAiSuggestion={(payload) => suggestAiEdit({ ...payload, target_role: editingVersionTargetRole, requirement_text: requirementText })}
+          recordAiLearning={recordAiLearning}
+          busy={busy}
+        />
       ) : null}
     </section>
   );
-}
-
-function CandidateSharePanel({
-  shares,
-  selectedVersionId,
-  shareLabel,
-  setShareLabel,
-  includePii,
-  setIncludePii,
-  busy,
-  createShare,
-  revokeShare,
-}: {
-  shares: CandidateResumeShare[];
-  selectedVersionId: string;
-  shareLabel: string;
-  setShareLabel: (value: string) => void;
-  includePii: boolean;
-  setIncludePii: (value: boolean) => void;
-  busy: boolean;
-  createShare: () => Promise<void>;
-  revokeShare: (shareId: string) => Promise<void>;
-}) {
-  const activeShares = shares.filter((share) => share.status === "active");
-  return (
-    <article className="candidatePortalCard candidateShareCard">
-      <div className="candidatePortalSectionHead">
-        <div>
-          <span className="eyebrow">Controlled sharing</span>
-          <h2>Resume MCP link</h2>
-          <p>Create a controlled resume-data endpoint for a specific version. PII stays off unless the candidate explicitly includes it.</p>
-        </div>
-      </div>
-      <label>Share label<input value={shareLabel} onChange={(event) => setShareLabel(event.target.value)} /></label>
-      <label className="candidateToggleRow">
-        <input type="checkbox" checked={includePii} onChange={(event) => setIncludePii(event.target.checked)} />
-        Include PII in this specific share link
-      </label>
-      <button className="primary fullWidth" type="button" disabled={busy || !selectedVersionId} onClick={createShare}>Create controlled link</button>
-      <div className="candidateShareList">
-        {activeShares.length ? activeShares.slice(0, 4).map((share) => {
-          const url = candidatePortalShareUrl(share.access_token);
-          return (
-            <article key={share.id}>
-              <strong>{share.label}</strong>
-              <span>{share.version_title || "Resume version"} · {share.permissions?.include_pii ? "PII included" : "PII locked"}</span>
-              <code>{url}</code>
-              <div>
-                <button className="plain small" type="button" onClick={() => navigator.clipboard?.writeText(url)}>Copy</button>
-                <button className="plain small dangerText" type="button" onClick={() => revokeShare(share.id)}>Revoke</button>
-              </div>
-            </article>
-          );
-        }) : <EmptyPanel title="No active share links" body="Create one when a candidate wants to share a controlled resume version externally." />}
-      </div>
-    </article>
-  );
-}
-
-function CandidateApplicationTracker({
-  applications,
-  selectedVersionId,
-  destination,
-  setDestination,
-  destinationType,
-  setDestinationType,
-  jobTitle,
-  setJobTitle,
-  jobUrl,
-  setJobUrl,
-  status,
-  setStatus,
-  note,
-  setNote,
-  createShare,
-  setCreateShare,
-  includePii,
-  setIncludePii,
-  busy,
-  save,
-  updateStatus,
-}: {
-  applications: CandidateApplication[];
-  selectedVersionId: string;
-  destination: string;
-  setDestination: (value: string) => void;
-  destinationType: string;
-  setDestinationType: (value: string) => void;
-  jobTitle: string;
-  setJobTitle: (value: string) => void;
-  jobUrl: string;
-  setJobUrl: (value: string) => void;
-  status: string;
-  setStatus: (value: string) => void;
-  note: string;
-  setNote: (value: string) => void;
-  createShare: boolean;
-  setCreateShare: (value: boolean) => void;
-  includePii: boolean;
-  setIncludePii: (value: boolean) => void;
-  busy: boolean;
-  save: () => Promise<void>;
-  updateStatus: (applicationId: string, status: string) => Promise<void>;
-}) {
-  return (
-    <article id="candidate-application-tracker" className="candidatePortalCard candidateApplicationTracker">
-      <div className="candidatePortalSectionHead">
-        <div>
-          <span className="eyebrow">Application memory</span>
-          <h2>Where did you share this?</h2>
-          <p>Track which resume version went to which company, recruiter, job board, or LinkedIn conversation.</p>
-        </div>
-      </div>
-      <div className="candidateFormGrid">
-        <label>Destination<input value={destination} onChange={(event) => setDestination(event.target.value)} placeholder="Company, recruiter, LinkedIn contact..." /></label>
-        <label>Type
-          <select value={destinationType} onChange={(event) => setDestinationType(event.target.value)}>
-            <option value="company">Company</option>
-            <option value="recruiter">Recruiter</option>
-            <option value="job_board">Job board</option>
-            <option value="linkedin">LinkedIn</option>
-            <option value="email">Email</option>
-            <option value="referral">Referral</option>
-            <option value="other">Other</option>
-          </select>
-        </label>
-        <label>Role / job title<input value={jobTitle} onChange={(event) => setJobTitle(event.target.value)} placeholder="Senior Data Engineer" /></label>
-        <label>Status
-          <select value={status} onChange={(event) => setStatus(event.target.value)}>
-            <option value="shared">Shared</option>
-            <option value="applied">Applied</option>
-            <option value="interviewing">Interviewing</option>
-            <option value="offer">Offer</option>
-            <option value="rejected">Rejected</option>
-            <option value="withdrawn">Withdrawn</option>
-            <option value="archived">Archived</option>
-          </select>
-        </label>
-      </div>
-      <label>Job URL<input value={jobUrl} onChange={(event) => setJobUrl(event.target.value)} placeholder="https://..." /></label>
-      <label>Private note<textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} placeholder="What did you send, who asked, what should you follow up on?" /></label>
-      <label className="candidateToggleRow">
-        <input type="checkbox" checked={createShare} onChange={(event) => setCreateShare(event.target.checked)} />
-        Also create a controlled resume link for this destination
-      </label>
-      {createShare ? (
-        <label className="candidateToggleRow">
-          <input type="checkbox" checked={includePii} onChange={(event) => setIncludePii(event.target.checked)} />
-          Include contact details in that controlled link
-        </label>
-      ) : null}
-      <button className="primary fullWidth" type="button" disabled={busy || !selectedVersionId || !destination.trim()} onClick={save}>Save share history</button>
-      <div className="candidateApplicationList">
-        {applications.length ? applications.slice(0, 6).map((application) => {
-          const shareUrl = application.share_url_token ? candidatePortalShareUrl(application.share_url_token) : "";
-          return (
-            <article key={application.id}>
-              <div>
-                <strong>{application.destination_name}</strong>
-                <span>{[application.job_title, humanizeLabel(application.destination_type), formatDateTime(application.shared_at)].filter(Boolean).join(" · ")}</span>
-              </div>
-              <select value={application.status} onChange={(event) => void updateStatus(application.id, event.target.value)}>
-                <option value="shared">Shared</option>
-                <option value="applied">Applied</option>
-                <option value="interviewing">Interviewing</option>
-                <option value="offer">Offer</option>
-                <option value="rejected">Rejected</option>
-                <option value="withdrawn">Withdrawn</option>
-                <option value="archived">Archived</option>
-              </select>
-              {application.job_url ? <a href={application.job_url} target="_blank" rel="noreferrer">Open job</a> : null}
-              {shareUrl ? <button className="plain small" type="button" onClick={() => navigator.clipboard?.writeText(shareUrl)}>Copy share link</button> : null}
-              {application.status !== "archived" ? <button className="plain small dangerText" type="button" onClick={() => void updateStatus(application.id, "archived")}>Archive</button> : null}
-              {application.candidate_note ? <p>{application.candidate_note}</p> : null}
-            </article>
-          );
-        }) : <EmptyPanel title="No share history for this version" body="When you send this resume anywhere, log it here so you know which version was used." />}
-      </div>
-    </article>
-  );
-}
-
-function CandidateAccessRequestsPanel({
-  accessRequests,
-  busy,
-  decide,
-}: {
-  accessRequests: CandidateAccessRequest[];
-  busy: boolean;
-  decide: (requestId: string, decision: "approve" | "deny") => Promise<void>;
-}) {
-  const pending = accessRequests.filter((request) => request.status === "pending");
-  return (
-    <article className="candidatePortalCard candidateAccessCard">
-      <div className="candidatePortalSectionHead">
-        <div>
-          <span className="eyebrow">PII access</span>
-          <h2>{pending.length ? `${pending.length} pending` : "No pending requests"}</h2>
-          <p>Recruiters can discover searchable native candidates, but contact details unlock only after approval.</p>
-        </div>
-      </div>
-      <div className="candidateAccessList">
-        {pending.length ? pending.slice(0, 4).map((request) => (
-          <article key={request.id}>
-            <strong>{request.tenant_name || "Recruiter workspace"}</strong>
-            <span>{request.request_message || "Requested permission to view candidate contact/profile details."}</span>
-            <small>{request.recruiter_email || "Recruiter"} · {formatDateTime(request.created_at)}</small>
-            <div>
-              <button className="primary small" type="button" disabled={busy} onClick={() => decide(request.id, "approve")}>Approve</button>
-              <button className="secondary small" type="button" disabled={busy} onClick={() => decide(request.id, "deny")}>Deny</button>
-            </div>
-          </article>
-        )) : <EmptyPanel title="No access requests" body="When recruiters ask to see PII, the candidate can approve or deny from here." />}
-      </div>
-    </article>
-  );
-}
-
-function candidatePortalShareUrl(token: string) {
-  const path = `/api/backend/candidate-shares/${encodeURIComponent(token)}`;
-  if (typeof window === "undefined") return path;
-  return `${window.location.origin}${path}`;
-}
-
-function selectedTemplateLabel(templateId: string) {
-  return CANDIDATE_RESUME_TEMPLATES.find((template) => template.id === templateId)?.name ?? "Atlas";
-}
-
-function candidateAtsSignals(
-  profile: CandidatePortalProfile["profile"],
-  resume: Record<string, any>,
-  selectedTemplateId: string,
-  versions: CandidateResumeVersion[],
-  applications: CandidateApplication[],
-) {
-  const contact = resume.contact ?? {};
-  const experience = Array.isArray(resume.experience) ? resume.experience : [];
-  const education = Array.isArray(resume.education) ? resume.education : [];
-  const projects = Array.isArray(resume.projects) ? resume.projects : [];
-  const skills = toTextList(resume.skills);
-  const hasDates = experience.some((item) => textValue(item.start_date) || textValue(item.end_date));
-  const hasLinks = Boolean(contact.linkedin_url || contact.portfolio_url || contact.github_url || profile.linkedin_url || profile.portfolio_url || profile.github_url);
-  const hasTargetedVersion = versions.some((version) => Boolean(textValue(version.target_role)));
-  return [
-    { label: "Name and headline", ok: Boolean(textValue(resume.name || profile.display_name) && textValue(resume.headline || profile.headline)) },
-    { label: "Contact details", ok: Boolean(textValue(contact.email || profile.email) || textValue(contact.phone || profile.phone)) },
-    { label: "Location", ok: Boolean(textValue(contact.location || profile.current_location)) },
-    { label: "Professional links", ok: hasLinks },
-    { label: "Summary", ok: Boolean(textValue(resume.summary || profile.summary)) },
-    { label: "Experience bullets", ok: experience.some((item) => cvTextList(item.bullets || item.details || item.description).length) },
-    { label: "Role dates", ok: hasDates },
-    { label: "Skills", ok: skills.length >= 6 },
-    { label: "Education or projects", ok: education.length > 0 || projects.length > 0 },
-    { label: "ATS-safe template", ok: CANDIDATE_RESUME_TEMPLATES.some((template) => template.id === selectedTemplateId) },
-    { label: "Role-specific version", ok: hasTargetedVersion || versions.length === 1 },
-    { label: "Submission tracking", ok: applications.length > 0 },
-  ];
-}
-
-function candidateResumeFromProfile(profile: CandidatePortalProfile["profile"]): Record<string, any> {
-  return {
-    name: profile.display_name || "",
-    headline: profile.headline || "",
-    summary: profile.summary || "",
-    summary_highlights: profile.summary_highlights || [],
-    ai_enhancement: profile.ai_enhancement || {},
-    contact: {
-      location: profile.current_location || "",
-      email: profile.email || "",
-      phone: profile.phone || "",
-      linkedin_url: profile.linkedin_url || "",
-      portfolio_url: profile.portfolio_url || "",
-      github_url: profile.github_url || "",
-    },
-    skills: profile.skills || [],
-    skill_groups: profile.skill_groups || {},
-    experience: profile.experience || [],
-    education: profile.education || [],
-    certifications: profile.certifications || [],
-    projects: profile.projects || [],
-    awards: profile.awards || [],
-    publications: profile.publications || [],
-    languages: profile.languages || [],
-    other_sections: profile.other_sections || {},
-    links: profile.links || [],
-  };
-}
-
-function SkillGroups({ groups }: { groups: Array<{ label: string; skills: string[] }> }) {
-  return (
-    <div className="cvSkillGroups">
-      {groups.map((group) => (
-        <div key={group.label}>
-          <strong>{group.label}</strong>
-          <span>{group.skills.join(", ")}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function TextListSection({ title, items }: { title: string; items: string[] }) {
-  if (!items.length) return null;
-  return (
-    <section>
-      <h2>{title}</h2>
-      <ul>{items.map((item) => <li key={item}>{item}</li>)}</ul>
-    </section>
-  );
-}
-
-function CandidateUploadList({ uploads, activeUploadId, selectUpload }: { uploads: CandidateResumeUpload[]; activeUploadId: string; selectUpload: (id: string) => void }) {
-  if (!uploads.length) return <EmptyPanel title="No uploads yet" body="Upload a resume to start parsing and build the master profile." />;
-  return (
-    <div className="candidateUploadList">
-      {uploads.map((upload) => (
-        <button key={upload.id} className={activeUploadId === upload.id ? "active" : ""} type="button" onClick={() => selectUpload(upload.id)}>
-          <span>{humanizeLabel(upload.status)}</span>
-          <strong>{upload.original_filename}</strong>
-          <small>{upload.stage_label ?? humanizeLabel(upload.stage)} · {formatDateTime(upload.updated_at)}</small>
-          <ProgressBar value={upload.progress} />
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function CvItem({ item }: { item: Record<string, any> }) {
-  const title = textValue(item.title || item.degree || item.role || item.name);
-  const place = textValue(item.company || item.school);
-  const location = textValue(item.location);
-  const dates = toTextList([item.start_date, item.end_date]).join(" - ");
-  const technologies = cvTextList(item.technologies);
-  const links = cvTextList(item.links);
-  const bullets = cvTextList(item.bullets || item.details || item.description);
-  const workstreams = Array.isArray(item.workstreams) ? item.workstreams : [];
-  return (
-    <article className="cvItem">
-      <h3>{title}{place ? ` · ${place}` : ""}</h3>
-      {dates || location ? <span>{[dates, location].filter(Boolean).join(" · ")}</span> : null}
-      {technologies.length ? <p className="cvItemTech">{technologies.join(", ")}</p> : null}
-      {links.length ? <p className="cvItemLinks">{links.join(" | ")}</p> : null}
-      {bullets.length ? <ul>{bullets.map((bullet) => <li key={bullet}>{bullet}</li>)}</ul> : null}
-      {workstreams.length ? (
-        <div className="cvWorkstreams">
-          {workstreams.map((workstream, index) => (
-            <CvItem key={`${workstream.name || workstream.role || "workstream"}-${index}`} item={workstream} />
-          ))}
-        </div>
-      ) : null}
-    </article>
-  );
-}
-
-function cvTextList(value: unknown): string[] {
-  if (typeof value === "string") {
-    return value.split(/\n+/).map((item) => item.trim()).filter(Boolean);
-  }
-  return toTextList(value);
-}
-
-function splitLineList(value: string): string[] {
-  return value.split(/\n+/).map((item) => item.trim()).filter(Boolean);
-}
-
-function candidateUploadPreviewKind(file: File | null): "pdf" | "image" | "document" | "none" {
-  if (!file) return "none";
-  const mime = (file.type || "").toLowerCase();
-  const name = file.name.toLowerCase();
-  if (mime.includes("pdf") || name.endsWith(".pdf")) return "pdf";
-  if (mime.startsWith("image/") || [".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"].some((suffix) => name.endsWith(suffix))) return "image";
-  return "document";
-}
-
-function skillGroupEntries(groups: unknown, fallbackSkills: string[]) {
-  if (groups && typeof groups === "object" && !Array.isArray(groups)) {
-    return Object.entries(groups as Record<string, unknown>)
-      .map(([label, values]) => ({ label: humanizeLabel(label), skills: cvTextList(values) }))
-      .filter((group) => group.skills.length);
-  }
-  return fallbackSkills.length ? [{ label: "Skills", skills: fallbackSkills }] : [];
-}
-
-function resumeOtherSectionEntries(value: unknown): Array<{ title: string; items: string[] }> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
-  return Object.entries(value as Record<string, unknown>)
-    .map(([title, items]) => ({
-      title: humanizeLabel(title),
-      items: cvTextList(items),
-    }))
-    .filter((section) => section.items.length);
-}
-
-function versionEvidenceSummary(resume: Record<string, any>) {
-  const skills = toTextList(resume.skills).slice(0, 3);
-  const experience = Array.isArray(resume.experience) ? resume.experience : [];
-  const latest = experience[0] ?? {};
-  return [
-    latest.title && latest.company ? `${latest.title} at ${latest.company}` : latest.title || latest.company,
-    skills.length ? skills.join(", ") : "",
-  ].filter(Boolean).join(" · ") || "Open to review resume evidence";
-}
-
-function practicalJobCardsForCandidate(profile: CandidatePortalProfile["profile"], versions: CandidateResumeVersion[]) {
-  const enhancement = normalizedAiEnhancement(profile.ai_enhancement);
-  const aiRoles = cvTextList(enhancement.best_fit_roles);
-  const versionRoles = versions.map((version) => version.target_role || "").filter(Boolean);
-  const headlineRoles = textValue(profile.headline)
-    ? [textValue(profile.headline).replace(/\|/g, " ").split(",")[0]?.trim()].filter(Boolean)
-    : [];
-  const roles = uniqueTextList([...aiRoles, ...versionRoles, ...headlineRoles]).slice(0, 6);
-  const skills = toTextList(profile.skills).slice(0, 12);
-  const experience = Array.isArray(profile.experience) ? profile.experience : [];
-  const latest = experience[0] ?? {};
-  return roles.map((role) => {
-    const roleNeedle = role.toLowerCase().split(" ")[0] || role.toLowerCase();
-    const matchingVersion = versions.find((version) => (version.target_role || version.title || "").toLowerCase().includes(roleNeedle));
-    const keywords = uniqueTextList([...skills, ...cvTextList(enhancement.search_keywords)]).slice(0, 8);
-    return {
-      role,
-      versionId: matchingVersion?.id || versions[0]?.id || "",
-      versionTitle: matchingVersion?.title || versions[0]?.title || "",
-      fit: matchingVersion ? "Version exists" : "Create or tailor a version",
-      reason: [
-        latest.title && latest.company ? `Recent evidence includes ${latest.title} at ${latest.company}.` : "",
-        skills.length ? `Core searchable skills include ${skills.slice(0, 5).join(", ")}.` : "",
-        textValue(enhancement.profile_read || enhancement.career_narrative),
-      ].filter(Boolean)[0] || "This role is inferred from the candidate profile. Verify against a real requirement before applying.",
-      keywords,
-      requirementText: [
-        `Role: ${role}`,
-        skills.length ? `Relevant skills to test: ${skills.slice(0, 10).join(", ")}` : "",
-        latest.title || latest.company ? `Recent experience evidence: ${[latest.title, latest.company].filter(Boolean).join(" at ")}` : "",
-        "Use this as a starting job brief. Paste the real requirement to get a better match.",
-      ].filter(Boolean).join("\n"),
-    };
-  });
-}
-
-function candidateCoachReply(profile: CandidatePortalProfile["profile"], message: string) {
-  const enhancement = normalizedAiEnhancement(profile.ai_enhancement);
-  const lower = message.toLowerCase();
-  const skills = toTextList(profile.skills).slice(0, 8);
-  const bestRoles = cvTextList(enhancement.best_fit_roles).slice(0, 4);
-  const questions = cvTextList(enhancement.screening_questions || enhancement.likely_missed_details).slice(0, 4);
-  if (lower.includes("template") || lower.includes("pdf") || lower.includes("download")) {
-    return "Use Atlas for the default professional export, Technical for engineering/data roles, Compact if the resume is too long, and Minimal when you want the safest ATS-first version. Verify the selected template in preview before downloading.";
-  }
-  if (lower.includes("summary") || lower.includes("headline")) {
-    const suggested = textValue(enhancement.headline_suggestion || enhancement.career_narrative || enhancement.profile_read);
-    return suggested
-      ? `I would start with this positioning: ${suggested}`
-      : "Your summary should be evidence-led: current role, strongest domain, top 3 skills, and one quantified impact. Add metrics from the resume before exporting.";
-  }
-  if (lower.includes("missing") || lower.includes("improve") || lower.includes("weak")) {
-    return questions.length
-      ? `The main missing items to verify are: ${questions.join("; ")}. Add these in the structured editor so every resume version improves.`
-      : "Check dates, latest title, location, LinkedIn/portfolio, quantified bullets, project ownership, and role-specific keywords. Those fields usually improve matching the most.";
-  }
-  if (lower.includes("job") || lower.includes("role") || lower.includes("match")) {
-    return bestRoles.length
-      ? `The strongest practical directions look like: ${bestRoles.join(", ")}. Use Job Board to test one version against a real requirement before applying.`
-      : `Based on captured skills${skills.length ? ` like ${skills.join(", ")}` : ""}, create a targeted version for the job and then match it against the requirement.`;
-  }
-  return `I would improve this profile by tightening the headline, making bullets outcome-based, and ensuring role-specific keywords are present${skills.length ? `: ${skills.slice(0, 5).join(", ")}` : ""}. Ask me about summary, missing evidence, template choice, or job matching.`;
-}
-
-function strengthenResumeBullet(bullet: string, role: Record<string, any> | null) {
-  const clean = textValue(bullet).replace(/^[-•]\s*/, "");
-  const roleLabel = [role?.title, role?.company].filter(Boolean).join(" at ");
-  if (!clean) return "";
-  if (/\b(led|built|designed|architected|improved|reduced|increased|launched|implemented|optimized|automated|delivered)\b/i.test(clean)) {
-    return clean;
-  }
-  const prefix = roleLabel ? `Delivered ${roleLabel} work by ` : "Delivered impact by ";
-  return `${prefix}${clean.charAt(0).toLowerCase()}${clean.slice(1)}`;
-}
-
-function inferTargetRoleFromRequirement(requirementText: string) {
-  const lines = requirementText
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const explicit = lines.find((line) => /^(role|job title|title|position)\s*:/i.test(line));
-  if (explicit) return explicit.replace(/^(role|job title|title|position)\s*:/i, "").trim().slice(0, 80);
-  const heading = lines.find((line) => line.length <= 80 && /(engineer|developer|analyst|manager|designer|architect|consultant|scientist|specialist|lead)/i.test(line));
-  if (heading) return heading.replace(/^job\s*/i, "").trim().slice(0, 80);
-  return "";
-}
-
-function candidateJobEditPlan(match: CandidateSelfMatch | null, targetRole: string) {
-  if (!match) return [];
-  const matched = match.matched_terms.slice(0, 8).join(", ") || "No strong matched terms yet.";
-  const missing = match.missing_or_unclear_terms.slice(0, 8).join(", ") || "No major gaps detected.";
-  const skills = match.skill_hits.slice(0, 8).join(", ") || matched;
-  return [
-    {
-      title: "Fit read",
-      body: match.summary || `This version scored ${match.score}% for the role. Use this as a decision aid, not a reason to invent missing details.`,
-    },
-    {
-      title: "Positioning",
-      body: targetRole
-        ? `Create a version that clearly targets ${targetRole}. The summary and headline should mention the role only if the resume evidence supports it.`
-        : "Add a target role before creating the version so the export has a clear direction.",
-    },
-    {
-      title: "Evidence to emphasize",
-      body: `Bring these signals higher in the resume where they are factual: ${matched}.`,
-    },
-    {
-      title: "Missing or unclear keywords",
-      body: `Verify these before adding them: ${missing}. If they are not true, keep them out and prepare an interview answer instead.`,
-    },
-    {
-      title: "ATS keyword focus",
-      body: `The strongest skill overlap is: ${skills}. Use the editor to sharpen bullets around these skills before export.`,
-    },
-    {
-      title: "What not to fake",
-      body: "Do not add tools, years, locations, certifications, or employers unless they are true. Mark unclear items as questions to verify.",
-    },
-  ];
-}
-
-function normalizedAiEnhancement(value: unknown): Record<string, any> {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : {};
-}
-
-function EditableProfileList({
-  title,
-  addLabel,
-  items,
-  setItems,
-  fields,
-  detailsKey,
-  detailsLabel,
-  enableWorkstreams = false,
-}: {
-  title: string;
-  addLabel: string;
-  items: Array<Record<string, any>>;
-  setItems: (items: Array<Record<string, any>>) => void;
-  fields: Array<{ key: string; label: string }>;
-  detailsKey: "bullets" | "details";
-  detailsLabel: string;
-  enableWorkstreams?: boolean;
-}) {
-  function updateItem(index: number, key: string, value: string) {
-    setItems(items.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item));
-  }
-
-  function updateDetails(index: number, value: string) {
-    setItems(items.map((item, itemIndex) => itemIndex === index ? { ...item, [detailsKey]: value.split("\n").map((line) => line.trim()).filter(Boolean) } : item));
-  }
-
-  function updateWorkstreams(index: number, workstreams: Array<Record<string, any>>) {
-    setItems(items.map((item, itemIndex) => itemIndex === index ? { ...item, workstreams } : item));
-  }
-
-  return (
-    <section className="editableProfileList">
-      <div>
-        <h3>{title}</h3>
-        <button className="plain small" type="button" onClick={() => setItems([...items, {}])}><Plus size={14} /> {addLabel}</button>
-      </div>
-      {items.length ? items.map((item, index) => (
-        <article key={`${title}-${index}`} className="editableProfileItem">
-          <div className="candidateFormGrid">
-            {fields.map((field) => (
-              <label key={field.key}>{field.label}<input value={textValue(item[field.key])} onChange={(event) => updateItem(index, field.key, event.target.value)} /></label>
-            ))}
-          </div>
-          <label className="candidateWideField">{detailsLabel}<textarea value={toTextList(item[detailsKey]).join("\n")} onChange={(event) => updateDetails(index, event.target.value)} rows={4} placeholder="One bullet per line" /></label>
-          {enableWorkstreams ? (
-            <EditableWorkstreamList
-              workstreams={Array.isArray(item.workstreams) ? item.workstreams : []}
-              setWorkstreams={(workstreams) => updateWorkstreams(index, workstreams)}
-            />
-          ) : null}
-          <button className="plain dangerText" type="button" onClick={() => setItems(items.filter((_, itemIndex) => itemIndex !== index))}>Remove</button>
-        </article>
-      )) : <EmptyPanel title={`No ${title.toLowerCase()} yet`} body={`Add ${title.toLowerCase()} to make generated CV versions stronger.`} />}
-    </section>
-  );
-}
-
-function EditableWorkstreamList({
-  workstreams,
-  setWorkstreams,
-}: {
-  workstreams: Array<Record<string, any>>;
-  setWorkstreams: (items: Array<Record<string, any>>) => void;
-}) {
-  function updateItem(index: number, key: string, value: string) {
-    setWorkstreams(workstreams.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item));
-  }
-
-  function updateList(index: number, key: "bullets" | "technologies", value: string) {
-    const list = key === "technologies" ? splitCommaList(value) : splitLineList(value);
-    setWorkstreams(workstreams.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: list } : item));
-  }
-
-  return (
-    <section className="editableWorkstreamList">
-      <div className="editableWorkstreamHead">
-        <div>
-          <strong>Same-company projects / workstreams</strong>
-          <span>These stay under the parent role and are not counted as separate jobs.</span>
-        </div>
-        <button className="plain small" type="button" onClick={() => setWorkstreams([...workstreams, {}])}>
-          <Plus size={14} /> Add project
-        </button>
-      </div>
-      {workstreams.length ? workstreams.map((item, index) => (
-        <article className="editableWorkstreamItem" key={`${item.name || item.role || "workstream"}-${index}`}>
-          <div className="candidateFormGrid">
-            <label>Project / product<input value={textValue(item.name)} onChange={(event) => updateItem(index, "name", event.target.value)} /></label>
-            <label>Role on project<input value={textValue(item.role)} onChange={(event) => updateItem(index, "role", event.target.value)} /></label>
-            <label>Start<input value={textValue(item.start_date)} onChange={(event) => updateItem(index, "start_date", event.target.value)} /></label>
-            <label>End<input value={textValue(item.end_date)} onChange={(event) => updateItem(index, "end_date", event.target.value)} /></label>
-            <label>Location<input value={textValue(item.location)} onChange={(event) => updateItem(index, "location", event.target.value)} /></label>
-            <label>Technologies<input value={toTextList(item.technologies).join(", ")} onChange={(event) => updateList(index, "technologies", event.target.value)} /></label>
-          </div>
-          <label className="candidateWideField">Project bullets<textarea value={toTextList(item.bullets || item.details || item.description).join("\n")} onChange={(event) => updateList(index, "bullets", event.target.value)} rows={4} placeholder="One project bullet per line" /></label>
-          <button className="plain dangerText small" type="button" onClick={() => setWorkstreams(workstreams.filter((_, itemIndex) => itemIndex !== index))}>Remove project</button>
-        </article>
-      )) : (
-        <p className="editableWorkstreamEmpty">Add projects here when one employer contains several products, clients, agents, platforms, or implementations.</p>
-      )}
-    </section>
-  );
-}
-
-function normalizeEditableProfileItems(items: Array<Record<string, any>>, detailsKey: "bullets" | "details") {
-  return items
-    .map((item) => {
-      const normalized = { ...item };
-      normalized[detailsKey] = toTextList(item[detailsKey]);
-      if (Array.isArray(normalized.workstreams)) {
-        normalized.workstreams = normalized.workstreams
-          .map((workstream: Record<string, any>) => ({
-            ...workstream,
-            bullets: toTextList(workstream.bullets || workstream.details || workstream.description),
-            technologies: toTextList(workstream.technologies),
-          }))
-          .filter((workstream: Record<string, any>) => Object.values(workstream).some((value) => Array.isArray(value) ? value.length : Boolean(String(value ?? "").trim())));
-      }
-      return normalized;
-    })
-    .filter((item) => Object.values(item).some((value) => Array.isArray(value) ? value.length : Boolean(String(value ?? "").trim())));
-}
-
-function candidatePortalCompleteness(profile: CandidatePortalProfile["profile"]) {
-  const checks = [
-    profile.display_name,
-    profile.headline,
-    profile.current_location,
-    profile.email,
-    profile.phone,
-    profile.linkedin_url || profile.portfolio_url || profile.github_url,
-    profile.summary,
-    profile.skills?.length,
-    profile.experience?.length,
-    profile.education?.length,
-    profile.projects?.length,
-  ];
-  const complete = checks.filter(Boolean).length;
-  return Math.round((complete / checks.length) * 100);
-}
-
-function humanizeLabel(value: string) {
-  return value.split("_").map((item) => item.charAt(0).toUpperCase() + item.slice(1)).join(" ");
 }
 
 function NavButton({ icon, label, active, onClick }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void }) {
@@ -6052,23 +4688,11 @@ function DatabaseView({
   query,
   setQuery,
   open,
-  nativeQuery,
-  setNativeQuery,
-  nativeCandidates,
-  searchNativeCandidates,
-  requestNativeAccess,
-  busy,
 }: {
   candidates: CandidateSummary[];
   query: string;
   setQuery: (value: string) => void;
   open: (id: string) => void;
-  nativeQuery: string;
-  setNativeQuery: (value: string) => void;
-  nativeCandidates: NativeCandidateSummary[];
-  searchNativeCandidates: (query?: string) => Promise<void>;
-  requestNativeAccess: (candidateUserId: string, resumeVersionId?: string | null) => Promise<void>;
-  busy: boolean;
 }) {
   const [filters, setFilters] = useState<string[]>([]);
   const readyCount = candidates.filter((candidate) => (candidate.coverage ?? 0) >= 0.8 && Number(candidate.duplicate_risk_score ?? 0) < 0.75).length;
@@ -6117,10 +4741,6 @@ function DatabaseView({
           <h2>Candidate Profiles</h2>
           <p>Search the company resume database using profile fields, recruiter notes, locations, and raw resume evidence.</p>
         </div>
-        <div className="profilesResultCount">
-          <strong>{filteredCandidates.length}</strong>
-          <span>shown of {candidates.length}</span>
-        </div>
       </header>
 
       <div className="profilesMetricStrip">
@@ -6157,7 +4777,14 @@ function DatabaseView({
         </article>
       </div>
 
-      <section className="profileSearchPanel">
+      <section className="profileSearchPanel sourceSearchCard">
+        <div className="sourceSearchHeader">
+          <div>
+            <span className="eyebrow">Your DB</span>
+            <h3>Search your company candidate database</h3>
+            <p>Search parsed fields, recruiter notes, raw resume text, countries, companies, skills, and version signals.</p>
+          </div>
+        </div>
         <form className="semanticSearch" onSubmit={(event) => event.preventDefault()}>
           <Search size={20} />
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by skill, company, country, raw resume text, or recruiter note" />
@@ -6169,74 +4796,7 @@ function DatabaseView({
         </div>
       </section>
 
-      <NativeCandidateDiscoveryPanel
-        query={nativeQuery}
-        setQuery={setNativeQuery}
-        nativeCandidates={nativeCandidates}
-        search={() => searchNativeCandidates(nativeQuery)}
-        requestAccess={requestNativeAccess}
-        busy={busy}
-      />
-
       <CandidateTable candidates={filteredCandidates} open={open} />
-    </section>
-  );
-}
-
-function NativeCandidateDiscoveryPanel({
-  query,
-  setQuery,
-  nativeCandidates,
-  search,
-  requestAccess,
-  busy,
-}: {
-  query: string;
-  setQuery: (value: string) => void;
-  nativeCandidates: NativeCandidateSummary[];
-  search: () => Promise<void>;
-  requestAccess: (candidateUserId: string, resumeVersionId?: string | null) => Promise<void>;
-  busy: boolean;
-}) {
-  return (
-    <section className="nativeDiscoveryPanel">
-      <div className="nativeDiscoveryHead">
-        <div>
-          <span className="eyebrow">candidateSignal native</span>
-          <h3>Search opt-in candidates without PII</h3>
-          <p>These candidates manage their own profiles. You can review fit signals, then request contact/profile access from the candidate.</p>
-        </div>
-        <form onSubmit={(event) => { event.preventDefault(); void search(); }}>
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search native candidates by role, skills, location..." />
-          <button className="secondary" type="submit" disabled={busy}>{busy ? "Searching..." : "Search native"}</button>
-        </form>
-      </div>
-      {nativeCandidates.length ? (
-        <div className="nativeCandidateGrid">
-          {nativeCandidates.map((candidate) => (
-            <article key={candidate.candidate_user_id}>
-              <div>
-                <strong>{candidate.name}</strong>
-                <span>{candidate.headline || "Candidate-managed profile"}</span>
-              </div>
-              <p>{candidate.summary || "Summary is available after the candidate completes their profile."}</p>
-              <div className="nativeCandidateTags">
-                {(candidate.skills ?? []).slice(0, 8).map((skill) => <span key={skill}>{skill}</span>)}
-              </div>
-              <footer>
-                <small>{candidate.current_location || "Location unclear"} · {candidate.pii_locked ? "PII locked" : "PII approved"}</small>
-                <button className="secondary small" type="button" disabled={busy || candidate.request_status === "pending"} onClick={() => requestAccess(candidate.candidate_user_id, candidate.resume_version_id)}>
-                  {candidate.request_status === "pending" ? "Requested" : candidate.request_status === "approved" ? "Approved" : "Request access"}
-                </button>
-              </footer>
-            </article>
-          ))}
-        </div>
-      ) : (
-        <div className="nativeDiscoveryEmpty">
-          <span>Native candidates are separate from your tenant database until they opt in and approve PII access.</span>
-        </div>
-      )}
     </section>
   );
 }
@@ -6701,12 +5261,14 @@ function OperationsView(props: {
         <section className="workerStatusPanel">
           <div>
             <h3>Processing Status</h3>
-            <p>{props.workerStatus?.online ? "Resume processing is online." : "Processing is offline. Queued resumes will wait."}</p>
+            <p>{props.workerStatus?.online ? "Processing is online." : "Processing is offline. Queued parsing and matching work will wait."}</p>
           </div>
           <div className="workerStats">
             <Metric label="Waiting" value={`${props.workerStatus?.queued_count ?? 0}`} />
             <Metric label="Running" value={`${props.workerStatus?.running_count ?? 0}`} />
             <Metric label="Failed" value={`${props.workerStatus?.failed_count ?? 0}`} />
+            <Metric label="Resume Queue" value={`${props.workerStatus?.parse_queued_count ?? 0}`} />
+            <Metric label="Match Queue" value={`${props.workerStatus?.campaign_match_queued_count ?? 0}`} />
             <Metric label="Needs Review" value={`${props.workerStatus?.dead_letter_count ?? 0}`} />
             <Metric label="Active Batches" value={`${activeBatches.length}`} />
             <Metric label="Maintenance" value={`${activeMaintenanceJobs.length}`} />
@@ -6809,81 +5371,7 @@ function OperationsView(props: {
   );
 }
 
-type CandidateSortKey = "name" | "title" | "company" | "years" | "coverage" | "risk" | "updated";
 type ResolutionFilter = "all" | "suggested" | "versioned" | "separate" | "review_later";
-
-function CandidateTable({ candidates, open }: { candidates: CandidateSummary[]; open: (id: string) => void }) {
-  const [sort, setSort] = useState<{ key: CandidateSortKey; direction: "asc" | "desc" }>({ key: "updated", direction: "desc" });
-  const sortedCandidates = useMemo(() => {
-    return [...candidates].sort((left, right) => {
-      const leftValue = candidateSortValue(left, sort.key);
-      const rightValue = candidateSortValue(right, sort.key);
-      const comparison = typeof leftValue === "number" && typeof rightValue === "number"
-        ? leftValue - rightValue
-        : String(leftValue).localeCompare(String(rightValue));
-      return sort.direction === "asc" ? comparison : -comparison;
-    });
-  }, [candidates, sort]);
-
-  function changeSort(key: CandidateSortKey) {
-    setSort((current) => current.key === key ? { key, direction: current.direction === "asc" ? "desc" : "asc" } : { key, direction: "desc" });
-  }
-
-  return (
-    <div className="table candidateTable">
-      <div className="tableRow header">
-        <button onClick={() => changeSort("name")}>Name {sortArrow(sort, "name")}</button>
-        <button onClick={() => changeSort("title")}>Current Role {sortArrow(sort, "title")}</button>
-        <button onClick={() => changeSort("company")}>Company {sortArrow(sort, "company")}</button>
-        <button onClick={() => changeSort("years")}>Experience {sortArrow(sort, "years")}</button>
-        <span>Domains</span>
-        <span>Location / Country</span>
-        <button onClick={() => changeSort("coverage")}>Completeness {sortArrow(sort, "coverage")}</button>
-        <button onClick={() => changeSort("risk")}>Version Signal {sortArrow(sort, "risk")}</button>
-        <button onClick={() => changeSort("updated")}>Updated {sortArrow(sort, "updated")}</button>
-      </div>
-      {!sortedCandidates.length ? (
-        <div className="tableEmpty">
-          <strong>No candidates match this view.</strong>
-          <span>Clear filters, change the search query, or upload resumes to build the database.</span>
-        </div>
-      ) : null}
-      {sortedCandidates.map((item) => {
-        const hazardItems = candidateListHazards(item);
-        const noteSignals = candidateNoteSignalLabels(item).slice(0, 2);
-        const freshness = candidateProfileFreshnessLabel(item.profile_freshness);
-        return (
-          <button className="tableRow" key={item.document_id} onClick={() => open(item.document_id)}>
-            <span className="truncateCell candidateListNameCell" title={item.name ?? "Unknown"}>
-              <span>
-                {hazardItems.length ? <AlertTriangle className="candidateListHazardIcon" size={15} aria-label={hazardItems.join(", ")} /> : null}
-                {item.name ?? "Unknown"}
-              </span>
-              <small>{hazardItems[0] ?? item.email ?? item.phone ?? "No contact ID"}</small>
-            </span>
-            <span className="truncateCell" title={item.current_title ?? "Missing"}>
-              {item.current_title ?? "Missing"}
-              {candidateRoleFactsNeedReview(item) ? <small className="factReviewText">Role facts need review</small> : null}
-            </span>
-            <span className="truncateCell" title={item.current_company ?? "Missing"}>{item.current_company ?? "Missing"}</span>
-            <span>{typeof item.total_years_experience === "number" ? `${item.total_years_experience} yrs` : "N/A"}<small>{item.seniority ?? "Unknown seniority"}</small></span>
-            <span className="truncateCell" title={(item.top_domains ?? []).map(domainLabel).join(", ") || "Missing"}>
-              {(item.top_domains ?? []).slice(0, 2).map(domainLabel).join(", ") || "Missing"}
-              {noteSignals.length ? <small>{noteSignals.join(" | ")}</small> : null}
-            </span>
-            <span className="truncateCell" title={[item.location, ...(item.countries ?? [])].filter(Boolean).join(" / ") || "Missing"}>
-              {[item.location, ...(item.countries ?? [])].filter(Boolean).join(" / ") || "Missing"}
-              {freshness ? <small>{freshness}</small> : null}
-            </span>
-            <span className="coverageCell"><i style={{ width: `${Math.round((item.coverage ?? 0) * 100)}%` }} />{item.coverage ? `${Math.round(item.coverage * 100)}%` : "N/A"}</span>
-            <span>{item.duplicate_risk_score ? <b className="riskBadge">{Math.round(item.duplicate_risk_score * 100)}% {versionStatusLabel(item.duplicate_status)}</b> : "Unique"}</span>
-            <span>{item.updated_at ? new Date(item.updated_at).toLocaleDateString() : "N/A"}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 function CandidateDetail({
   candidate,
@@ -7916,43 +6404,6 @@ function CandidateWorkEducationTimeline({
   );
 }
 
-type CandidateCorrectionForm = {
-  name: string;
-  email: string;
-  phone: string;
-  location: string;
-  summary: string;
-  current_title: string;
-  current_company: string;
-  total_years_experience: string;
-  skills: string;
-  countries: string;
-  certifications: string;
-  experience: CandidateCorrectionExperience[];
-  education: CandidateCorrectionEducation[];
-};
-
-type CandidateCorrectionExperience = {
-  company: string;
-  title: string;
-  location: string;
-  start_date: string;
-  end_date: string;
-  bullets: string;
-  technologies: string[];
-  workstreams: Candidate["experience"][number]["workstreams"];
-};
-
-type CandidateCorrectionEducation = {
-  school: string;
-  degree: string;
-  field: string;
-  location: string;
-  start_date: string;
-  end_date: string;
-  details: string;
-};
-
 type CandidateCorrectionTextField = Exclude<keyof CandidateCorrectionForm, "experience" | "education">;
 
 function CandidateCorrectionPanel({
@@ -8066,121 +6517,6 @@ function CandidateCorrectionPanel({
       </div>
     </section>
   );
-}
-
-function candidateCorrectionForm(candidate: Candidate): CandidateCorrectionForm {
-  const hr = candidate.derived?.hr_profile ?? {};
-  return {
-    name: textValue(candidate.name),
-    email: textValue(candidate.contact?.email),
-    phone: textValue(candidate.contact?.phone),
-    location: textValue(candidate.contact?.location),
-    summary: textValue(candidate.summary),
-    current_title: textValue(hr.current_title),
-    current_company: textValue(hr.current_company),
-    total_years_experience: textValue(hr.total_years_experience),
-    skills: (candidate.skills ?? []).join(", "),
-    countries: toTextList(candidate.derived?.countries_associated ?? []).join(", "),
-    certifications: (candidate.certifications ?? []).join(", "),
-    experience: (candidate.experience ?? []).map((item) => ({
-      company: textValue(item.company),
-      title: textValue(item.title),
-      location: textValue(item.location),
-      start_date: textValue(item.start_date),
-      end_date: textValue(item.end_date),
-      bullets: (item.bullets ?? []).join("\n"),
-      technologies: item.technologies ?? [],
-      workstreams: item.workstreams ?? [],
-    })),
-    education: (candidate.education ?? []).map((item) => ({
-      school: textValue(item.school),
-      degree: textValue(item.degree),
-      field: textValue(item.field),
-      location: textValue(item.location),
-      start_date: textValue(item.start_date),
-      end_date: textValue(item.end_date),
-      details: (item.details ?? []).join("\n"),
-    })),
-  };
-}
-
-function candidateCorrectionPayload(form: CandidateCorrectionForm): CandidateProfileUpdate {
-  const years = Number(form.total_years_experience.replace(/[^\d.]/g, ""));
-  return {
-    name: form.name.trim() || null,
-    email: form.email.trim() || null,
-    phone: form.phone.trim() || null,
-    location: form.location.trim() || null,
-    summary: form.summary.trim() || null,
-    current_title: form.current_title.trim() || null,
-    current_company: form.current_company.trim() || null,
-    total_years_experience: Number.isFinite(years) ? years : null,
-    skills: candidateInputList(form.skills),
-    countries: candidateInputList(form.countries),
-    certifications: candidateInputList(form.certifications),
-    experience: form.experience.map((item) => ({
-      company: nullableCandidateText(item.company),
-      title: nullableCandidateText(item.title),
-      location: nullableCandidateText(item.location),
-      start_date: nullableCandidateText(item.start_date),
-      end_date: nullableCandidateText(item.end_date),
-      bullets: candidateTextLines(item.bullets),
-      technologies: item.technologies ?? [],
-      workstreams: item.workstreams ?? [],
-    })).filter((item) => hasCandidateExperienceContent(item)),
-    education: form.education.map((item) => ({
-      school: nullableCandidateText(item.school),
-      degree: nullableCandidateText(item.degree),
-      field: nullableCandidateText(item.field),
-      location: nullableCandidateText(item.location),
-      start_date: nullableCandidateText(item.start_date),
-      end_date: nullableCandidateText(item.end_date),
-      details: candidateTextLines(item.details),
-    })).filter((item) => hasCandidateEducationContent(item)),
-  };
-}
-
-function emptyExperienceCorrection(): CandidateCorrectionExperience {
-  return { company: "", title: "", location: "", start_date: "", end_date: "", bullets: "", technologies: [], workstreams: [] };
-}
-
-function emptyEducationCorrection(): CandidateCorrectionEducation {
-  return { school: "", degree: "", field: "", location: "", start_date: "", end_date: "", details: "" };
-}
-
-function nullableCandidateText(value: string) {
-  const text = value.trim();
-  return text || null;
-}
-
-function candidateTextLines(value: string) {
-  return value.split(/\n+/).map((item) => item.trim()).filter(Boolean);
-}
-
-function hasCandidateExperienceContent(item: Candidate["experience"][number]) {
-  return Boolean(item.company || item.title || item.location || item.start_date || item.end_date || item.bullets.length);
-}
-
-function hasCandidateEducationContent(item: Candidate["education"][number]) {
-  return Boolean(item.school || item.degree || item.field || item.location || item.start_date || item.end_date || item.details?.length);
-}
-
-function coverageGapReasons(coverage?: Candidate["primary_key_coverage"]) {
-  if (!coverage) return [];
-  const generated = coverage.low_coverage_reasons ?? [];
-  if (generated.length) return generated;
-  return (coverage.items ?? [])
-    .filter((item) => item.status === "missing")
-    .slice(0, 8)
-    .map((item) => ({
-      severity: item.severity ?? "standard",
-      label: item.label,
-      detail: `${item.category_label ?? "Profile"} field is missing.`,
-    }));
-}
-
-function candidateInputList(value: string) {
-  return value.split(/[\n,;]+/).map((item) => item.trim()).filter(Boolean);
 }
 
 function WorkstreamList({ workstreams }: { workstreams: Array<{ name?: string | null; start_date?: string | null; end_date?: string | null; bullets?: string[] }> }) {
@@ -8700,83 +7036,6 @@ function RequirementIntake(props: {
   );
 }
 
-type MatchFilter = "all" | "eligible" | "blocked" | "shortlisted" | "rejected";
-
-const requirementStructuredFields = [
-  {
-    key: "__profile.must_have_skills",
-    profileKey: "must_have_skills",
-    label: "Must-have skills",
-    placeholder: "Azure OpenAI, LangChain, RAG",
-    help: "Non-negotiable capabilities only if the recruiter truly means hard requirement.",
-    multiline: true,
-  },
-  {
-    key: "__profile.nice_to_have_skills",
-    profileKey: "nice_to_have_skills",
-    label: "Nice-to-have skills",
-    placeholder: "Databricks, LangGraph, Kubernetes",
-    help: "Improves score but should not block otherwise strong candidates.",
-    multiline: true,
-  },
-  {
-    key: "__profile.min_years_experience",
-    profileKey: "min_years_experience",
-    label: "Minimum years",
-    placeholder: "5",
-    help: "Used for years-fit scoring. Treat as hard only when the requirement explicitly says so.",
-    multiline: false,
-  },
-  {
-    key: "__profile.seniority",
-    profileKey: "seniority",
-    label: "Required seniority",
-    placeholder: "Senior / Lead / Principal",
-    help: "Sets recruiter intent for title and responsibility fit.",
-    multiline: false,
-  },
-  {
-    key: "__profile.required_countries",
-    profileKey: "required_countries",
-    label: "Required countries",
-    placeholder: "United States, Canada",
-    help: "Candidate country/location signals are checked against this list.",
-    multiline: false,
-  },
-  {
-    key: "__profile.required_locations",
-    profileKey: "required_locations",
-    label: "Required locations / time zones",
-    placeholder: "EST, New York, Remote US",
-    help: "Use for city, timezone, remote, or office-specific constraints.",
-    multiline: false,
-  },
-  {
-    key: "__profile.domains",
-    profileKey: "domains",
-    label: "Priority domains",
-    placeholder: "generative_ai, data_engineering",
-    help: "Domain fit is scored separately from raw skill matches.",
-    multiline: false,
-  },
-  {
-    key: "__profile.work_authorization",
-    profileKey: "work_authorization",
-    label: "Work authorization",
-    placeholder: "US work authorization required",
-    help: "Only make strict if it is a real hiring constraint.",
-    multiline: false,
-  },
-  {
-    key: "__profile.dealbreakers",
-    profileKey: "dealbreakers",
-    label: "Dealbreakers",
-    placeholder: "No production AI experience; no cloud experience",
-    help: "Active dealbreakers are shown as hard-filter failures when detected.",
-    multiline: true,
-  },
-] as const;
-
 function MatchResults({
   requirement,
   requirements,
@@ -9218,6 +7477,7 @@ function CampaignsView({
               <div>
                 <span className="eyebrow">Campaigns</span>
                 <strong>{campaigns.length}</strong>
+                <em>{activeCampaign.name}</em>
               </div>
               <button className="campaignRailNewButton" type="button" onClick={() => setShowCampaignCreate((value) => !value)}>
                 {showCampaignCreate ? "Close" : "New"}
@@ -9238,8 +7498,12 @@ function CampaignsView({
                   onClick={() => openCampaign(item.id)}
                   disabled={campaignLoadingId === item.id}
                 >
-                  <strong>{item.name}</strong>
-                  <span>{campaignLoadingId === item.id ? "Loading campaign..." : `${domainLabel(item.status)} | ${item.candidate_count} candidates`}</span>
+                  <span className="campaignRailInitial">{item.name.slice(0, 1).toUpperCase()}</span>
+                  <span className="campaignRailItemCopy">
+                    <strong>{item.name}</strong>
+                    <em>{campaignLoadingId === item.id ? "Loading campaign..." : domainLabel(item.status)}</em>
+                  </span>
+                  <span className="campaignRailCount">{item.candidate_count}</span>
                 </button>
               ))}
             </div>
@@ -9768,341 +8032,6 @@ function CampaignsView({
       )}
     </section>
   );
-}
-
-type CampaignScorecardForm = {
-  role_intent: string;
-  location_preference: string;
-  seniority: string;
-  min_years_experience: string;
-  must_have_skills: string;
-  nice_to_have_skills: string;
-  domains: string;
-  industry_preferences: string;
-  soft_preferences: string;
-  hidden_intent: string;
-  dealbreakers: string;
-  strict_must_haves: boolean;
-  strict_min_years: boolean;
-  weight_skills: string;
-  weight_role: string;
-  weight_domain: string;
-  weight_years: string;
-  weight_location: string;
-  weight_recency: string;
-  weight_seniority: string;
-  weight_notes: string;
-};
-
-function emptyCampaignScorecardForm(): CampaignScorecardForm {
-  return {
-    role_intent: "",
-    location_preference: "",
-    seniority: "",
-    min_years_experience: "",
-    must_have_skills: "",
-    nice_to_have_skills: "",
-    domains: "",
-    industry_preferences: "",
-    soft_preferences: "",
-    hidden_intent: "",
-    dealbreakers: "",
-    strict_must_haves: false,
-    strict_min_years: false,
-    weight_skills: "30",
-    weight_role: "18",
-    weight_domain: "15",
-    weight_years: "12",
-    weight_location: "10",
-    weight_recency: "8",
-    weight_seniority: "5",
-    weight_notes: "2",
-  };
-}
-
-function campaignScorecardForm(campaign: JobCampaign): CampaignScorecardForm {
-  const scorecard = campaign.scorecard ?? {};
-  const profile = campaign.requirement?.final_requirement_profile ?? campaign.requirement?.extracted_requirement_json ?? {};
-  const locationPreference = firstCampaignList(
-    scorecard.location_preference,
-    profile.preferred_locations,
-    profile.location_preference,
-    profile.required_locations,
-    profile.required_countries
-  );
-  return {
-    role_intent: textValue(scorecard.role_intent ?? profile.role_intent),
-    location_preference: campaignListInput(locationPreference),
-    seniority: textValue(scorecard.seniority ?? profile.seniority),
-    min_years_experience: textValue(scorecard.min_years_experience ?? profile.min_years_experience),
-    must_have_skills: campaignListInput(scorecard.must_have_skills ?? profile.must_have_skills),
-    nice_to_have_skills: campaignListInput(scorecard.nice_to_have_skills ?? profile.nice_to_have_skills),
-    domains: campaignListInput(scorecard.domains ?? profile.domains),
-    industry_preferences: campaignListInput(scorecard.industry_preferences ?? profile.industry_preferences),
-    soft_preferences: campaignListInput(scorecard.soft_preferences ?? profile.soft_preferences),
-    hidden_intent: campaignListInput(scorecard.hidden_intent ?? profile.hidden_intent),
-    dealbreakers: campaignListInput(scorecard.dealbreakers ?? profile.dealbreakers),
-    strict_must_haves: Boolean(scorecard.strict_must_haves ?? profile.strict_must_haves),
-    strict_min_years: Boolean(scorecard.strict_min_years ?? profile.strict_min_years),
-    weight_skills: scoreWeightPercent(scorecard.score_weights?.skills ?? profile.score_weights?.skills, "30"),
-    weight_role: scoreWeightPercent(scorecard.score_weights?.role ?? profile.score_weights?.role, "18"),
-    weight_domain: scoreWeightPercent(scorecard.score_weights?.domain ?? profile.score_weights?.domain, "15"),
-    weight_years: scoreWeightPercent(scorecard.score_weights?.years ?? profile.score_weights?.years, "12"),
-    weight_location: scoreWeightPercent(scorecard.score_weights?.location ?? profile.score_weights?.location, "10"),
-    weight_recency: scoreWeightPercent(scorecard.score_weights?.recency ?? profile.score_weights?.recency, "8"),
-    weight_seniority: scoreWeightPercent(scorecard.score_weights?.seniority ?? profile.score_weights?.seniority, "5"),
-    weight_notes: scoreWeightPercent(scorecard.score_weights?.notes ?? profile.score_weights?.notes, "2"),
-  };
-}
-
-function firstCampaignList(...values: unknown[]) {
-  for (const value of values) {
-    if (Array.isArray(value) && value.length) return value;
-    if (typeof value === "string" && value.trim()) return value;
-  }
-  return [];
-}
-
-function campaignScorecardPayload(form: CampaignScorecardForm, campaign: JobCampaign): CampaignScorecard {
-  const years = Number(form.min_years_experience.replace(/[^\d.]/g, ""));
-  return {
-    title: campaign.requirement_title || campaign.name,
-    role_intent: form.role_intent.trim() || null,
-    location_preference: campaignInputList(form.location_preference),
-    seniority: form.seniority.trim() || null,
-    min_years_experience: Number.isFinite(years) && years > 0 ? years : null,
-    must_have_skills: campaignInputList(form.must_have_skills),
-    nice_to_have_skills: campaignInputList(form.nice_to_have_skills),
-    domains: campaignInputList(form.domains),
-    industry_preferences: campaignInputList(form.industry_preferences),
-    soft_preferences: campaignInputList(form.soft_preferences),
-    hidden_intent: campaignInputList(form.hidden_intent),
-    dealbreakers: campaignInputList(form.dealbreakers),
-    strict_must_haves: form.strict_must_haves,
-    strict_min_years: form.strict_min_years,
-    score_weights: {
-      skills: percentInputToDecimal(form.weight_skills),
-      role: percentInputToDecimal(form.weight_role),
-      domain: percentInputToDecimal(form.weight_domain),
-      years: percentInputToDecimal(form.weight_years),
-      location: percentInputToDecimal(form.weight_location),
-      recency: percentInputToDecimal(form.weight_recency),
-      seniority: percentInputToDecimal(form.weight_seniority),
-      notes: percentInputToDecimal(form.weight_notes),
-    },
-  };
-}
-
-function campaignScorecardCompleteness(form: CampaignScorecardForm) {
-  const checks = [
-    form.role_intent.trim(),
-    form.must_have_skills.trim(),
-    form.min_years_experience.trim(),
-    form.seniority.trim(),
-    form.location_preference.trim(),
-    form.domains.trim() || form.industry_preferences.trim(),
-    form.dealbreakers.trim(),
-  ];
-  return Math.round((checks.filter(Boolean).length / checks.length) * 100);
-}
-
-function scoreWeightPercent(value: unknown, fallback: string) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric <= 0) return fallback;
-  return String(Math.round((numeric <= 1 ? numeric * 100 : numeric) * 10) / 10);
-}
-
-function percentInputToDecimal(value: string) {
-  const numeric = Number(value.replace(/[^\d.]/g, ""));
-  if (!Number.isFinite(numeric) || numeric <= 0) return 0;
-  return Math.max(0, Math.min(1, numeric > 1 ? numeric / 100 : numeric));
-}
-
-function campaignListInput(value: unknown) {
-  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean).join("\n");
-  if (value == null) return "";
-  return String(value);
-}
-
-function campaignInputList(value: string) {
-  return value
-    .split(/[\n,;]+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function campaignEvidenceItems(item: JobCampaignCandidate) {
-  return [
-    ...toTextList(item.evidence?.top_reasons),
-    ...toTextList(item.evidence?.evidence?.must_have_hits),
-    ...toTextList(item.evidence?.evidence?.nice_to_have_hits),
-  ].filter(Boolean);
-}
-
-function mergeCampaignCandidateUpdate(current: JobCampaignCandidate, updated: JobCampaignCandidate): JobCampaignCandidate {
-  const seen = new Set<string>();
-  const activityEvents = [
-    ...(updated.activity_events ?? []),
-    ...(current.activity_events ?? []),
-  ].filter((event) => {
-    if (!event?.id || seen.has(event.id)) return false;
-    seen.add(event.id);
-    return true;
-  });
-  return { ...current, ...updated, activity_events: activityEvents };
-}
-
-function stageCandidateStatus(status: string): CampaignPipelineStatus {
-  if (status === "uploaded" || status === "matched" || status === "reviewing") return "recommended";
-  if (status === "below_threshold") return "below_threshold";
-  if (
-    [
-      "recommended",
-      "shortlisted",
-      "contacted",
-      "replied",
-      "screened",
-      "submitted",
-      "interviewing",
-      "offer",
-      "placed",
-      "rejected",
-      "archived",
-    ].includes(status)
-  ) {
-    return status as CampaignPipelineStatus;
-  }
-  return "recommended";
-}
-
-function campaignCandidateVisibleInPipeline(item: JobCampaignCandidate, threshold: number) {
-  if (item.status === "below_threshold") return false;
-  if (["shortlisted", "contacted", "replied", "screened", "submitted", "interviewing", "offer", "placed", "rejected", "archived"].includes(item.status)) {
-    return true;
-  }
-  return Number(item.score ?? 0) >= threshold;
-}
-
-function campaignScoreBreakdownItems(item: JobCampaignCandidate) {
-  const breakdown = item.evidence?.score_breakdown ?? {};
-  const fallbackTotal = Number(item.score ?? 0);
-  return [
-    { label: "Total", raw: breakdown.total ?? fallbackTotal },
-    { label: "Must", raw: breakdown.must_have },
-    { label: "Nice", raw: breakdown.nice_to_have },
-    { label: "Years", raw: breakdown.years },
-    { label: "Domain", raw: breakdown.domain },
-    { label: "Location", raw: breakdown.location },
-  ]
-    .map((item) => ({ label: item.label, value: percentScore(Number(item.raw ?? 0)) }))
-    .filter((item) => Number.isFinite(item.value));
-}
-
-function campaignHardFilterFailures(item: JobCampaignCandidate) {
-  return [
-    ...toTextList(item.evidence?.hard_filter_failures),
-    ...toTextList(item.evidence?.evidence?.hard_filter_failures),
-  ];
-}
-
-function campaignReasonItems(item: JobCampaignCandidate) {
-  const explicit = toTextList(item.evidence?.top_reasons);
-  if (explicit.length) return explicit;
-  return campaignEvidenceItems(item);
-}
-
-function campaignGapItems(item: JobCampaignCandidate) {
-  const threshold = Number(item.evidence?.incremental_match?.visibility_threshold ?? 0);
-  const thresholdLabel = threshold ? `${Math.round(threshold * 100)}%` : "review";
-  const thresholdReason = item.status === "below_threshold"
-    ? [`Below ${thresholdLabel} campaign threshold.`]
-    : [];
-  const incrementalReason = typeof item.evidence?.incremental_match?.reason === "string"
-    ? [item.evidence.incremental_match.reason]
-    : toTextList(item.evidence?.incremental_match?.reason);
-  const explicit = toTextList(item.evidence?.top_gaps);
-  const fallback = Object.entries(item.evidence?.gaps ?? {}).flatMap(([key, value]) => gapItems(key, value));
-  return uniqueTextList([...thresholdReason, ...incrementalReason, ...explicit, ...fallback]);
-}
-
-function campaignProgressStats(campaign: JobCampaign | null, candidates: JobCampaignCandidate[]) {
-  const uploads = campaign?.upload_batches ?? [];
-  const totalUploaded = uploads.reduce((sum, batch) => sum + Number(batch.total_files ?? 0), 0);
-  const completedUploads = uploads.reduce((sum, batch) => sum + Number(batch.completed_count ?? 0) + Number(batch.failed_count ?? 0), 0);
-  const uploadPercent = totalUploaded ? Math.round((completedUploads / totalUploaded) * 100) : 0;
-  const shortlisted = candidates.filter((item) => item.status === "shortlisted").length;
-  const rejected = candidates.filter((item) => item.status === "rejected").length;
-  const reviewed = shortlisted + rejected;
-  const reviewPercent = candidates.length ? Math.round((reviewed / candidates.length) * 100) : 0;
-  const matched = candidates.length > 0;
-  const percent = Math.max(uploadPercent, matched ? Math.max(35, reviewPercent) : campaign?.requirement_id ? 20 : 5);
-  return {
-    percent: Math.min(100, percent),
-    label: matched ? `${candidates.length} ranked candidates` : campaign?.requirement_id ? "Requirement ready" : "Campaign setup",
-    description: matched
-      ? "Review recommended candidates, shortlist the strongest profiles, and keep rejects tied to this campaign."
-      : "Create or link criteria, then run matching against the company database and any campaign-specific uploads.",
-    stages: [
-      { label: "Criteria", value: campaign?.requirement_status ?? (campaign?.requirement_id ? "linked" : "missing"), done: Boolean(campaign?.requirement_id), active: !campaign?.requirement_id },
-      { label: "Uploads", value: uploads.length ? `${completedUploads}/${totalUploaded} files` : "none yet", done: Boolean(totalUploaded && completedUploads >= totalUploaded), active: Boolean(totalUploaded && completedUploads < totalUploaded) },
-      { label: "Ranked", value: `${candidates.length} candidates`, done: matched, active: Boolean(campaign?.requirement_id && !matched) },
-      { label: "Reviewed", value: `${reviewed}/${candidates.length || 0}`, done: Boolean(candidates.length && reviewed === candidates.length), active: Boolean(candidates.length && reviewed < candidates.length) },
-    ],
-  };
-}
-
-function campaignTimelineItems(campaign: JobCampaign | null, candidates: JobCampaignCandidate[]) {
-  if (!campaign) return [];
-  const events: Array<{ id: string; title: string; body: string; date?: string | null }> = [];
-  events.push({
-    id: `${campaign.id}-created`,
-    title: "Campaign created",
-    body: campaign.requirement_id ? "Requirement profile linked for matching." : "Campaign shell created; add criteria before ranking.",
-    date: campaign.created_at,
-  });
-  for (const batch of campaign.upload_batches ?? []) {
-    events.push({
-      id: `${campaign.id}-batch-${batch.id}`,
-      title: `Upload batch: ${batch.status}`,
-      body: `${batch.completed_count}/${batch.total_files} resumes processed, ${batch.failed_count} failed.`,
-      date: batch.updated_at,
-    });
-  }
-  for (const item of candidates) {
-    const activityEvents = item.activity_events ?? [];
-    for (const event of activityEvents) {
-      events.push({
-        id: `${campaign.id}-${item.candidate_id}-activity-${event.id}`,
-        title: `${item.candidate?.name ?? item.candidate_id}: ${event.title}`,
-        body: event.body || "No note added.",
-        date: event.created_at,
-      });
-    }
-    if (!activityEvents.length && (item.status === "shortlisted" || item.status === "rejected")) {
-      events.push({
-        id: `${campaign.id}-${item.candidate_id}-${item.status}`,
-        title: item.status === "shortlisted" ? "Candidate shortlisted" : "Candidate rejected",
-        body: item.candidate?.name ?? item.candidate_id,
-        date: item.updated_at,
-      });
-    } else if (item.source === "matched") {
-      events.push({
-        id: `${campaign.id}-${item.candidate_id}-matched`,
-        title: "Candidate ranked",
-        body: `${item.candidate?.name ?? item.candidate_id} scored ${Math.round((item.score ?? 0) * 100)}%.`,
-        date: item.updated_at,
-      });
-    }
-  }
-  events.push({
-    id: `${campaign.id}-updated`,
-    title: "Campaign updated",
-    body: `${candidates.length} candidate${candidates.length === 1 ? "" : "s"} currently attached.`,
-    date: campaign.updated_at,
-  });
-  return events
-    .filter((event) => event.date || event.title)
-    .sort((left, right) => new Date(right.date ?? 0).getTime() - new Date(left.date ?? 0).getTime());
 }
 
 function CandidateVersionReview({ clusters, decide }: { clusters: CandidateVersionMatch[]; decide: (id: string, decision: "versioned" | "separate" | "review-later") => void }) {
@@ -10795,258 +8724,12 @@ function isPlatformAdminAuditEvent(event: AuditEvent) {
     && !/workspace|candidate|resume|parse|requirement|match|copilot|pii|document|note/.test(action);
 }
 
-type EvidenceRowInput = { label: string; value?: unknown; source: string; query?: string[] };
-
-function buildRecruiterEvidenceRows(facts: EvidenceRowInput[], inferences: EvidenceRowInput[], evidenceMap: any[], rawText: string) {
-  const rows = [
-    ...facts.map((item, index) => ({ ...item, kind: "Fact" as const, id: `fact-${item.label}-${index}` })),
-    ...inferences.map((item, index) => ({ ...item, kind: "AI interpretation" as const, id: `inference-${item.label}-${index}` })),
-  ];
-  return rows
-    .filter((item) => String(item.value ?? "").trim())
-    .map((item) => ({
-      id: item.id,
-      kind: item.kind,
-      label: item.label,
-      claim: String(item.value ?? "").trim(),
-      source: item.source,
-      snippet: findClaimEvidence(item.value, evidenceMap, rawText, item.query ?? []),
-    }))
-    .slice(0, 24);
-}
-
-function topDomainCounts(candidates: CandidateSummary[]): Array<[string, number]> {
-  const counts = new Map<string, number>();
-  candidates.forEach((candidate) => {
-    (candidate.top_domains ?? []).forEach((domain) => counts.set(domain, (counts.get(domain) ?? 0) + 1));
-  });
-  return [...counts.entries()].sort((left, right) => right[1] - left[1]).slice(0, 5);
-}
-
-function applyDatabaseFilters(candidates: CandidateSummary[], filters: string[]) {
-  const selectedCountries = filters
-    .filter((item) => item.startsWith("country:"))
-    .map((item) => item.slice("country:".length));
-  const selectedNoteSignals = filters
-    .filter((item) => item.startsWith("note:"))
-    .map((item) => item.slice("note:".length));
-  return candidates.filter((candidate) => {
-    if (filters.includes("ai") && !(candidate.top_domains ?? []).some((domain) => /ai|gen|llm|conversation/i.test(domain))) return false;
-    if (filters.includes("experience") && Number(candidate.total_years_experience ?? 0) < 5) return false;
-    if (selectedCountries.length && !selectedCountries.some((country) => (candidate.countries ?? []).includes(country))) return false;
-    if (selectedNoteSignals.length && !selectedNoteSignals.some((key) => (candidate.note_signals ?? []).some((signal) => candidateNoteSignalKey(signal) === key))) return false;
-    if (filters.includes("seniority") && !/lead|senior|principal|staff/i.test(candidate.seniority ?? `${candidate.current_title ?? ""}`)) return false;
-    if (filters.includes("duplicate") && Number(candidate.duplicate_risk_score ?? 0) < 0.75) return false;
-    if (filters.includes("coverage") && Number(candidate.coverage ?? 0) <= 0.8) return false;
-    if (filters.includes("missing_location") && candidate.location) return false;
-    return true;
-  });
-}
-
 function autoBatchNameForFiles(files: File[], campaignName?: string | null) {
   const count = files.length;
   const date = new Date().toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   if (!count) return campaignName ? `${campaignName} upload` : "Resume upload";
   if (count === 1) return `${campaignName ? `${campaignName} - ` : ""}${files[0].name}`;
   return `${campaignName ? `${campaignName} - ` : ""}${count} resumes - ${date}`;
-}
-
-function candidateSortValue(candidate: CandidateSummary, key: CandidateSortKey) {
-  if (key === "name") return candidate.name ?? "";
-  if (key === "title") return candidate.current_title ?? "";
-  if (key === "company") return candidate.current_company ?? "";
-  if (key === "years") return Number(candidate.total_years_experience ?? -1);
-  if (key === "coverage") return Number(candidate.coverage ?? -1);
-  if (key === "risk") return Number(candidate.duplicate_risk_score ?? 0);
-  return candidate.updated_at ? new Date(candidate.updated_at).getTime() : 0;
-}
-
-function sortArrow(sort: { key: CandidateSortKey; direction: "asc" | "desc" }, key: CandidateSortKey) {
-  if (sort.key !== key) return "";
-  return sort.direction === "asc" ? "↑" : "↓";
-}
-
-function hasMatchGaps(gaps: any) {
-  return Object.values(gaps ?? {}).some((value) => Array.isArray(value) ? value.length > 0 : Number(value ?? 0) > 0);
-}
-
-function gapItems(key: string, value: unknown) {
-  const label = domainLabel(key);
-  if (Array.isArray(value)) return value.map((item) => `${label}: ${item}`);
-  if (Number(value ?? 0) > 0) return [`${label}: ${value}`];
-  return [];
-}
-
-function matchFilterHit(match: RequirementMatch, filter: MatchFilter) {
-  if (filter === "all") return true;
-  if (filter === "eligible") return !(match.evidence?.hard_filter_failures ?? []).length;
-  if (filter === "blocked") return (match.evidence?.hard_filter_failures ?? []).length > 0;
-  return match.status === filter;
-}
-
-function matchNextAction(match: RequirementMatch) {
-  if ((match.evidence?.hard_filter_failures ?? []).length) return "Do not outreach yet. Resolve hard-filter failures or change the requirement constraints.";
-  if (match.status === "shortlisted") return "Already shortlisted. Move to recruiter screen or hiring-manager review.";
-  if (match.status === "rejected") return "Rejected for this requirement. Keep the decision for audit/history.";
-  if (match.total_score >= 0.78) return "Shortlist and open the candidate detail to review raw evidence before outreach.";
-  if (hasMatchGaps(match.gaps)) return "Review gaps and semantic evidence before deciding whether to shortlist.";
-  return "Open candidate detail and compare against other eligible candidates.";
-}
-
-function matchDistribution(matches: Array<{ total_score?: number; score?: number }>) {
-  const buckets = [
-    { label: "80-100%", minimum: 0.8, min: 0.8, max: 1.01 },
-    { label: "65-79%", minimum: 0.65, min: 0.65, max: 0.8 },
-    { label: "50-64%", minimum: 0.5, min: 0.5, max: 0.65 },
-    { label: "30-49%", minimum: 0.3, min: 0.3, max: 0.5 },
-  ];
-  const total = Math.max(1, matches.length);
-  return buckets.map((bucket) => {
-    const count = matches.filter((item) => {
-      const score = Number(item.total_score ?? item.score ?? 0);
-      return score >= bucket.min && score < bucket.max;
-    }).length;
-    return { ...bucket, count, percent: Math.round((count / total) * 100) };
-  });
-}
-
-function findClaimEvidence(value: unknown, evidenceMap: any[], rawText: string, fallbackTerms: string[]) {
-  const text = String(value || "");
-  const terms = evidenceTerms(text);
-  const mapped = evidenceMap.find((item) => {
-    const claimTerms = evidenceTerms(item?.claim ?? "");
-    const overlap = claimTerms.filter((term) => terms.includes(term));
-    return overlap.length >= 2;
-  });
-  const mappedEvidence = Array.isArray(mapped?.evidence) ? mapped.evidence.find((item: unknown) => String(item || "").trim()) : "";
-  if (mappedEvidence) return String(mappedEvidence).slice(0, 280);
-  return findEvidenceSnippet(rawText, fallbackTerms.length ? fallbackTerms : terms);
-}
-
-function findEvidenceSnippet(rawText: string, terms: string[]) {
-  if (!rawText || !terms.length) return "";
-  const normalizedTerms = terms.map((term) => String(term || "").trim()).filter((term) => term.length >= 3);
-  if (!normalizedTerms.length) return "";
-  const flattened = rawText.replace(/\s+/g, " ").trim();
-  const lower = flattened.toLowerCase();
-  const hit = normalizedTerms
-    .map((term) => ({ term, index: lower.indexOf(term.toLowerCase()) }))
-    .filter((item) => item.index >= 0)
-    .sort((left, right) => left.index - right.index)[0];
-  if (!hit) return "";
-  const start = Math.max(0, hit.index - 110);
-  const end = Math.min(flattened.length, hit.index + hit.term.length + 170);
-  return `${start > 0 ? "... " : ""}${flattened.slice(start, end)}${end < flattened.length ? " ..." : ""}`;
-}
-
-function evidenceTerms(value: unknown) {
-  const text = String(value || "").toLowerCase();
-  const stopwords = new Set(["with", "from", "that", "this", "role", "good", "fit", "for", "and", "the", "ask", "current", "candidate", "experience"]);
-  return Array.from(new Set(text.match(/[a-z0-9+#.]{3,}/g) ?? []))
-    .filter((term) => !stopwords.has(term))
-    .slice(0, 8);
-}
-
-function evidenceSourceLabel(evidence: { source_label?: string | null; chunk_type?: string | null; page_number?: number | null }) {
-  const label = evidence.source_label || evidence.chunk_type || "Candidate evidence";
-  const normalized = String(label).toLowerCase();
-  if (normalized.includes("raw extracted")) return evidence.page_number ? `Raw CV page ${evidence.page_number}` : "Raw CV text";
-  if (normalized.includes("parsed skills") || normalized === "skills") return "Parsed skills";
-  if (normalized.includes("recruiter notes") || normalized === "notes") return "Recruiter notes";
-  if (normalized.includes("ai hr") || normalized.includes("ai_intelligence")) return "AI intelligence";
-  if (normalized.includes("experience")) return label;
-  if (normalized.includes("location")) return "Location signals";
-  return label;
-}
-
-function profileAnswerValue(
-  draftAnswers: Record<string, string>,
-  savedAnswers: Record<string, string>,
-  profile: Record<string, any>,
-  field: (typeof requirementStructuredFields)[number],
-) {
-  if (Object.prototype.hasOwnProperty.call(draftAnswers, field.key)) return draftAnswers[field.key] ?? "";
-  if (Object.prototype.hasOwnProperty.call(savedAnswers, field.key)) return savedAnswers[field.key] ?? "";
-  const value = profile?.[field.profileKey];
-  if (Array.isArray(value)) return value.join(", ");
-  if (typeof value === "number") return String(value);
-  if (typeof value === "string") return value;
-  return "";
-}
-
-function candidateRoleFactsNeedReview(candidate: CandidateSummary) {
-  return Boolean(
-    candidate.current_role_verification_status
-    && candidate.current_role_verification_status !== "verified"
-    && candidate.current_role_verification_status !== "missing"
-  );
-}
-
-function candidateNoteSignalLabels(candidate: CandidateSummary) {
-  return (candidate.note_signals ?? [])
-    .map(candidateNoteSignalDisplay)
-    .filter(Boolean);
-}
-
-function candidateNoteSignalDisplay(signal: { category?: string; label?: string; value?: string | null }) {
-  const label = domainLabel(String(signal.label || signal.value || signal.category || ""));
-  const value = signal.value && String(signal.value).toLowerCase() !== String(signal.label || "").toLowerCase()
-    ? `: ${signal.value}`
-    : "";
-  return `${label}${value}`.trim();
-}
-
-function candidateNoteSignalKey(signal: { category?: string; label?: string; value?: string | null }) {
-  const category = String(signal.category || "").toLowerCase().trim();
-  const label = String(signal.label || signal.value || "").toLowerCase().trim();
-  if (!category && !label) return "";
-  return `${category}:${label}`.replace(/\s+/g, "_");
-}
-
-function candidateProfileFreshnessLabel(freshness?: CandidateSummary["profile_freshness"]) {
-  if (!freshness?.label) return "";
-  if (freshness.status === "fresh") return freshness.label;
-  return freshness.summary ? `${freshness.label}: ${freshness.summary}` : freshness.label;
-}
-
-function profileFreshnessBadgeClass(status?: string) {
-  if (status === "fresh") return "freshnessBadge fresh";
-  if (status === "stale" || status === "possibly_stale") return "freshnessBadge stale";
-  return "freshnessBadge review";
-}
-
-function candidateProfileFreshness(candidate: CandidateSummary | Candidate): CandidateSummary["profile_freshness"] {
-  return (candidate as CandidateSummary).profile_freshness ?? (candidate as Candidate).derived?.profile_freshness;
-}
-
-function candidateProfileFreshnessNeedsReview(candidate: CandidateSummary | Candidate) {
-  const freshness = candidateProfileFreshness(candidate);
-  return ["stale", "possibly_stale", "needs_verification"].includes(String(freshness?.status ?? "")) && !candidateReviewSignalDone(candidate, "profile_freshness_review");
-}
-
-function candidateListHazards(candidate: CandidateSummary) {
-  const hazards: string[] = [];
-  const coverage = Number(candidate.coverage ?? 0);
-  if (coverage > 0 && coverage < 0.8 && !candidateReviewSignalDone(candidate, "low_coverage")) {
-    hazards.push(coverage < 0.65 ? `Low profile coverage: ${Math.round(coverage * 100)}%` : `Review profile coverage: ${Math.round(coverage * 100)}%`);
-  }
-  if (candidateRoleFactsNeedReview(candidate) && !candidateReviewSignalDone(candidate, "role_fact_review")) {
-    hazards.push("Role facts need review");
-  }
-  if (
-    Number(candidate.duplicate_risk_score ?? 0) >= 0.75
-    && normalizeCandidateVersionStatus(candidate.duplicate_status) === "suggested"
-  ) {
-    hazards.push("Possible repeated candidate upload");
-  }
-  if (candidateProfileFreshnessNeedsReview(candidate)) {
-    hazards.push(candidate.profile_freshness?.summary ?? "Profile may be stale");
-  }
-  return hazards;
-}
-
-function candidateReviewSignalDone(candidate: CandidateSummary | Candidate, signalKey: CandidateReviewSignal) {
-  return Boolean(candidate.reviewed_signals?.includes(signalKey));
 }
 
 function latestCandidateReparseBatch(batches: ParseBatch[], sourceName: string) {
@@ -11060,131 +8743,6 @@ function latestCandidateReparseBatch(batches: ParseBatch[], sourceName: string) 
 
 function delay(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-function candidateEducationRows(education: Candidate["education"]) {
-  return (education ?? []).map((item) => ({
-    school: textValue(item.school),
-    degree: textValue(item.degree),
-    field: textValue(item.field),
-    location: textValue(item.location),
-    start_date: textValue(item.start_date),
-    end_date: textValue(item.end_date),
-    details: toTextList(item.details ?? []),
-  })).filter((item) => item.school || item.degree || item.field || item.location);
-}
-
-function candidateEducationTimelineEvents(education: Candidate["education"]) {
-  return candidateEducationRows(education)
-    .filter((item) => item.start_date || item.end_date)
-    .map((item, index) => ({
-      id: `education-${item.school || item.degree || index}`,
-      title: item.degree || item.field || "Education",
-      organization: item.school,
-      start_date: item.start_date || item.end_date,
-      end_date: item.end_date || item.start_date,
-      summary: [item.field, item.location, ...item.details.slice(0, 2)].filter(Boolean).join(" | "),
-      relationship: "education",
-      workstreams: [],
-      overlaps_with: [],
-    }));
-}
-
-function educationDateLabel(item: { start_date?: string; end_date?: string }) {
-  if (item.start_date && item.end_date && item.start_date !== item.end_date) return `${item.start_date} - ${item.end_date}`;
-  if (item.end_date) return `Completed ${item.end_date}`;
-  if (item.start_date) return `Started ${item.start_date}`;
-  return "Dates not extracted";
-}
-
-function timelineDateRangeLabel(item: { start_date?: string | null; end_date?: string | null }, isEducation: boolean) {
-  const start = textValue(item.start_date);
-  const end = textValue(item.end_date);
-  if (isEducation && end && (!start || start === end)) return `Completed ${end}`;
-  if (isEducation && start && !end) return `Started ${start}`;
-  return `${start || "Unknown"} - ${end || (isEducation ? "Completed" : "Present")}`;
-}
-
-function isEducationTimelineEvent(value: any) {
-  const relationship = String(value?.relationship ?? value?.kind ?? value?.type ?? "").toLowerCase();
-  return relationship === "education" || relationship === "school" || relationship === "degree";
-}
-
-function dedupeTimelineEvents(events: any[]) {
-  const seen = new Set<string>();
-  return events.filter((event) => {
-    const key = [
-      isEducationTimelineEvent(event) ? "education" : "work",
-      normalizeComparableText(event?.title),
-      normalizeComparableText(event?.organization),
-      String(event?.start_date ?? ""),
-      String(event?.end_date ?? ""),
-    ].join("|");
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-function buildTimelineRows(events: any[]) {
-  const dated = events
-    .map((event) => ({ ...event, startIndex: timelineMonthIndex(event.start_date), endIndex: timelineMonthIndex(event.end_date || "Present") }))
-    .filter((event) => typeof event.startIndex === "number" && typeof event.endIndex === "number");
-  if (!dated.length) return [];
-  const byId = new Map(dated.map((event) => [event.id, event]));
-  const min = Math.min(...dated.map((event) => event.startIndex));
-  const max = Math.max(...dated.map((event) => event.endIndex));
-  const span = Math.max(1, max - min);
-  return dated.map((event) => {
-    const overlapIds = Array.isArray(event.overlaps_with) ? event.overlaps_with : [];
-    const crossCompanyOverlap = overlapIds.some((id: string) => {
-      const other = byId.get(id);
-      return other && normalizeOrg(other.organization) !== normalizeOrg(event.organization);
-    });
-    return {
-      ...event,
-      crossCompanyOverlap,
-      left: Math.max(0, ((event.startIndex - min) / span) * 100),
-      width: Math.max(3, ((event.endIndex - event.startIndex) / span) * 100),
-      minYear: Math.floor(min / 12),
-      maxYear: Math.floor(max / 12),
-    };
-  });
-}
-
-function timelineYearMarkers(rows: any[]) {
-  const years = rows.flatMap((row) => [row.minYear, row.maxYear]).filter((value) => typeof value === "number") as number[];
-  if (!years.length) return [];
-  const min = Math.min(...years);
-  const max = Math.max(...years);
-  if (max <= min) return [min];
-  const span = max - min;
-  const step = span > 10 ? 2 : 1;
-  const markers: number[] = [];
-  for (let year = min; year <= max; year += step) markers.push(year);
-  if (markers[markers.length - 1] !== max) markers.push(max);
-  return markers;
-}
-
-function timelineMonthIndex(value: unknown) {
-  const text = String(value || "").trim().toLowerCase();
-  if (!text || ["present", "current", "now"].includes(text)) {
-    const now = new Date();
-    return now.getFullYear() * 12 + now.getMonth() + 1;
-  }
-  const match = text.match(/(\d{4})(?:[-/](\d{1,2}))?/);
-  if (!match) return null;
-  const year = Number(match[1]);
-  const month = Number(match[2] || 1);
-  return year * 12 + Math.max(1, Math.min(12, month));
-}
-
-function normalizeOrg(value: unknown) {
-  return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
-}
-
-function normalizeComparableText(value: unknown) {
-  return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function batchProgress(batch: ParseBatch) {

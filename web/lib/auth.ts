@@ -20,7 +20,9 @@ export const auth = betterAuth({
   database: new Pool({ connectionString: databaseUrl }),
   secret: betterAuthSecret,
   baseURL: process.env.BETTER_AUTH_URL ?? readParentEnv("BETTER_AUTH_URL") ?? "http://127.0.0.1:3001",
+  basePath: "/api/auth",
   trustedOrigins: resolveTrustedOrigins(),
+  socialProviders: resolveSocialProviders(),
   emailAndPassword: {
     enabled: true,
     disableSignUp: true,
@@ -51,6 +53,10 @@ export const auth = betterAuth({
   },
   account: {
     modelName: "accounts",
+    accountLinking: {
+      enabled: true,
+      trustedProviders: ["google"],
+    },
     fields: {
       userId: "user_id",
       accountId: "account_id",
@@ -73,6 +79,20 @@ export const auth = betterAuth({
     },
   },
 });
+
+function resolveSocialProviders() {
+  const googleClientId = readConfigValue("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_ID_FILE");
+  const googleClientSecret = readConfigValue("GOOGLE_CLIENT_SECRET", "GOOGLE_CLIENT_SECRET_FILE");
+  if (!googleClientId || !googleClientSecret) return {};
+  return {
+    google: {
+      clientId: googleClientId,
+      clientSecret: googleClientSecret,
+      scopes: ["openid", "email", "profile"],
+      accessType: "online" as const,
+    },
+  };
+}
 
 function hashPassword(password: string) {
   const salt = crypto.randomBytes(16);
@@ -98,14 +118,20 @@ function readParentEnv(key: string) {
 
 function resolveBetterAuthSecret() {
   const secret =
-    process.env.BETTER_AUTH_SECRET ??
-    readParentEnv("BETTER_AUTH_SECRET") ??
-    readSecretFile(process.env.BETTER_AUTH_SECRET_FILE ?? readParentEnv("BETTER_AUTH_SECRET_FILE"));
+    readConfigValue("BETTER_AUTH_SECRET", "BETTER_AUTH_SECRET_FILE");
   if (secret) return secret;
   if (isStrictProductionRuntime()) {
     throw new Error("BETTER_AUTH_SECRET is required in production");
   }
   return "resume-intel-local-dev-secret-change-me";
+}
+
+function readConfigValue(envKey: string, fileEnvKey?: string) {
+  return (
+    process.env[envKey] ??
+    readParentEnv(envKey) ??
+    readSecretFile(fileEnvKey ? process.env[fileEnvKey] ?? readParentEnv(fileEnvKey) : undefined)
+  );
 }
 
 function readSecretFile(filePath?: string) {

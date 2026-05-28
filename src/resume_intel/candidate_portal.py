@@ -3,7 +3,6 @@ from __future__ import annotations
 import html
 import copy
 import re
-import hashlib
 import secrets
 import textwrap
 import unicodedata
@@ -19,6 +18,7 @@ from .auth import hash_password
 from .db import db
 from .pipeline import SUPPORTED_EXTENSIONS, parse_file
 from .settings import load_settings
+from .storage import document_storage
 from .tenancy import normalize_email
 
 
@@ -75,6 +75,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CANDIDATE_PORTAL_DATA_DIR = ROOT / "data" / "candidate_portal"
 CANDIDATE_UPLOAD_STAGES = {
     "queued": (5, "Queued"),
+    "retrying": (10, "Retrying"),
     "stored": (10, "Resume stored"),
     "running": (20, "Parsing resume"),
     "profile": (78, "Building profile"),
@@ -82,6 +83,9 @@ CANDIDATE_UPLOAD_STAGES = {
     "succeeded": (100, "Completed"),
     "failed": (100, "Needs review"),
 }
+ACTIVE_CANDIDATE_UPLOAD_STATUSES = {"queued", "retrying", "running"}
+CANDIDATE_UPLOAD_RETRY_BACKOFF_SECONDS = 60
+CANDIDATE_UPLOAD_STALE_RUNNING_MINUTES = 60
 
 STOPWORDS = {
     "a",
@@ -156,6 +160,57 @@ def create_candidate_account(*, name: str, email: str, password: str) -> dict[st
         )
         conn.commit()
     return {"user": _candidate_public_user(user_row), "profile": _profile_response(user_row, profile_json)}
+
+
+def finalize_candidate_oauth_account(user: dict[str, Any], *, new_user: bool = False) -> dict[str, Any]:
+    """Convert a fresh Better Auth Google user into a candidate workspace.
+
+    Recruiter and platform-admin accounts must never be silently converted into
+    candidate accounts. Only brand-new OAuth users with no active tenant
+    membership can be converted; existing candidate users are just repaired if
+    their candidate profile row is missing.
+    """
+
+    user_id = user.get("id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="invalid Google session")
+    with db() as conn:
+        row = conn.execute(
+            """
+            select users.id, users.email, users.name, users.role, users.created_at,
+                   count(tenant_memberships.id) filter (where tenant_memberships.status='active') as active_tenant_count
+            from users
+            left join tenant_memberships on tenant_memberships.user_id = users.id
+            where users.id=%s
+            group by users.id
+            """,
+            (user_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=401, detail="invalid Google session")
+        role = row["role"]
+        if role in {"admin", "platform_admin"}:
+            raise HTTPException(status_code=403, detail="Google account belongs to the platform admin system")
+        if role != "candidate":
+            if not new_user:
+                raise HTTPException(status_code=403, detail="Google account is not a candidate account. Use Recruiter Access or create a candidate profile.")
+            if int(row.get("active_tenant_count") or 0) > 0:
+                raise HTTPException(status_code=409, detail="Google account already belongs to a recruiter workspace")
+            conn.execute(
+                """
+                update users
+                set role='candidate', email_verified=true, updated_at=now()
+                where id=%s
+                """,
+                (row["id"],),
+            )
+            row = conn.execute(
+                "select id, email, name, role, created_at from users where id=%s",
+                (user_id,),
+            ).fetchone()
+        _ensure_candidate_profile(conn, row)
+        conn.commit()
+    return {"user": _candidate_public_user(row)}
 
 
 def get_candidate_profile(user: dict[str, Any]) -> dict[str, Any]:
@@ -243,6 +298,45 @@ def update_candidate_privacy_settings(user: dict[str, Any], payload: dict[str, A
         )
         conn.commit()
     return get_candidate_profile(user)
+
+
+def create_candidate_ai_learning_event(user: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    _require_candidate(user)
+    event_type = _clean_optional_text(payload.get("event_type")) or "candidate_editor_event"
+    source = _clean_optional_text(payload.get("source")) or "candidate_editor"
+    original_text = _clean_optional_text(payload.get("original_text"))
+    suggested_text = _clean_optional_text(payload.get("suggested_text"))
+    accepted = payload.get("accepted")
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    with db() as conn:
+        row = conn.execute(
+            """
+            insert into candidate_ai_learning_events
+              (candidate_user_id, event_type, source, original_text, suggested_text, accepted, metadata_json)
+            values (%s, %s, %s, %s, %s, %s, %s)
+            returning id, candidate_user_id, event_type, source, original_text, suggested_text, accepted, metadata_json, created_at
+            """,
+            (user["id"], event_type[:80], source[:80], original_text, suggested_text, accepted if isinstance(accepted, bool) else None, Jsonb(metadata)),
+        ).fetchone()
+        conn.commit()
+    return {"event": _candidate_ai_learning_event_row(row)}
+
+
+def list_candidate_ai_learning_events(user: dict[str, Any], limit: int = 30) -> dict[str, Any]:
+    _require_candidate(user)
+    safe_limit = max(1, min(int(limit or 30), 100))
+    with db() as conn:
+        rows = conn.execute(
+            """
+            select id, candidate_user_id, event_type, source, original_text, suggested_text, accepted, metadata_json, created_at
+            from candidate_ai_learning_events
+            where candidate_user_id=%s
+            order by created_at desc
+            limit %s
+            """,
+            (user["id"], safe_limit),
+        ).fetchall()
+    return {"events": [_candidate_ai_learning_event_row(row) for row in rows]}
 
 
 def list_resume_shares(user: dict[str, Any]) -> dict[str, Any]:
@@ -633,6 +727,39 @@ def create_resume_version(user: dict[str, Any], *, title: str, target_role: str 
     return {"version": _version_row(row, include_resume=True)}
 
 
+def update_resume_version(
+    user: dict[str, Any],
+    version_id: str,
+    *,
+    title: str | None = None,
+    target_role: str | None = None,
+    resume_json: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    _require_candidate(user)
+    existing = _load_resume_version(user, version_id)
+    if existing["status"] == "archived":
+        raise HTTPException(status_code=400, detail="archived resume versions cannot be edited")
+    clean_title = _clean_optional_text(title) if title is not None else existing["title"]
+    if not clean_title:
+        raise HTTPException(status_code=400, detail="resume version title is required")
+    clean_target = _clean_optional_text(target_role) if target_role is not None else existing.get("target_role")
+    resume = _normalize_resume(resume_json if resume_json is not None else existing.get("resume_json") or {})
+    with db() as conn:
+        row = conn.execute(
+            """
+            update candidate_resume_versions
+            set title=%s, target_role=%s, resume_json=%s, updated_at=now()
+            where id=%s and candidate_user_id=%s and status <> 'archived'
+            returning id, title, target_role, status, resume_json, created_at, updated_at
+            """,
+            (clean_title, clean_target, Jsonb(resume), version_id, user["id"]),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="resume version not found")
+        conn.commit()
+    return {"version": _version_row(row, include_resume=True)}
+
+
 def get_resume_version(user: dict[str, Any], version_id: str) -> dict[str, Any]:
     _require_candidate(user)
     row = _load_resume_version(user, version_id)
@@ -738,35 +865,39 @@ def create_resume_upload(
     if suffix not in SUPPORTED_EXTENSIONS:
         raise HTTPException(status_code=400, detail="unsupported file type")
     upload_id = str(uuid.uuid4())
-    safe_name = _safe_filename(original_filename)
-    upload_dir = CANDIDATE_PORTAL_DATA_DIR / str(user["id"]) / "uploads" / upload_id
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    stored_path = upload_dir / safe_name
-    data = file_obj.read()
-    if not data:
+    storage = document_storage()
+    stored = storage.save_upload(
+        tenant_id=str(user["id"]),
+        namespace=f"candidate_uploads/{upload_id}",
+        filename=original_filename,
+        file_obj=file_obj,
+        content_type=mime_type,
+    )
+    if stored.size_bytes <= 0:
+        storage.delete(stored.key)
         raise HTTPException(status_code=400, detail="resume file is empty")
-    stored_path.write_bytes(data)
-    digest = hashlib.sha256(data).hexdigest()
     with db() as conn:
         row = conn.execute(
             """
             insert into candidate_resume_uploads (
               id, candidate_user_id, original_filename, stored_path, mime_type, size_bytes,
-              sha256, target_role, candidate_note, status, stage, progress
+              sha256, target_role, candidate_note, status, stage, progress, storage_backend, storage_key
             )
-            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'queued', 'queued', 5)
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'queued', 'queued', 5, %s, %s)
             returning *
             """,
             (
                 upload_id,
                 user["id"],
-                original_filename,
-                str(stored_path),
-                mime_type,
-                len(data),
-                digest,
+                stored.original_filename,
+                str(stored.local_path),
+                stored.content_type,
+                stored.size_bytes,
+                stored.sha256,
                 _clean_optional_text(target_role),
                 _clean_optional_text(note),
+                stored.backend,
+                stored.key,
             ),
         ).fetchone()
         conn.commit()
@@ -795,14 +926,108 @@ def get_resume_upload(user: dict[str, Any], upload_id: str) -> dict[str, Any]:
     return {"upload": _upload_row(row)}
 
 
-def run_resume_upload_parse(upload_id: str, candidate_user_id: str) -> None:
+def retry_resume_upload(user: dict[str, Any], upload_id: str) -> dict[str, Any]:
+    _require_candidate(user)
+    with db() as conn:
+        row = conn.execute(
+            """
+            update candidate_resume_uploads
+            set status='queued',
+                stage='queued',
+                progress=%s,
+                error_message=null,
+                next_retry_at=null,
+                completed_at=null,
+                updated_at=now()
+            where id=%s
+              and candidate_user_id=%s
+              and status in ('failed', 'retrying')
+            returning *
+            """,
+            (CANDIDATE_UPLOAD_STAGES["queued"][0], upload_id, user["id"]),
+        ).fetchone()
+        conn.commit()
+    if not row:
+        raise HTTPException(status_code=404, detail="failed candidate resume upload not found")
+    return {"upload": _upload_row(row)}
+
+
+def run_next_resume_upload_job(worker_id: str | None = None) -> dict[str, Any] | None:
+    """Claim and process one candidate-owned resume upload.
+
+    Candidate uploads are user-facing long-running work. They must not depend on
+    FastAPI in-process background tasks because process restarts can silently
+    abandon them. This mirrors the recruiter parse-job worker pattern.
+    """
+
+    reconcile_resume_upload_jobs()
+    with db() as conn:
+        row = conn.execute(
+            """
+            select *
+            from candidate_resume_uploads
+            where status in ('queued', 'retrying')
+              and (next_retry_at is null or next_retry_at <= now())
+            order by created_at
+            for update skip locked
+            limit 1
+            """
+        ).fetchone()
+        if not row:
+            return None
+        claimed = conn.execute(
+            """
+            update candidate_resume_uploads
+            set status='running',
+                stage='running',
+                progress=%s,
+                attempt_count=attempt_count + 1,
+                worker_id=%s,
+                started_at=coalesce(started_at, now()),
+                error_message=null,
+                updated_at=now()
+            where id=%s and candidate_user_id=%s
+            returning *
+            """,
+            (CANDIDATE_UPLOAD_STAGES["running"][0], worker_id, row["id"], row["candidate_user_id"]),
+        ).fetchone()
+        conn.commit()
+    return run_resume_upload_parse(str(claimed["id"]), str(claimed["candidate_user_id"]), worker_id=worker_id)
+
+
+def reconcile_resume_upload_jobs(*, stale_after_minutes: int = CANDIDATE_UPLOAD_STALE_RUNNING_MINUTES) -> dict[str, int]:
+    with db() as conn:
+        rows = conn.execute(
+            """
+            update candidate_resume_uploads
+            set status=case when attempt_count < max_attempts then 'retrying' else 'failed' end,
+                stage=case when attempt_count < max_attempts then 'retrying' else 'failed' end,
+                progress=case when attempt_count < max_attempts then %s else 100 end,
+                error_message='Worker timeout while parsing candidate resume.',
+                next_retry_at=case when attempt_count < max_attempts then now() + (%s * interval '1 second') else null end,
+                completed_at=case when attempt_count >= max_attempts then now() else completed_at end,
+                updated_at=now()
+            where status='running'
+              and updated_at <= now() - (%s * interval '1 minute')
+            returning status
+            """,
+            (CANDIDATE_UPLOAD_STAGES["retrying"][0], CANDIDATE_UPLOAD_RETRY_BACKOFF_SECONDS, stale_after_minutes),
+        ).fetchall()
+        conn.commit()
+    return {
+        "retrying": sum(1 for row in rows if row["status"] == "retrying"),
+        "failed": sum(1 for row in rows if row["status"] == "failed"),
+    }
+
+
+def run_resume_upload_parse(upload_id: str, candidate_user_id: str, worker_id: str | None = None) -> dict[str, Any]:
     row = _load_resume_upload(candidate_user_id, upload_id)
     if row["status"] in {"succeeded", "failed"}:
-        return
-    stored_path = Path(row["stored_path"])
+        return {"upload": _upload_row(row)}
+    stored_path = _candidate_upload_processing_path(row)
     if not stored_path.exists():
         _mark_upload_failed(upload_id, candidate_user_id, "stored resume file not found")
-        return
+        return get_resume_upload({"id": candidate_user_id, "role": "candidate"}, upload_id)
     try:
         _set_upload_stage(upload_id, candidate_user_id, "running")
         settings = load_settings()
@@ -872,8 +1097,10 @@ def run_resume_upload_parse(upload_id: str, candidate_user_id: str) -> None:
                 ),
             )
             conn.commit()
+        return get_resume_upload({"id": candidate_user_id, "role": "candidate"}, upload_id)
     except Exception as exc:
-        _mark_upload_failed(upload_id, candidate_user_id, str(exc))
+        _mark_upload_retry_or_failed(upload_id, candidate_user_id, exc, worker_id=worker_id)
+        return get_resume_upload({"id": candidate_user_id, "role": "candidate"}, upload_id)
 
 
 def profile_from_parsed_resume(record: dict[str, Any]) -> dict[str, Any]:
@@ -1548,6 +1775,36 @@ def _assert_candidate_email_available(conn: Any, normalized_email: str) -> None:
         raise HTTPException(status_code=409, detail="email is already registered")
 
 
+def _ensure_candidate_profile(conn: Any, user_row: Any) -> None:
+    display_name = (user_row.get("name") or "").strip() or user_row["email"].split("@", 1)[0]
+    profile_json = {
+        "display_name": display_name,
+        "email": user_row["email"],
+        "headline": "",
+        "skills": [],
+        "experience": [],
+        "education": [],
+        "certifications": [],
+        "projects": [],
+        "links": [],
+    }
+    conn.execute(
+        """
+        insert into candidate_profiles (user_id, display_name, headline, profile_json)
+        values (%s, %s, '', %s)
+        on conflict (user_id) do update set
+          display_name=coalesce(candidate_profiles.display_name, excluded.display_name),
+          profile_json=case
+            when candidate_profiles.profile_json is null or candidate_profiles.profile_json = '{}'::jsonb
+            then excluded.profile_json
+            else candidate_profiles.profile_json
+          end,
+          updated_at=now()
+        """,
+        (user_row["id"], display_name, Jsonb(profile_json)),
+    )
+
+
 def _require_candidate(user: dict[str, Any]) -> None:
     if user.get("platform_role") != "candidate" and user.get("role") != "candidate" and user.get("workspace_access") != "candidate":
         raise HTTPException(status_code=403, detail="candidate account required")
@@ -1597,6 +1854,20 @@ def _profile_response(row: Any, profile: dict[str, Any]) -> dict[str, Any]:
         "profile": _normalize_profile(profile),
         "privacy_settings": _normalize_privacy_settings({}),
         "updated_at": _iso(row.get("created_at")),
+    }
+
+
+def _candidate_ai_learning_event_row(row: Any) -> dict[str, Any]:
+    return {
+        "id": str(row["id"]),
+        "candidate_user_id": str(row["candidate_user_id"]),
+        "event_type": row["event_type"],
+        "source": row["source"],
+        "original_text": row.get("original_text"),
+        "suggested_text": row.get("suggested_text"),
+        "accepted": row.get("accepted"),
+        "metadata": dict(row.get("metadata_json") or {}),
+        "created_at": _iso(row.get("created_at")),
     }
 
 
@@ -1785,6 +2056,10 @@ def _upload_row(row: Any) -> dict[str, Any]:
         "stage": row["stage"],
         "stage_label": CANDIDATE_UPLOAD_STAGES.get(row["stage"], (progress, row["stage"]))[1],
         "progress": progress,
+        "attempt_count": int(row.get("attempt_count") or 0),
+        "max_attempts": int(row.get("max_attempts") or 0),
+        "worker_id": row.get("worker_id"),
+        "next_retry_at": _iso(row.get("next_retry_at")),
         "error_message": row.get("error_message"),
         "parsed_profile_json": row.get("parsed_profile_json") or {},
         "parsed_resume_json": row.get("parsed_resume_json") or {},
@@ -1835,12 +2110,52 @@ def _mark_upload_failed(upload_id: str, candidate_user_id: str, error_message: s
         conn.execute(
             """
             update candidate_resume_uploads
-            set status='failed', stage='failed', progress=100, error_message=%s, updated_at=now(), completed_at=now()
+            set status='failed', stage='failed', progress=100, error_message=%s,
+                next_retry_at=null, updated_at=now(), completed_at=now()
             where id=%s and candidate_user_id=%s
             """,
             (error_message[:4000], upload_id, candidate_user_id),
         )
         conn.commit()
+
+
+def _mark_upload_retry_or_failed(upload_id: str, candidate_user_id: str, exc: Exception, *, worker_id: str | None = None) -> None:
+    error_message = f"{exc.__class__.__name__}: {str(exc)[:3800]}"
+    with db() as conn:
+        row = conn.execute(
+            """
+            update candidate_resume_uploads
+            set status=case when attempt_count < max_attempts then 'retrying' else 'failed' end,
+                stage=case when attempt_count < max_attempts then 'retrying' else 'failed' end,
+                progress=case when attempt_count < max_attempts then %s else 100 end,
+                error_message=%s,
+                worker_id=coalesce(%s, worker_id),
+                next_retry_at=case when attempt_count < max_attempts then now() + (%s * interval '1 second') else null end,
+                completed_at=case when attempt_count >= max_attempts then now() else completed_at end,
+                updated_at=now()
+            where id=%s and candidate_user_id=%s
+            returning *
+            """,
+            (
+                CANDIDATE_UPLOAD_STAGES["retrying"][0],
+                error_message,
+                worker_id,
+                CANDIDATE_UPLOAD_RETRY_BACKOFF_SECONDS,
+                upload_id,
+                candidate_user_id,
+            ),
+        ).fetchone()
+        conn.commit()
+    if not row:
+        raise HTTPException(status_code=404, detail="candidate resume upload not found")
+
+
+def _candidate_upload_processing_path(row: Any) -> Path:
+    storage_backend = row.get("storage_backend")
+    storage_key = row.get("storage_key")
+    if storage_backend and storage_key:
+        return document_storage(storage_backend).open_for_processing(storage_key)
+    return Path(row["stored_path"])
 
 
 def _safe_filename(filename: str) -> str:

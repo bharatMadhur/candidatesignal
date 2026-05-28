@@ -139,6 +139,10 @@ export type CandidateResumeUpload = {
   stage: string;
   stage_label?: string | null;
   progress: number;
+  attempt_count?: number;
+  max_attempts?: number;
+  worker_id?: string | null;
+  next_retry_at?: string | null;
   error_message?: string | null;
   parsed_profile_json?: CandidatePortalProfile["profile"];
   parsed_resume_json?: Record<string, any>;
@@ -159,6 +163,35 @@ export type CandidateSelfMatch = {
   summary: string;
   recommended_next_action: string;
   privacy_note: string;
+  created_at?: string | null;
+};
+
+export type CandidateAiSuggestion = {
+  status: "ok" | "needs_more_context" | "disabled" | "fallback" | "error" | string;
+  assistant_message: string;
+  suggested_text?: string;
+  rationale?: string[];
+  missing_facts?: string[];
+  warnings?: string[];
+  learning_tags?: string[];
+  action?: string;
+  usage?: {
+    model?: string;
+    input_tokens?: number;
+    output_tokens?: number;
+    total_tokens?: number;
+  };
+};
+
+export type CandidateAiLearningEvent = {
+  id: string;
+  candidate_user_id: string;
+  event_type: string;
+  source: string;
+  original_text?: string | null;
+  suggested_text?: string | null;
+  accepted?: boolean | null;
+  metadata?: Record<string, any>;
   created_at?: string | null;
 };
 
@@ -912,6 +945,15 @@ export type WorkerStatus = {
   queued_count: number;
   running_count: number;
   failed_count: number;
+  parse_queued_count?: number;
+  parse_running_count?: number;
+  parse_failed_count?: number;
+  campaign_match_queued_count?: number;
+  campaign_match_running_count?: number;
+  campaign_match_failed_count?: number;
+  candidate_upload_queued_count?: number;
+  candidate_upload_running_count?: number;
+  candidate_upload_failed_count?: number;
   dead_letter_count?: number;
   online_window_seconds: number;
   workers: Array<{
@@ -1002,6 +1044,14 @@ export async function candidateSignup(name: string, email: string, password: str
   });
 }
 
+export async function finalizeCandidateGoogleOAuth(token: string, newUser: boolean): Promise<{ user: CurrentUser }> {
+  return request("/auth/candidate-oauth/finalize", {
+    method: "POST",
+    token,
+    body: JSON.stringify({ new_user: newUser }),
+  });
+}
+
 export async function me(token: string) {
   return request("/auth/me", { token });
 }
@@ -1048,6 +1098,10 @@ export async function getCandidatePortalResumeUpload(token: string, uploadId: st
   return request(`/candidate/resume-uploads/${uploadId}`, { token });
 }
 
+export async function retryCandidatePortalResumeUpload(token: string, uploadId: string): Promise<{ upload: CandidateResumeUpload }> {
+  return request(`/candidate/resume-uploads/${uploadId}/retry`, { method: "POST", token });
+}
+
 export async function listCandidatePortalResumeVersions(token: string): Promise<{ versions: CandidateResumeVersion[] }> {
   return request("/candidate/resume-versions", { token });
 }
@@ -1067,6 +1121,18 @@ export async function createCandidatePortalResumeVersion(
 
 export async function getCandidatePortalResumeVersion(token: string, versionId: string): Promise<{ version: CandidateResumeVersion }> {
   return request(`/candidate/resume-versions/${versionId}`, { token });
+}
+
+export async function updateCandidatePortalResumeVersion(
+  token: string,
+  versionId: string,
+  payload: { title?: string; target_role?: string | null; resume_json?: Record<string, any> },
+): Promise<{ version: CandidateResumeVersion }> {
+  return request(`/candidate/resume-versions/${versionId}`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function archiveCandidatePortalResumeVersion(token: string, versionId: string): Promise<{ version: CandidateResumeVersion }> {
@@ -1176,6 +1242,47 @@ export async function matchCandidatePortalRequirement(token: string, versionId: 
     method: "POST",
     token,
     body: JSON.stringify({ requirement_text: requirementText }),
+  });
+}
+
+export async function suggestCandidateAiEdit(
+  token: string,
+  payload: {
+    action: "coach" | "rewrite_selection" | "tailor_section" | "gap_check";
+    selected_text?: string;
+    instruction?: string;
+    profile?: CandidatePortalProfile["profile"];
+    resume_html?: string;
+    target_role?: string;
+    requirement_text?: string;
+  },
+): Promise<{ suggestion: CandidateAiSuggestion }> {
+  return request("/candidate/ai/editor-suggest", {
+    method: "POST",
+    token,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listCandidateAiLearningEvents(token: string, limit = 30): Promise<{ events: CandidateAiLearningEvent[] }> {
+  return request(`/candidate/ai/learning-events?limit=${encodeURIComponent(String(limit))}`, { token });
+}
+
+export async function createCandidateAiLearningEvent(
+  token: string,
+  payload: {
+    event_type: string;
+    source?: string;
+    original_text?: string;
+    suggested_text?: string;
+    accepted?: boolean;
+    metadata?: Record<string, any>;
+  },
+): Promise<{ event: CandidateAiLearningEvent }> {
+  return request("/candidate/ai/learning-events", {
+    method: "POST",
+    token,
+    body: JSON.stringify(payload),
   });
 }
 

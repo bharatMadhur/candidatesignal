@@ -13,7 +13,7 @@ async function main() {
   assert.equal(home.response.status, 200, "homepage should load");
   assert.match(home.body, /candidateSignal\.ai/, "homepage should show product brand");
   assert.match(home.body, /Recruiter Login|Recruiter workspace/i, "homepage should include recruiter login");
-  assert.match(home.body, /Applicant Login|Applicant portal/i, "homepage should include applicant coming-soon login");
+  assert.match(home.body, /Candidate Access|Candidate portal/i, "homepage should include candidate access");
   assert.doesNotMatch(home.body, /Admin Login/i, "homepage should not expose admin login");
   assert.match(home.body, /Upload resumes/i, "homepage should preserve public-home content");
 

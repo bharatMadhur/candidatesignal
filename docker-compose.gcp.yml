@@ -117,9 +117,12 @@ services:
       DATABASE_URL_FILE: /run/candidatesignal-secrets/database-url
       NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE}
       SERVER_API_BASE: http://api:8010
+      BACKEND_PROXY_MAX_BODY_BYTES: ${BACKEND_PROXY_MAX_BODY_BYTES:-36700160}
       BETTER_AUTH_SECRET_FILE: /run/candidatesignal-secrets/better-auth-secret
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
       BETTER_AUTH_TRUSTED_ORIGINS: ${BETTER_AUTH_TRUSTED_ORIGINS}
+      GOOGLE_CLIENT_ID_FILE: /run/candidatesignal-secrets/google-client-id
+      GOOGLE_CLIENT_SECRET_FILE: /run/candidatesignal-secrets/google-client-secret
     ports:
       - "127.0.0.1:${UI_PORT:-3001}:3001"
     depends_on:
@@ -223,9 +226,12 @@ services:
       NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-/api/backend}
       NEXT_PUBLIC_DEPLOY_ENV: staging
       SERVER_API_BASE: http://api-staging:8010
+      BACKEND_PROXY_MAX_BODY_BYTES: ${BACKEND_PROXY_MAX_BODY_BYTES:-36700160}
       BETTER_AUTH_SECRET_FILE: /run/candidatesignal-staging-secrets/better-auth-secret
       BETTER_AUTH_URL: ${STAGING_BETTER_AUTH_URL:-https://staging.candidatesignal.ai}
       BETTER_AUTH_TRUSTED_ORIGINS: ${STAGING_BETTER_AUTH_TRUSTED_ORIGINS:-https://staging.candidatesignal.ai}
+      GOOGLE_CLIENT_ID_FILE: /run/candidatesignal-staging-secrets/google-client-id
+      GOOGLE_CLIENT_SECRET_FILE: /run/candidatesignal-staging-secrets/google-client-secret
       STAGING_GATE_PASSWORD_HASH: ${STAGING_GATE_PASSWORD_HASH:-}
       STAGING_GATE_COOKIE_NAME: ${STAGING_GATE_COOKIE_NAME:-candidate_signal_staging_gate}
       STAGING_GATE_MAX_AGE_SECONDS: ${STAGING_GATE_MAX_AGE_SECONDS:-43200}

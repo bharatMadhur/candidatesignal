@@ -106,6 +106,44 @@ else
   echo "No Resend API key configured. Product email will remain disabled or dry-run until the secret is added."
 fi
 
+if [[ -n "${GOOGLE_CLIENT_ID:-}" ]]; then
+  upsert_secret "google-oauth-client-id" "${GOOGLE_CLIENT_ID}"
+  echo "Loaded Google OAuth client id from environment."
+elif secret_exists "google-oauth-client-id"; then
+  echo "Keeping existing google-oauth-client-id secret."
+else
+  echo "No Google OAuth client id configured. Candidate Google login will remain disabled until the secret is added."
+fi
+
+if [[ -n "${GOOGLE_CLIENT_SECRET:-}" ]]; then
+  upsert_secret "google-oauth-client-secret" "${GOOGLE_CLIENT_SECRET}"
+  echo "Loaded Google OAuth client secret from environment."
+elif secret_exists "google-oauth-client-secret"; then
+  echo "Keeping existing google-oauth-client-secret secret."
+else
+  echo "No Google OAuth client secret configured. Candidate Google login will remain disabled until the secret is added."
+fi
+
+if [[ -n "${STAGING_GOOGLE_CLIENT_ID:-}" ]]; then
+  upsert_secret "staging-google-oauth-client-id" "${STAGING_GOOGLE_CLIENT_ID}"
+  echo "Loaded staging Google OAuth client id from environment."
+elif secret_exists "staging-google-oauth-client-id"; then
+  echo "Keeping existing staging-google-oauth-client-id secret."
+elif [[ -n "${GOOGLE_CLIENT_ID:-}" ]]; then
+  upsert_secret "staging-google-oauth-client-id" "${GOOGLE_CLIENT_ID}"
+  echo "Using production Google OAuth client id for staging."
+fi
+
+if [[ -n "${STAGING_GOOGLE_CLIENT_SECRET:-}" ]]; then
+  upsert_secret "staging-google-oauth-client-secret" "${STAGING_GOOGLE_CLIENT_SECRET}"
+  echo "Loaded staging Google OAuth client secret from environment."
+elif secret_exists "staging-google-oauth-client-secret"; then
+  echo "Keeping existing staging-google-oauth-client-secret secret."
+elif [[ -n "${GOOGLE_CLIENT_SECRET:-}" ]]; then
+  upsert_secret "staging-google-oauth-client-secret" "${GOOGLE_CLIENT_SECRET}"
+  echo "Using production Google OAuth client secret for staging."
+fi
+
 for account in "${VM_SERVICE_ACCOUNT}" "${OCR_SERVICE_ACCOUNT}"; do
   email="$(service_account_email "${account}")"
   gcloud secrets add-iam-policy-binding "ocr-internal-token" \
@@ -132,6 +170,18 @@ gcloud secrets add-iam-policy-binding "apify-api-token" \
   --member="serviceAccount:$(service_account_email "${VM_SERVICE_ACCOUNT}")" \
   --role="roles/secretmanager.secretAccessor" >/dev/null 2>&1 || true
 gcloud secrets add-iam-policy-binding "resend-api-key" \
+  --member="serviceAccount:$(service_account_email "${VM_SERVICE_ACCOUNT}")" \
+  --role="roles/secretmanager.secretAccessor" >/dev/null 2>&1 || true
+gcloud secrets add-iam-policy-binding "google-oauth-client-id" \
+  --member="serviceAccount:$(service_account_email "${VM_SERVICE_ACCOUNT}")" \
+  --role="roles/secretmanager.secretAccessor" >/dev/null 2>&1 || true
+gcloud secrets add-iam-policy-binding "google-oauth-client-secret" \
+  --member="serviceAccount:$(service_account_email "${VM_SERVICE_ACCOUNT}")" \
+  --role="roles/secretmanager.secretAccessor" >/dev/null 2>&1 || true
+gcloud secrets add-iam-policy-binding "staging-google-oauth-client-id" \
+  --member="serviceAccount:$(service_account_email "${VM_SERVICE_ACCOUNT}")" \
+  --role="roles/secretmanager.secretAccessor" >/dev/null 2>&1 || true
+gcloud secrets add-iam-policy-binding "staging-google-oauth-client-secret" \
   --member="serviceAccount:$(service_account_email "${VM_SERVICE_ACCOUNT}")" \
   --role="roles/secretmanager.secretAccessor" >/dev/null 2>&1 || true
 

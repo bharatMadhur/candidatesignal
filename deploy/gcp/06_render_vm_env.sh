@@ -116,6 +116,8 @@ render_secrets() {
   printf "%s" "$(secret_value litellm-api-key)" > "${secrets_dir}/litellm-api-key"
   printf "%s" "${APIFY_API_TOKEN:-$(secret_value apify-api-token)}" > "${secrets_dir}/apify-api-token"
   printf "%s" "${RESEND_API_KEY:-$(secret_value resend-api-key)}" > "${secrets_dir}/resend-api-key"
+  printf "%s" "${GOOGLE_CLIENT_ID:-$(secret_value google-oauth-client-id)}" > "${secrets_dir}/google-client-id"
+  printf "%s" "${GOOGLE_CLIENT_SECRET:-$(secret_value google-oauth-client-secret)}" > "${secrets_dir}/google-client-secret"
   printf "%s" "$(secret_value ocr-internal-token)" > "${secrets_dir}/ocr-internal-token"
   printf "%s" "${RESUME_INTEL_ALERT_WEBHOOK_URL:-$(secret_value operational-alert-webhook-url)}" > "${secrets_dir}/alert-webhook-url"
   chmod 600 "${secrets_dir}"/*
@@ -141,6 +143,8 @@ render_secrets() {
   printf "%s" "$(secret_value_first staging-litellm-api-key litellm-api-key)" > "${staging_secrets_dir}/litellm-api-key"
   printf "%s" "${APIFY_API_TOKEN:-$(secret_value_first staging-apify-api-token apify-api-token)}" > "${staging_secrets_dir}/apify-api-token"
   printf "%s" "${RESEND_API_KEY:-$(secret_value_first staging-resend-api-key resend-api-key)}" > "${staging_secrets_dir}/resend-api-key"
+  printf "%s" "${STAGING_GOOGLE_CLIENT_ID:-${GOOGLE_CLIENT_ID:-$(secret_value_first staging-google-oauth-client-id google-oauth-client-id)}}" > "${staging_secrets_dir}/google-client-id"
+  printf "%s" "${STAGING_GOOGLE_CLIENT_SECRET:-${GOOGLE_CLIENT_SECRET:-$(secret_value_first staging-google-oauth-client-secret google-oauth-client-secret)}}" > "${staging_secrets_dir}/google-client-secret"
   printf "%s" "$(secret_value ocr-internal-token)" > "${staging_secrets_dir}/ocr-internal-token"
   printf "%s" "${RESUME_INTEL_ALERT_WEBHOOK_URL:-$(secret_value staging-operational-alert-webhook-url)}" > "${staging_secrets_dir}/alert-webhook-url"
   chmod 600 "${staging_secrets_dir}"/*
