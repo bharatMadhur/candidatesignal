@@ -71,14 +71,6 @@ class LlmPromptSecurityTests(unittest.TestCase):
             "skills": [],
             "experience": [],
             "education": [],
-            "projects": [],
-            "certifications": [],
-            "awards": [],
-            "publications": [],
-            "languages": [],
-            "notes": [],
-            "other_sections": {},
-            "derived": {},
         }
 
         self.assertIs(_validate_json_pass_output("resume_record", resume), resume)

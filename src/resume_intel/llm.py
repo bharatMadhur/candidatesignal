@@ -57,20 +57,12 @@ JSON_PASS_SCHEMAS: dict[str, JsonSchemaSpec] = {
         "wow_factor": "list",
     },
     "resume_record": {
+        # Keep this shape check intentionally light. `validate_resume()` owns
+        # normalization/repair of optional resume arrays, while this guard
+        # catches accidental cross-prompt responses such as requirement or
+        # campaign-match JSON.
         "document_id": "string",
         "source_file": "string",
-        "contact": "dict",
-        "skills": "list",
-        "experience": "list",
-        "education": "list",
-        "projects": "list",
-        "certifications": "list",
-        "awards": "list",
-        "publications": "list",
-        "languages": "list",
-        "notes": "list",
-        "other_sections": "dict",
-        "derived": "dict",
     },
     "requirement_profile": {
         "title": "nullable_string",
