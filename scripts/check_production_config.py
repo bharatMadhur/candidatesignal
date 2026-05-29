@@ -62,6 +62,8 @@ def main() -> int:
 
     if not _secret_value("RESUME_INTEL_ALERT_WEBHOOK_URL", "RESUME_INTEL_ALERT_WEBHOOK_URL_FILE"):
         warnings.append("RESUME_INTEL_ALERT_WEBHOOK_URL is not set; operational alerts will stay in-app only")
+    if not os.getenv("RESUME_INTEL_BUILD_SHA"):
+        warnings.append("RESUME_INTEL_BUILD_SHA is not set; health checks cannot prove the deployed Git revision")
 
     mail_enabled = os.getenv("RESUME_INTEL_MAIL_ENABLED", "0").lower() in {"1", "true", "yes"}
     if mail_enabled:

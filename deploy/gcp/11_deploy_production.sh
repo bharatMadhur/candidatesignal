@@ -29,6 +29,7 @@ else
   git fetch origin '${PRODUCTION_GIT_REF}'
   git checkout --detach FETCH_HEAD
 fi
+export RESUME_INTEL_BUILD_SHA=\$(git rev-parse --short=12 HEAD)
 docker compose -f docker-compose.gcp.yml --env-file .env up -d --build api worker ui
 docker compose -f docker-compose.gcp.yml --env-file .env up -d --no-deps --force-recreate caddy
 docker compose -f docker-compose.gcp.yml --env-file .env exec -T api python scripts/migrate_db.py

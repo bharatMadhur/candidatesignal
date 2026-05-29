@@ -19,8 +19,6 @@ class CandidateReviewSignalTests(unittest.TestCase):
         with (
             patch.object(web, "load_candidate_db", return_value=raw_record),
             patch.object(web, "list_matches_for_candidate", return_value=[]),
-            patch.object(web, "find_matches_for_record", return_value=[]),
-            patch.object(web, "persist_matches"),
             patch.object(web, "reviewed_candidate_signals_db", return_value=["role_fact_review"]),
             patch.object(web, "_can_view_pii", return_value=False),
             patch.object(web, "public_candidate_record", side_effect=lambda record, **_kwargs: dict(record)),

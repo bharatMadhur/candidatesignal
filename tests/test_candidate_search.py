@@ -14,8 +14,10 @@ class _Result:
 class _SearchConnection:
     def __init__(self, responses):
         self.responses = list(responses)
+        self.calls = []
 
-    def execute(self, *_args, **_kwargs):
+    def execute(self, *args, **_kwargs):
+        self.calls.append(args)
         return _Result(self.responses.pop(0))
 
 
@@ -125,3 +127,16 @@ def test_exact_search_returns_canonical_candidate_when_old_version_matches(monke
     assert result[0]["document_id"] == "new-doc"
     assert result[0]["version_source_document_id"] == "old-doc"
     assert result[0]["evidence"][0]["source_label"] == "Exact candidate identity/version match"
+
+
+def test_semantic_search_uses_nearest_chunk_recall_before_grouping(monkeypatch):
+    connection = _SearchConnection([[]])
+    monkeypatch.setattr(vector_search, "db", lambda: _SearchDb(connection))
+    monkeypatch.setattr(vector_search, "embed_text_real", lambda _text: ([0.1] * vector_search.OPENAI_EMBEDDING_DIMENSIONS, "openai/text-embedding-3-small"))
+    monkeypatch.setattr(vector_search, "canonical_candidate_map", lambda tenant_id: {})
+
+    vector_search.semantic_candidate_scores("data engineer", tenant_id="tenant-1", limit=25)
+
+    sql = connection.calls[0][0]
+    assert "with nearest_chunks as" in sql.lower()
+    assert "order by candidate_search_chunks.embedding <=>" in sql.lower()

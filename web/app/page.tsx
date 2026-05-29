@@ -37,7 +37,6 @@ import {
   CampaignScorecard,
   CandidateMaintenanceJob,
   CandidateSummary,
-  CollaborationComment,
   LinkedInImportJob,
   LinkedInVerificationRun,
   AuditEvent,
@@ -56,7 +55,6 @@ import {
   RequirementMatch,
   RequirementMatchRun,
   RequirementMatchRunChange,
-  RecruiterTask,
   TeamMember,
   Tenant,
   TenantAdminDetail,
@@ -85,16 +83,12 @@ import {
   createCampaign,
   createCampaignRequirement,
   createCandidateRederiveJob,
-  createCollaborationComment,
-  createRecruiterTask,
   createTenant,
   createRequirement,
   createRequirementFromCopilotThread,
   decideCandidateVersion,
   decideCandidatePortalAccessRequest,
-  deleteCollaborationComment,
   deleteCandidate,
-  deleteRecruiterTask,
   getTeam,
   getCampaign,
   getCandidateDocumentHtml,
@@ -136,11 +130,9 @@ import {
   listOperationalAlerts,
   listPiiAccessEvents,
   listCandidateMaintenanceJobs,
-  listCollaborationComments,
   listMailMessages,
   listParseDeadLetters,
   listParseBatches,
-  listRecruiterTasks,
   listRequirements,
   listTenants,
   me,
@@ -176,7 +168,6 @@ import {
   updateCandidateProfile,
   updateCampaignScorecard,
   updateGovernancePolicy,
-  updateRecruiterTask,
   uploadCampaignRequirement,
   uploadCandidatePortalResume,
   verifyLinkedInProfile,
@@ -188,18 +179,33 @@ import {
 import { authClient, signInCandidateWithGoogle, signInWithBetterAuth } from "../lib/auth-client";
 import { BrandMark } from "./components/brand";
 import { CandidateCoachChat, CandidateEditorCoachTools, CandidateJobAiEditor, CandidateVisibilityPanel } from "./components/candidate-coach-panels";
+import { CollaborationPanel } from "./components/collaboration-panel";
+import { CandidateCorrectionPanel } from "./components/candidate-correction-panel";
 import { CandidateHomeCommandCenter } from "./components/candidate-home-command-center";
 import { CandidatePreParsePreview } from "./components/candidate-pre-parse-preview";
 import { CandidateResumeDocumentEditor, candidateStarterResumeProfile } from "./components/candidate-resume-document-editor";
 import { CandidateAtsConfidencePanel, CandidateCvPreview, CandidateTemplateSelector, CandidateVersionDiffPanel } from "./components/candidate-resume-export-panels";
 import { CandidateResumeGuidedForm } from "./components/candidate-resume-guided-form";
 import { CandidateAccessRequestsPanel, CandidateApplicationTracker, CandidateSharePanel } from "./components/candidate-sharing-panels";
+import {
+  LinkedInVerificationSummary,
+  NoteTypeButtons,
+  PiiGroup,
+  VerificationRow,
+  isLinkedInVerified,
+  linkedinMatchConfidence,
+  linkedinVerificationLabel,
+  linkedinVerificationStatus,
+} from "./components/candidate-detail-widgets";
 import { CandidatePracticalJobBoard, CandidateScratchBuilderGuide } from "./components/candidate-job-board";
 import { CandidateTable } from "./components/candidate-table";
+import { CandidateWorkEducationTimeline } from "./components/candidate-timeline-panel";
 import { CandidateUploadList } from "./components/candidate-upload-list";
 import { CandidateVersionDatabase } from "./components/candidate-version-database";
 import { CandidateVersionEditorOverlay } from "./components/candidate-version-editor-overlay";
+import { CandidateVersionReview } from "./components/candidate-version-review";
 import { EmptyPanel, Metric, ProgressBar } from "./components/primitives";
+import { MatchResults, RequirementIntake } from "./components/requirement-matching";
 import { RECRUITER_COPY, WORKSPACE_NAV_LABELS } from "./components/recruiter-language";
 import {
   campaignCandidateVisibleInPipeline,
@@ -218,7 +224,6 @@ import {
   type CampaignScorecardForm,
 } from "./lib/campaign-workflow";
 import {
-  candidateVersionCompareRows,
   candidateVersionDocumentLabel,
   candidateVersionLinks,
   candidateVersionSummary,
@@ -240,10 +245,6 @@ import {
   candidateCorrectionForm,
   candidateCorrectionPayload,
   coverageGapReasons,
-  emptyEducationCorrection,
-  emptyExperienceCorrection,
-  type CandidateCorrectionEducation,
-  type CandidateCorrectionExperience,
   type CandidateCorrectionForm,
 } from "./lib/candidate-corrections";
 import {
@@ -252,11 +253,10 @@ import {
   candidateEducationTimelineEvents,
   dedupeTimelineEvents,
   educationDateLabel,
-  isEducationTimelineEvent,
   normalizeComparableText,
-  timelineDateRangeLabel,
   timelineYearMarkers,
 } from "./lib/candidate-timeline";
+import { candidateLocationChips } from "./lib/candidate-location";
 import {
   applyDatabaseFilters,
   candidateNoteSignalDisplay,
@@ -270,16 +270,7 @@ import {
   topDomainCounts,
   type CandidateReviewSignal,
 } from "./lib/candidate-database";
-import {
-  gapItems,
-  hasMatchGaps,
-  matchDistribution,
-  matchFilterHit,
-  matchNextAction,
-  profileAnswerValue,
-  requirementStructuredFields,
-  type MatchFilter,
-} from "./lib/matching-display";
+import { matchDistribution } from "./lib/matching-display";
 import {
   buildRecruiterEvidenceRows,
   evidenceSourceLabel,
@@ -302,7 +293,7 @@ import {
 } from "./lib/copilot";
 import { inferTargetRoleFromRequirement } from "./lib/candidate-job-fit";
 import { candidateProfileHasContent, candidateResumeFromProfile } from "./lib/candidate-resume-profile";
-import { domainLabel, formatBytes, formatDateTime, humanizeLabel, shortHash, splitCommaList, textValue, toTextList } from "./lib/format";
+import { domainLabel, formatDateTime, humanizeLabel, splitCommaList, textValue, toTextList } from "./lib/format";
 import { DOCUMENT_FILE_ACCEPT, DOCUMENT_FORMAT_LABEL, resolveLoginIdentifier } from "./lib/login";
 import { copyCurrentUrl, parseWorkspaceRoute, routeHasDeepLink, type CampaignDetailTab, type CandidateDetailTab, type View, type WorkspaceRoute } from "./lib/workspace-route";
 
@@ -5379,8 +5370,6 @@ function OperationsView(props: {
   );
 }
 
-type ResolutionFilter = "all" | "suggested" | "versioned" | "separate" | "review_later";
-
 function CandidateDetail({
   candidate,
   token,
@@ -5502,7 +5491,7 @@ function CandidateDetail({
   const locationSignals = locationIntel?.location_signals ?? locationIntel?.countries_associated ?? candidate.derived?.countries_associated ?? [];
   const latestJobLocation = textValue(locationIntel?.latest_role_location) || textValue(locationIntel?.current_job_location) || textValue(candidate.experience?.[0]?.location);
   const resumeHeaderLocation = textValue(locationIntel?.resume_header_location) || textValue(candidate.contact?.location);
-  const currentLocation = resumeHeaderLocation || textValue(locationIntel?.current_location) || latestJobLocation;
+  const currentLocation = resumeHeaderLocation || textValue(locationIntel?.current_location);
   const currentLocationSource = resumeHeaderLocation && currentLocation === resumeHeaderLocation ? "resume_header" : textValue(locationIntel?.current_location_source);
   const coverage = candidate.primary_key_coverage;
   const coverageScore = Number(coverage?.score ?? 0);
@@ -5514,7 +5503,7 @@ function CandidateDetail({
     candidate.contact?.phone ? { label: "Phone", value: candidate.contact.phone, source: "Parsed contact field", query: [candidate.contact.phone] } : null,
     linkedinProfileUrls.length ? { label: "LinkedIn", value: linkedinProfileUrls[0], source: "Deterministic PII/link extraction", query: linkedinProfileUrls.slice(0, 2) } : null,
     portfolioUrls.length ? { label: "Portfolio", value: portfolioUrls[0], source: "Deterministic PII/link extraction", query: portfolioUrls.slice(0, 2) } : null,
-    currentLocation ? { label: "Current location", value: currentLocation, source: currentLocationSource === "resume_header" ? "Resume contact/header location" : "Latest experience location", query: [currentLocation] } : null,
+    currentLocation ? { label: "Current location", value: currentLocation, source: currentLocationSource === "resume_header" ? "Resume contact/header location" : "Explicit current/profile location", query: [currentLocation] } : null,
     latestJobLocation ? { label: "Latest role location", value: latestJobLocation, source: "Latest experience location", query: [latestJobLocation] } : null,
     resumeHeaderLocation ? { label: "Resume header location", value: resumeHeaderLocation, source: "Resume contact/header location", query: [resumeHeaderLocation] } : null,
     hr?.current_title ? { label: "Current title", value: hr.current_title, source: "Derived HR profile", query: [hr.current_title] } : null,
@@ -6213,7 +6202,7 @@ function CandidateDetail({
                 <div><span>Coverage</span><strong>{coverage ? `${Math.round(coverage.score * 100)}%` : "Unknown"}</strong></div>
                 <div><span>Experience</span><strong>{formatYears(accounting?.total_years_unique ?? hr?.total_years_experience)}</strong></div>
                 <div><span>Top domain</span><strong>{domainRows[0] ? domainLabel(domainRows[0].domain) : "Not found"}</strong></div>
-                <div><span>Location</span><strong>{currentLocation || resumeHeaderLocation || "Unknown"}</strong></div>
+                <div><span>Location</span><strong>{currentLocation || "Current location not stated"}</strong></div>
                 <div><span>LinkedIn</span><strong>{linkedinVerified ? (linkedinConfidenceLabel ?? "Verified") : primaryLinkedIn ? "Not verified" : "Not found"}</strong></div>
                 <div><span>Versions</span><strong>{versionSummary.quickFact}</strong></div>
               </div>
@@ -6289,62 +6278,6 @@ function CandidateDetail({
   );
 }
 
-function LinkedInVerificationSummary({ run, external }: { run: LinkedInVerificationRun | null; external: any }) {
-  const comparison = run?.comparison && Object.keys(run.comparison).length ? run.comparison : external?.comparison ?? {};
-  const diff = run?.profile_diff && Object.keys(run.profile_diff).length ? run.profile_diff : external?.diff ?? {};
-  const reasons = toTextList(comparison.reasons ?? []);
-  const gaps = toTextList(comparison.gaps ?? []);
-  const summary = toTextList(diff.summary ?? []);
-  if (!run && !external?.profile) {
-    return <p className="muted">Not checked yet. Verification runs securely on the server.</p>;
-  }
-  if (run?.status === "queued" || run?.status === "running") {
-    return (
-      <div className="linkedinVerifySummary">
-        <ProgressBar value={run.status === "running" ? 65 : 20} />
-        <span>{domainLabel(run.stage ?? run.status)}</span>
-      </div>
-    );
-  }
-  if (run?.status === "failed") {
-    return <p className="muted">Verification failed: {run.error_message || "provider error"}</p>;
-  }
-  return (
-    <div className="linkedinVerifySummary">
-      <div className="compactMetaList">
-        <div><span>Match confidence</span><strong>{typeof comparison.match_confidence === "number" ? `${Math.round(comparison.match_confidence * 100)}%` : "Unknown"}</strong></div>
-        <div><span>Last checked</span><strong>{formatDateTime(run?.completed_at)}</strong></div>
-      </div>
-      {reasons.length ? <ul>{reasons.slice(0, 3).map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul> : null}
-      {!reasons.length && summary.length ? <ul>{summary.slice(0, 3).map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul> : null}
-      {gaps.length ? <p className="muted">{gaps[0]}</p> : null}
-    </div>
-  );
-}
-
-function linkedinMatchConfidence(run: LinkedInVerificationRun | null, external: any): number | null {
-  const direct = run?.match_confidence;
-  if (typeof direct === "number") return direct;
-  const comparison = run?.comparison && Object.keys(run.comparison).length ? run.comparison : external?.comparison ?? {};
-  return typeof comparison.match_confidence === "number" ? comparison.match_confidence : null;
-}
-
-function linkedinVerificationStatus(run: LinkedInVerificationRun | null, external: any) {
-  const status = run?.status === "succeeded" ? run.result_status : run?.status;
-  return String(status || external?.comparison?.status || "not_checked").replaceAll("_", "-");
-}
-
-function linkedinVerificationLabel(run: LinkedInVerificationRun | null, external: any) {
-  const status = run?.status === "succeeded" ? run.result_status : run?.status;
-  return domainLabel(status || external?.comparison?.status || "not checked");
-}
-
-function isLinkedInVerified(run: LinkedInVerificationRun | null, verificationItem: any, external: any) {
-  if (run?.status === "succeeded" && run.result_status === "verified") return true;
-  if (verificationItem?.status === "verified") return true;
-  return external?.comparison?.status === "verified";
-}
-
 function noteSignalItems(signals: any): Array<{ category: string; label: string; value?: string | null }> {
   if (Array.isArray(signals?.signals)) return signals.signals;
   const grouped = signals?.by_category ?? {};
@@ -6356,442 +6289,6 @@ function noteSignalItems(signals: any): Array<{ category: string; label: string;
 function noteSignalCount(signals: any) {
   if (typeof signals?.count === "number") return signals.count;
   return noteSignalItems(signals).length;
-}
-
-function CandidateWorkEducationTimeline({
-  rows,
-  markers,
-  uniqueExperience,
-}: {
-  rows: any[];
-  markers: number[];
-  uniqueExperience: string;
-}) {
-  return (
-    <section className="candidateReportTimeline cleanTimeline workEducationTimeline">
-      <div className="timelineHeader">
-        <div>
-          <h3>Work & Education Timeline</h3>
-          <p>Employment, same-company project workstreams, and dated education are shown together. Red bars only indicate true cross-company overlap.</p>
-        </div>
-        <div className="timelineAccounting">
-          <span>Unique work experience</span>
-          <strong>{uniqueExperience}</strong>
-        </div>
-      </div>
-      {rows.length ? (
-        <div className="timelineBoard">
-          <div className="timelineYearAxis">
-            <span />
-            <div>
-              {markers.map((year) => <b key={year}>{year}</b>)}
-            </div>
-          </div>
-          {rows.slice(0, 14).map((item: any, index: number) => {
-            const isEducation = isEducationTimelineEvent(item);
-            return (
-              <article className={`timelineRow ${isEducation ? "educationTimelineRow" : ""} ${item.crossCompanyOverlap ? "crossOverlap" : ""}`.trim()} key={item.id ?? index}>
-                <div className="timelineRoleLabel">
-                  <span className={isEducation ? "timelineType education" : "timelineType work"}>{isEducation ? "Education" : "Work"}</span>
-                  <strong>{item.title ?? (isEducation ? "Education" : "Role")}</strong>
-                  <span>{item.organization ?? (isEducation ? "School not extracted" : "Unknown company")}</span>
-                  <em>{timelineDateRangeLabel(item, isEducation)}</em>
-                </div>
-                <div className="timelineTrack">
-                  <i style={{ left: `${Math.max(0, Math.min(96, Number(item.left ?? 0)))}%`, width: `${Math.max(4, Math.min(100, Number(item.width ?? 100)))}%` }} />
-                  {item.crossCompanyOverlap ? <b>Cross-company overlap</b> : null}
-                </div>
-                {item.summary ? <p>{item.summary}</p> : null}
-                {item.workstreams?.length ? <WorkstreamList workstreams={item.workstreams} /> : null}
-              </article>
-            );
-          })}
-        </div>
-      ) : <EmptyPanel title="No dated timeline extracted" body="The parser did not extract dated work or education history. Review the source evidence panel or reparse this CV." />}
-    </section>
-  );
-}
-
-type CandidateCorrectionTextField = Exclude<keyof CandidateCorrectionForm, "experience" | "education">;
-
-function CandidateCorrectionPanel({
-  form,
-  setForm,
-  save,
-  cancel,
-}: {
-  form: CandidateCorrectionForm;
-  setForm: (form: CandidateCorrectionForm) => void;
-  save: () => void;
-  cancel: () => void;
-}) {
-  const update = (key: CandidateCorrectionTextField, value: string) => setForm({ ...form, [key]: value });
-  const updateExperience = (index: number, key: keyof CandidateCorrectionExperience, value: string) => {
-    setForm({
-      ...form,
-      experience: form.experience.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item),
-    });
-  };
-  const updateEducation = (index: number, key: keyof CandidateCorrectionEducation, value: string) => {
-    setForm({
-      ...form,
-      education: form.education.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item),
-    });
-  };
-  const addExperience = () => setForm({ ...form, experience: [...form.experience, emptyExperienceCorrection()] });
-  const removeExperience = (index: number) => setForm({ ...form, experience: form.experience.filter((_, itemIndex) => itemIndex !== index) });
-  const addEducation = () => setForm({ ...form, education: [...form.education, emptyEducationCorrection()] });
-  const removeEducation = (index: number) => setForm({ ...form, education: form.education.filter((_, itemIndex) => itemIndex !== index) });
-  return (
-    <section className="candidateCorrectionPanel">
-      <div>
-        <span className="reportLabel">Manual correction</span>
-        <h3>Edit extracted profile data</h3>
-        <p>Use this when the parser missed or confused a field. The original CV stays unchanged; these corrections update the candidate profile, timeline, coverage, search index, and matching context.</p>
-      </div>
-      <section className="candidateCorrectionSection">
-        <div className="candidateCorrectionSubhead">
-          <strong>Basics</strong>
-          <span>Identity, contact, location, and headline fields.</span>
-        </div>
-        <div className="candidateCorrectionGrid">
-          <label><span>Name</span><input value={form.name} onChange={(event) => update("name", event.target.value)} /></label>
-          <label><span>Email</span><input value={form.email} onChange={(event) => update("email", event.target.value)} /></label>
-          <label><span>Phone</span><input value={form.phone} onChange={(event) => update("phone", event.target.value)} /></label>
-          <label><span>Current location</span><input value={form.location} onChange={(event) => update("location", event.target.value)} /></label>
-          <label><span>Current title</span><input value={form.current_title} onChange={(event) => update("current_title", event.target.value)} /></label>
-          <label><span>Current company</span><input value={form.current_company} onChange={(event) => update("current_company", event.target.value)} /></label>
-          <label><span>Total years</span><input value={form.total_years_experience} onChange={(event) => update("total_years_experience", event.target.value)} /></label>
-          <label><span>Countries</span><input value={form.countries} onChange={(event) => update("countries", event.target.value)} placeholder="United States, India" /></label>
-          <label className="wide"><span>Summary</span><textarea value={form.summary} onChange={(event) => update("summary", event.target.value)} /></label>
-          <label className="wide"><span>Skills</span><textarea value={form.skills} onChange={(event) => update("skills", event.target.value)} placeholder="Python, Spark, Databricks" /></label>
-          <label className="wide"><span>Certifications</span><textarea value={form.certifications} onChange={(event) => update("certifications", event.target.value)} placeholder="AWS Solutions Architect, PMP" /></label>
-        </div>
-      </section>
-      <section className="candidateCorrectionSection">
-        <div className="candidateCorrectionSubhead">
-          <strong>Work history & dates</strong>
-          <span>These rows drive the visible timeline and non-overlapping experience calculation.</span>
-          <button className="plain small" type="button" onClick={addExperience}>Add role</button>
-        </div>
-        <div className="candidateEditableList">
-          {form.experience.length ? form.experience.map((item, index) => (
-            <article className="candidateEditableCard" key={`experience-${index}`}>
-              <div className="candidateEditableCardHeader">
-                <strong>Role {index + 1}</strong>
-                <button className="plain danger small" type="button" onClick={() => removeExperience(index)}>Remove</button>
-              </div>
-              <div className="candidateCorrectionGrid">
-                <label><span>Company</span><input value={item.company} onChange={(event) => updateExperience(index, "company", event.target.value)} /></label>
-                <label><span>Title</span><input value={item.title} onChange={(event) => updateExperience(index, "title", event.target.value)} /></label>
-                <label><span>Location</span><input value={item.location} onChange={(event) => updateExperience(index, "location", event.target.value)} placeholder="City, country, remote" /></label>
-                <label><span>Start date</span><input value={item.start_date} onChange={(event) => updateExperience(index, "start_date", event.target.value)} placeholder="2022-01" /></label>
-                <label><span>End date</span><input value={item.end_date} onChange={(event) => updateExperience(index, "end_date", event.target.value)} placeholder="Present" /></label>
-                <label className="wide"><span>Bullets</span><textarea value={item.bullets} onChange={(event) => updateExperience(index, "bullets", event.target.value)} placeholder="One bullet per line" /></label>
-              </div>
-            </article>
-          )) : <EmptyPanel title="No work history rows" body="Add roles here if the parser missed the candidate's experience." />}
-        </div>
-      </section>
-      <section className="candidateCorrectionSection">
-        <div className="candidateCorrectionSubhead">
-          <strong>Education</strong>
-          <span>Education appears in the candidate report and matching context.</span>
-          <button className="plain small" type="button" onClick={addEducation}>Add education</button>
-        </div>
-        <div className="candidateEditableList">
-          {form.education.length ? form.education.map((item, index) => (
-            <article className="candidateEditableCard" key={`education-${index}`}>
-              <div className="candidateEditableCardHeader">
-                <strong>Education {index + 1}</strong>
-                <button className="plain danger small" type="button" onClick={() => removeEducation(index)}>Remove</button>
-              </div>
-              <div className="candidateCorrectionGrid">
-                <label><span>School</span><input value={item.school} onChange={(event) => updateEducation(index, "school", event.target.value)} /></label>
-                <label><span>Degree</span><input value={item.degree} onChange={(event) => updateEducation(index, "degree", event.target.value)} /></label>
-                <label><span>Field</span><input value={item.field} onChange={(event) => updateEducation(index, "field", event.target.value)} /></label>
-                <label><span>Location</span><input value={item.location} onChange={(event) => updateEducation(index, "location", event.target.value)} /></label>
-                <label><span>Start date</span><input value={item.start_date} onChange={(event) => updateEducation(index, "start_date", event.target.value)} /></label>
-                <label><span>End date</span><input value={item.end_date} onChange={(event) => updateEducation(index, "end_date", event.target.value)} /></label>
-                <label className="wide"><span>Details</span><textarea value={item.details} onChange={(event) => updateEducation(index, "details", event.target.value)} placeholder="One detail per line" /></label>
-              </div>
-            </article>
-          )) : <EmptyPanel title="No education rows" body="Add education if the CV contains it but parsing missed it." />}
-        </div>
-      </section>
-      <div className="candidateCorrectionActions">
-        <button className="plain" onClick={cancel}>Cancel</button>
-        <button className="primary" onClick={save}>Save corrections</button>
-      </div>
-    </section>
-  );
-}
-
-function WorkstreamList({ workstreams }: { workstreams: Array<{ name?: string | null; start_date?: string | null; end_date?: string | null; bullets?: string[] }> }) {
-  return (
-    <div className="workstreamList">
-      <span>Same-company workstreams</span>
-      {workstreams.slice(0, 5).map((item, index) => (
-        <article key={`${item.name ?? "workstream"}-${index}`}>
-          <strong>{item.name ?? "Workstream"}</strong>
-          <em>{item.start_date ?? "Unknown"} - {item.end_date ?? "Present"}</em>
-          {item.bullets?.[0] ? <p>{item.bullets[0]}</p> : null}
-        </article>
-      ))}
-    </div>
-  );
-}
-
-function NoteTypeButtons({ setNoteName }: { setNoteName: (value: string) => void }) {
-  const types = ["Screening", "Client Feedback", "Concern", "Salary", "Availability"];
-  return (
-    <div className="noteTypeButtons" aria-label="Recruiter note types">
-      {types.map((type) => <button className="plain small" type="button" key={type} onClick={() => setNoteName(type)}>{type}</button>)}
-    </div>
-  );
-}
-
-function CollaborationPanel({
-  token,
-  entityType,
-  entityId,
-  teamMembers,
-  compact = false,
-}: {
-  token: string;
-  entityType: "candidate" | "campaign" | "campaign_candidate";
-  entityId: string;
-  teamMembers: TeamMember[];
-  compact?: boolean;
-}) {
-  const [comments, setComments] = useState<CollaborationComment[]>([]);
-  const [tasks, setTasks] = useState<RecruiterTask[]>([]);
-  const [commentBody, setCommentBody] = useState("");
-  const [commentVisibility, setCommentVisibility] = useState("team");
-  const [taskTitle, setTaskTitle] = useState("");
-  const [taskBody, setTaskBody] = useState("");
-  const [taskAssignee, setTaskAssignee] = useState("");
-  const [taskPriority, setTaskPriority] = useState("normal");
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const activeTeamMembers = teamMembers.filter((member) => member.status === "active");
-
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-    setError("");
-    Promise.all([
-      listCollaborationComments(token, entityType, entityId),
-      listRecruiterTasks(token, { entity_type: entityType, entity_id: entityId }),
-    ])
-      .then(([commentResult, taskResult]) => {
-        if (!active) return;
-        setComments(commentResult.comments);
-        setTasks(taskResult.tasks);
-      })
-      .catch((loadError) => {
-        if (active) setError(readableError(loadError));
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [entityId, entityType, token]);
-
-  async function refresh() {
-    const [commentResult, taskResult] = await Promise.all([
-      listCollaborationComments(token, entityType, entityId),
-      listRecruiterTasks(token, { entity_type: entityType, entity_id: entityId }),
-    ]);
-    setComments(commentResult.comments);
-    setTasks(taskResult.tasks);
-  }
-
-  async function addComment() {
-    if (!commentBody.trim() || saving) return;
-    setSaving(true);
-    setError("");
-    try {
-      const result = await createCollaborationComment(token, {
-        entity_type: entityType,
-        entity_id: entityId,
-        body: commentBody,
-        visibility: commentVisibility,
-      });
-      setComments((value) => [...value, result.comment]);
-      setCommentBody("");
-    } catch (commentError) {
-      setError(readableError(commentError));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function removeComment(commentId: string) {
-    setSaving(true);
-    setError("");
-    try {
-      await deleteCollaborationComment(token, commentId);
-      setComments((value) => value.filter((comment) => comment.id !== commentId));
-    } catch (deleteError) {
-      setError(readableError(deleteError));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function addTask() {
-    if (!taskTitle.trim() || saving) return;
-    setSaving(true);
-    setError("");
-    try {
-      const result = await createRecruiterTask(token, {
-        entity_type: entityType,
-        entity_id: entityId,
-        title: taskTitle,
-        body: taskBody,
-        assignee_user_id: taskAssignee || null,
-        priority: taskPriority,
-      });
-      setTasks((value) => [result.task, ...value]);
-      setTaskTitle("");
-      setTaskBody("");
-      setTaskAssignee("");
-      setTaskPriority("normal");
-    } catch (taskError) {
-      setError(readableError(taskError));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function updateTaskStatus(taskId: string, status: "open" | "in_progress" | "done" | "cancelled") {
-    setSaving(true);
-    setError("");
-    try {
-      const result = await updateRecruiterTask(token, taskId, { status });
-      setTasks((value) => value.map((task) => task.id === taskId ? result.task : task));
-    } catch (taskError) {
-      setError(readableError(taskError));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function removeTask(taskId: string) {
-    setSaving(true);
-    setError("");
-    try {
-      await deleteRecruiterTask(token, taskId);
-      setTasks((value) => value.filter((task) => task.id !== taskId));
-    } catch (taskError) {
-      setError(readableError(taskError));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const openTasks = tasks.filter((task) => !["done", "cancelled"].includes(task.status));
-  const completedTasks = tasks.filter((task) => task.status === "done");
-  const entityLabel = entityType === "campaign_candidate" ? "candidate in this campaign" : entityType;
-
-  return (
-    <section className={compact ? "collaborationPanel handoffPanel compact" : "collaborationPanel handoffPanel"}>
-      <header className="collaborationHeader">
-        <div>
-          <span className="reportLabel">Team Handoff</span>
-          <h3>Shared context</h3>
-          <p>Leave internal notes, mention teammates, and assign follow-ups for this {entityLabel}.</p>
-        </div>
-        <div className="handoffHeaderActions">
-          <span>{openTasks.length} open</span>
-          <span>{comments.length} comments</span>
-          <button className="plain small" type="button" onClick={() => void refresh()} disabled={loading || saving}>
-            {loading ? "Loading..." : "Refresh"}
-          </button>
-        </div>
-      </header>
-      {error ? <p className="noteSaveFeedback error">{error}</p> : null}
-      <div className="collaborationGrid">
-        <article className="collaborationComposer">
-          <strong>Team note</strong>
-          <textarea
-            value={commentBody}
-            onChange={(event) => setCommentBody(event.target.value)}
-            placeholder="Add context for the team. Use @email if someone needs to see it."
-          />
-          <div className="collaborationControls">
-            <select value={commentVisibility} onChange={(event) => setCommentVisibility(event.target.value)}>
-              <option value="team">Team visible</option>
-              <option value="private">Private to me</option>
-              <option value="client_ready">Client-ready note</option>
-            </select>
-            <button className="secondary small" type="button" onClick={() => void addComment()} disabled={saving || !commentBody.trim()}>Post</button>
-          </div>
-        </article>
-        <article className="collaborationComposer">
-          <strong>Follow-up</strong>
-          <input value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} placeholder="Task title" />
-          <textarea value={taskBody} onChange={(event) => setTaskBody(event.target.value)} placeholder="What should happen next?" />
-          <div className="collaborationControls">
-            <select value={taskAssignee} onChange={(event) => setTaskAssignee(event.target.value)}>
-              <option value="">Unassigned</option>
-              {activeTeamMembers.map((member) => <option key={member.id} value={member.user_id}>{member.email}</option>)}
-            </select>
-            <select value={taskPriority} onChange={(event) => setTaskPriority(event.target.value)}>
-              <option value="normal">Normal</option>
-              <option value="high">High</option>
-              <option value="urgent">Urgent</option>
-              <option value="low">Low</option>
-            </select>
-            <button className="secondary small" type="button" onClick={() => void addTask()} disabled={saving || !taskTitle.trim()}>Create</button>
-          </div>
-        </article>
-      </div>
-      <div className="collaborationLists">
-        <section className="collaborationList">
-          <div className="collaborationListHeader">
-            <strong>Follow-ups</strong>
-            <span>{openTasks.length}</span>
-          </div>
-          {openTasks.length ? openTasks.slice(0, compact ? 4 : 8).map((task) => (
-            <article className="collaborationItem task" key={task.id}>
-              <div>
-                <strong>{task.title}</strong>
-                {task.body ? <p>{task.body}</p> : null}
-                <span>{task.assignee_email ? `Assigned to ${task.assignee_email}` : "Unassigned"} · {domainLabel(task.priority)} · {formatDateTime(task.created_at)}</span>
-              </div>
-              <div className="collaborationItemActions">
-                {task.status === "open" ? <button className="plain small" type="button" onClick={() => void updateTaskStatus(task.id, "in_progress")}>Start</button> : null}
-                <button className="secondary small" type="button" onClick={() => void updateTaskStatus(task.id, "done")}>Done</button>
-                <button className="plain small danger" type="button" onClick={() => void removeTask(task.id)}>Delete</button>
-              </div>
-            </article>
-          )) : <p className="muted">No open tasks for this item.</p>}
-          {completedTasks.length ? <span className="collaborationCompleteCount">{completedTasks.length} completed</span> : null}
-        </section>
-        <section className="collaborationList">
-          <div className="collaborationListHeader">
-            <strong>Shared notes</strong>
-            <span>{comments.length}</span>
-          </div>
-          {comments.length ? comments.slice(0, compact ? 4 : 10).map((comment) => (
-            <article className="collaborationItem" key={comment.id}>
-              <div>
-                <strong>{comment.user_name || comment.user_email || "Team member"}</strong>
-                <p>{comment.body}</p>
-                <span>{domainLabel(comment.visibility)} · {formatDateTime(comment.created_at)}</span>
-              </div>
-              <button className="plain small danger" type="button" onClick={() => void removeComment(comment.id)}>Delete</button>
-            </article>
-          )) : <p className="muted">No team comments yet.</p>}
-        </section>
-      </div>
-    </section>
-  );
 }
 
 function CandidateVersionRail({
@@ -6855,382 +6352,6 @@ function CandidateVersionRail({
         )}
       </div>
     </aside>
-  );
-}
-
-function candidateLocationChips(signals: unknown, currentLocation: string) {
-  const chips: Array<{ label: string; current: boolean }> = [];
-  const seen = new Set<string>();
-  const current = normalizeComparableText(currentLocation);
-  if (currentLocation) addLocationChip(chips, seen, currentLocation, true);
-  for (const signal of Array.isArray(signals) ? signals : []) {
-    const label = locationSignalLabel(signal);
-    if (!label) continue;
-    const normalized = normalizeComparableText(label);
-    const isCurrent = Boolean(current && (normalized.includes(current) || current.includes(normalized)));
-    addLocationChip(chips, seen, label, isCurrent);
-  }
-  return chips.slice(0, 10);
-}
-
-function addLocationChip(chips: Array<{ label: string; current: boolean }>, seen: Set<string>, label: string, current: boolean) {
-  const key = normalizeComparableText(label);
-  if (!key) return;
-  const existing = chips.find((item) => normalizeComparableText(item.label) === key);
-  if (existing) {
-    existing.current = existing.current || current;
-    return;
-  }
-  if (seen.has(key)) return;
-  seen.add(key);
-  chips.push({ label, current });
-}
-
-function locationSignalLabel(signal: unknown) {
-  if (typeof signal === "string") return signal;
-  if (!signal || typeof signal !== "object") return "";
-  const item = signal as Record<string, unknown>;
-  const location = textValue(item.location ?? item.current_location ?? item.city);
-  const region = textValue(item.region ?? item.state);
-  const country = textValue(item.country ?? item.country_name);
-  const combined = [location, region, country].filter(Boolean).join(", ");
-  return combined || textValue(item.label ?? item.name ?? item.value);
-}
-
-function PiiGroup({ label, values, compact = false }: { label: string; values: unknown; compact?: boolean }) {
-  const list = toTextList(Array.isArray(values) ? values : []).slice(0, compact ? 6 : 4);
-  return (
-    <article className="piiGroup">
-      <strong>{label}</strong>
-      {list.length ? (
-        <div>
-          {list.map((item, index) => item.startsWith("http") ? (
-            <a key={`${item}-${index}`} href={item} target="_blank" rel="noreferrer">{item}</a>
-          ) : (
-            <span key={`${item}-${index}`}>{item}</span>
-          ))}
-        </div>
-      ) : <span className="muted">Not found</span>}
-    </article>
-  );
-}
-
-function VerificationRow({ label, item }: { label: string; item?: { status?: string | null; reason?: string | null } }) {
-  const status = item?.status ?? "missing";
-  return (
-    <article className="verificationRow">
-      <strong>{label}</strong>
-      <span>{domainLabel(status)}</span>
-      <p>{item?.reason ?? "No verification signal found"}</p>
-    </article>
-  );
-}
-
-function RequirementIntake(props: {
-  requirement: Requirement | null;
-  requirementText: string;
-  setRequirementText: (value: string) => void;
-  requirementFile: File | null;
-  setRequirementFile: (file: File | null) => void;
-  clarifyAnswers: Record<string, string>;
-  setClarifyAnswers: (answers: Record<string, string>) => void;
-  createRequirement: () => void;
-  finalize: () => void;
-  match: () => void;
-  requirements: Requirement[];
-  selectRequirement: (requirement: Requirement) => void;
-}) {
-  const locked = props.requirement?.status === "finalized" || props.requirement?.status === "matched";
-  const inputMode = props.requirementFile ? "file" : props.requirementText.trim() ? "text" : "none";
-  const activeProfile = props.requirement?.final_requirement_profile ?? props.requirement?.extracted_requirement_json ?? {};
-  const updateAnswer = (key: string, value: string) => props.setClarifyAnswers({ ...props.clarifyAnswers, [key]: value });
-  return (
-    <section className="requirementPage">
-      <div className="pageTitle centered">
-        <div>
-          <h2>Build Requirement Profile</h2>
-          <p>Extract the job profile, answer clarifying questions, confirm the scorecard, then find matching candidates.</p>
-        </div>
-      </div>
-      <div className="intakeMethods">
-        <label className={inputMode === "file" ? "intakeMethod active" : "intakeMethod"}>
-          <FileUp size={28} />
-          <strong>Upload Requirement</strong>
-          <p>Upload a job description document. The system extracts the role, skills, location preferences, and dealbreakers.</p>
-          <span>{props.requirementFile ? props.requirementFile.name : "Browse files ->"}</span>
-          <input type="file" accept={DOCUMENT_FILE_ACCEPT} onChange={(event) => props.setRequirementFile(event.target.files?.[0] ?? null)} />
-        </label>
-        <article className={inputMode === "text" || inputMode === "none" ? "intakeMethod active" : "intakeMethod"}>
-          <FileSearch size={28} />
-          <strong>Paste Text Requirement</strong>
-          <p>Paste plain text from an email, internal req board, or hiring manager note.</p>
-          <span>Active input</span>
-        </article>
-      </div>
-      <section className="panel requirementTextPanel">
-        <label>Requirement Text</label>
-        <textarea value={props.requirementText} onChange={(event) => props.setRequirementText(event.target.value)} placeholder="Paste job description here..." />
-        <button className="plain" disabled={!props.requirementText.trim() && !props.requirementFile} onClick={props.createRequirement}>Build Profile</button>
-      </section>
-      <section className="panel requirementHistory">
-        <div className="panelHead"><h3>Requirement History</h3><span>{props.requirements.length}</span></div>
-        {props.requirements.slice(0, 5).map((item) => (
-          <button className={props.requirement?.id === item.id ? "historyItem active" : "historyItem"} key={item.id} onClick={() => props.selectRequirement(item)}>
-            <strong>{item.title ?? "Untitled requirement"}</strong>
-            <span>{item.status} | {new Date(item.updated_at).toLocaleDateString()}</span>
-          </button>
-        ))}
-        {!props.requirements.length ? <p className="muted">No saved requirements yet.</p> : null}
-      </section>
-      <section className="clarificationPanel">
-        <h3><ShieldCheck size={20} /> Clarifying Questions</h3>
-        <p>Clarify ambiguous parameters before matching so weak assumptions do not become hard filters.</p>
-        {props.requirement ? (
-          <>
-            <div className="requirementLifecycle">
-              <span className={props.requirement.status === "draft" ? "active" : ""}>1. Extracted</span>
-              <span className={props.requirement.status === "finalized" ? "active" : ""}>2. Confirmed</span>
-              <span className={props.requirement.status === "matched" ? "active" : ""}>3. Matched</span>
-            </div>
-            <section className="requirementSummary">
-              <Metric label="Title" value={props.requirement.title ?? "Untitled"} />
-              <Metric label="Minimum Years" value={`${activeProfile?.min_years_experience ?? "Not set"}`} />
-              <Metric label="Must-Haves" value={`${(activeProfile?.must_have_skills ?? []).length}`} />
-              <Metric label="Locations" value={`${(activeProfile?.required_locations ?? []).length + (activeProfile?.required_countries ?? []).length}`} />
-            </section>
-            <section className="structuredClarification">
-              <div className="cardTitle"><h3>Editable Scorecard</h3><span>These fields directly affect matching</span></div>
-              {requirementStructuredFields.map((field) => (
-                <label key={field.key} className={field.multiline ? "structuredField wide" : "structuredField"}>
-                  <span>{field.label}</span>
-                  {field.multiline ? (
-                    <textarea
-                      disabled={locked}
-                      value={profileAnswerValue(props.clarifyAnswers, props.requirement?.recruiter_answers ?? {}, activeProfile, field)}
-                      onChange={(event) => updateAnswer(field.key, event.target.value)}
-                      placeholder={field.placeholder}
-                    />
-                  ) : (
-                    <input
-                      disabled={locked}
-                      value={profileAnswerValue(props.clarifyAnswers, props.requirement?.recruiter_answers ?? {}, activeProfile, field)}
-                      onChange={(event) => updateAnswer(field.key, event.target.value)}
-                      placeholder={field.placeholder}
-                    />
-                  )}
-                  <small>{field.help}</small>
-                </label>
-              ))}
-            </section>
-            {(props.requirement.clarification_questions ?? []).length ? (
-              <section className="openQuestions">
-                <div className="cardTitle"><h3>Open Questions</h3><span>Additional recruiter context</span></div>
-                {(props.requirement.clarification_questions ?? []).map((question) => (
-                  <label className="question" key={question}>
-                    <span>{question}</span>
-                    <input disabled={locked} value={props.clarifyAnswers[question] ?? props.requirement?.recruiter_answers?.[question] ?? ""} onChange={(event) => updateAnswer(question, event.target.value)} />
-                  </label>
-                ))}
-              </section>
-            ) : null}
-            <div className="actions">
-              <button className="secondary" disabled={locked} onClick={props.finalize}>Confirm requirement</button>
-              <button className="primary" disabled={!locked} onClick={props.match}>{RECRUITER_COPY.matchingButton}</button>
-            </div>
-          </>
-        ) : <p className="muted">Create a requirement to generate clarification questions.</p>}
-      </section>
-    </section>
-  );
-}
-
-function MatchResults({
-  requirement,
-  requirements,
-  matches,
-  matchRuns,
-  matchRunChanges,
-  openCandidate,
-  shortlist,
-  reject,
-  setView,
-  selectRequirement,
-}: {
-  requirement: Requirement | null;
-  requirements: Requirement[];
-  matches: RequirementMatch[];
-  matchRuns: RequirementMatchRun[];
-  matchRunChanges: RequirementMatchRunChange[];
-  openCandidate: (id: string) => void;
-  shortlist: (id: string) => void;
-  reject: (id: string) => void;
-  setView: (view: View) => void;
-  selectRequirement: (requirement: Requirement) => void;
-}) {
-  const [filter, setFilter] = useState<MatchFilter>("all");
-  const [minimumScore, setMinimumScore] = useState(0.3);
-  const matchedRequirements = requirements.filter((item) => item.status === "matched");
-  const scoreBuckets = matchDistribution(matches);
-  const filteredMatches = matches.filter((item) => item.total_score >= minimumScore).filter((item) => matchFilterHit(item, filter));
-  const counts = {
-    all: matches.length,
-    eligible: matches.filter((item) => !(item.evidence?.hard_filter_failures ?? []).length).length,
-    blocked: matches.filter((item) => (item.evidence?.hard_filter_failures ?? []).length).length,
-    shortlisted: matches.filter((item) => item.status === "shortlisted").length,
-    rejected: matches.filter((item) => item.status === "rejected").length,
-  };
-  return (
-    <section className="matchesPage">
-      <div className="pageTitle">
-        <div>
-          <h2>Candidate Recommendations</h2>
-          <p>{requirement ? `Requirement: ${requirement.title ?? "Untitled requirement"}` : "Select or create a confirmed requirement to find matching candidates."}</p>
-        </div>
-        <span>{filteredMatches.length}/{matches.length} candidates shown above {Math.round(minimumScore * 100)}%</span>
-      </div>
-      {!matches.length ? (
-        <section className="panel emptyState">
-          <h3>No recommendations loaded</h3>
-          <p>Create a requirement, answer clarification questions, confirm the profile, then find matching candidates.</p>
-          <button className="primary" onClick={() => setView("requirement")}>Go to Requirements</button>
-        </section>
-      ) : null}
-      {matchedRequirements.length ? (
-        <section className="panel requirementHistory matchHistory">
-          <div className="panelHead"><h3>Matched Requirements</h3><span>{matchedRequirements.length}</span></div>
-          {matchedRequirements.slice(0, 8).map((item) => (
-            <button className={requirement?.id === item.id ? "historyItem active" : "historyItem"} key={item.id} onClick={() => selectRequirement(item)}>
-              <strong>{item.title ?? "Untitled requirement"}</strong>
-              <span>{item.status} | {new Date(item.updated_at).toLocaleDateString()}</span>
-            </button>
-          ))}
-        </section>
-      ) : null}
-      {matchRuns.length ? (
-        <section className="panel matchRunHistory">
-          <div className="panelHead"><h3>Match Run History</h3><span>{matchRuns.length} runs</span></div>
-          <div className="matchRunGrid">
-            {matchRuns.slice(0, 4).map((run) => (
-              <article key={run.id}>
-                <strong>Search #{run.run_number}</strong>
-                <span>{formatDateTime(run.created_at)}</span>
-                <div>
-                  <Metric label="Candidates" value={String(run.candidate_count)} />
-                  <Metric label="Eligible" value={String(run.eligible_count)} />
-                  <Metric label="Top Score" value={`${Math.round(run.top_score * 100)}%`} />
-                  <Metric label="Avg Score" value={`${Math.round(run.average_score * 100)}%`} />
-                </div>
-              </article>
-            ))}
-          </div>
-          {matchRunChanges.length ? (
-            <div className="matchRunChanges">
-              <strong>Latest run comparison</strong>
-              {matchRunChanges.slice(0, 6).map((change) => (
-                <span key={`${change.candidate_id}-${change.change_type}`}>
-                  {change.candidate_name ?? change.candidate_id}: {domainLabel(change.change_type)}
-                  {typeof change.score_delta === "number" ? ` ${change.score_delta > 0 ? "+" : ""}${Math.round(change.score_delta * 100)} pts` : ""}
-                  {change.rank_delta ? ` | rank ${change.rank_delta > 0 ? "+" : ""}${change.rank_delta}` : ""}
-                </span>
-              ))}
-            </div>
-          ) : <p className="muted">Run comparison will appear after at least two match runs.</p>}
-        </section>
-      ) : null}
-      {matches.length ? (
-        <section className="matchDistributionPanel">
-          <div>
-            <span className="eyebrow">Match distribution</span>
-            <h3>Only review candidates above the working threshold</h3>
-            <p>Candidates below 30% stay hidden from the recruiter list. Raise the threshold when the database gets large.</p>
-          </div>
-          <div className="matchGaugeBuckets">
-            {scoreBuckets.map((bucket) => (
-              <button className={minimumScore === bucket.minimum ? "active" : ""} key={bucket.label} onClick={() => setMinimumScore(bucket.minimum)}>
-                <span>{bucket.label}</span>
-                <strong>{bucket.count}</strong>
-                <i style={{ width: `${Math.max(8, Math.min(100, bucket.percent))}%` }} />
-              </button>
-            ))}
-          </div>
-        </section>
-      ) : null}
-      {matches.length ? (
-        <section className="matchToolbar">
-          {(["all", "eligible", "blocked", "shortlisted", "rejected"] as MatchFilter[]).map((item) => (
-            <button className={filter === item ? "active" : ""} key={item} onClick={() => setFilter(item)}>
-              {domainLabel(item)} <span>{counts[item]}</span>
-            </button>
-          ))}
-        </section>
-      ) : null}
-      <div className="matchList">
-        {filteredMatches.map((item, index) => (
-          <article className="matchCard" key={item.candidate_id}>
-            <div className="matchHead">
-              <div>
-                <strong>#{index + 1} {item.candidate.name}</strong>
-                <span>{item.candidate.current_title} | {item.candidate.total_years_experience} yrs</span>
-                <em className={`matchStatus ${item.status ?? "ranked"}`}>{item.status ?? "ranked"}</em>
-              </div>
-              <b>{Math.round(item.total_score * 100)}%</b>
-            </div>
-            <p>{item.recommendation}</p>
-            <div className="nextActionBox">
-              <strong>Recommended next action</strong>
-              <span>{matchNextAction(item)}</span>
-            </div>
-            {(item.evidence?.hard_filter_failures ?? []).length ? (
-              <div className="hardFilterBox">
-                <strong>Must-check failures</strong>
-                {(item.evidence.hard_filter_failures ?? []).map((failure: string, failureIndex: number) => <span key={`${failure}-${failureIndex}`}>{failure}</span>)}
-              </div>
-            ) : <div className="hardFilterPass">Must-check items passed</div>}
-            <div className="scoreGrid">
-              <Metric label="Must-have" value={`${Math.round(item.must_have_score * 100)}%`} />
-              <Metric label="Nice-have" value={`${Math.round(item.nice_to_have_score * 100)}%`} />
-              <Metric label="Years" value={`${Math.round(item.years_score * 100)}%`} />
-              <Metric label="Domain" value={`${Math.round(item.domain_score * 100)}%`} />
-            </div>
-            <div className="chips">{(item.evidence.must_have_hits ?? []).map((hit: string) => <span key={hit}>{hit}</span>)}</div>
-            {(item.evidence?.notes_relevance ?? []).length ? (
-              <div className="notesRelevance">
-                <strong>Recruiter notes relevance</strong>
-                {(item.evidence.notes_relevance ?? []).map((noteName: string, noteIndex: number) => <span key={`${noteName}-${noteIndex}`}>{noteName}</span>)}
-              </div>
-            ) : null}
-            {(item.evidence?.semantic_evidence ?? []).length ? (
-              <div className="matchEvidence">
-                <strong>Semantic evidence</strong>
-                {(item.evidence.semantic_evidence ?? []).slice(0, 3).map((evidence: any, evidenceIndex: number) => (
-                  <article key={`${evidence.source_label ?? "evidence"}-${evidenceIndex}`}>
-                    <span>{evidenceSourceLabel(evidence)}</span>
-                    <p>{evidence.snippet}</p>
-                  </article>
-                ))}
-              </div>
-            ) : null}
-            {hasMatchGaps(item.gaps) ? (
-              <div className="matchGaps">
-                <strong>Gaps</strong>
-                {Object.entries(item.gaps ?? {}).flatMap(([key, value]) => gapItems(key, value)).map((gap) => <span key={gap}>{gap}</span>)}
-              </div>
-            ) : null}
-            <div className="jobActions">
-              <button className="plain" onClick={() => openCandidate(item.candidate_id)}>Open candidate</button>
-              <button className="secondary" disabled={item.status === "shortlisted"} onClick={() => shortlist(item.candidate_id)}>Add to shortlist</button>
-              <button className="plain danger" disabled={item.status === "rejected"} onClick={() => reject(item.candidate_id)}>Reject for req</button>
-            </div>
-          </article>
-        ))}
-        {matches.length && !filteredMatches.length ? (
-          <section className="panel emptyState">
-            <h3>No candidates in this match view</h3>
-            <p>Change the match filter to review other ranked, blocked, shortlisted, or rejected candidates.</p>
-          </section>
-        ) : null}
-      </div>
-    </section>
   );
 }
 
@@ -8039,145 +7160,6 @@ function CampaignsView({
         </div>
       )}
     </section>
-  );
-}
-
-function CandidateVersionReview({ clusters, decide }: { clusters: CandidateVersionMatch[]; decide: (id: string, decision: "versioned" | "separate" | "review-later") => void }) {
-  const [filter, setFilter] = useState<ResolutionFilter>("all");
-  const [selectedId, setSelectedId] = useState<string | undefined>(clusters[0]?.id);
-  const filteredClusters = clusters.filter((cluster) => filter === "all" || (cluster.status ?? "suggested") === filter);
-  const selected = filteredClusters.find((cluster) => cluster.id === selectedId) ?? filteredClusters[0];
-  const selectedStatus = normalizeCandidateVersionStatus(selected?.status);
-  const resolutionCounts = {
-    all: clusters.length,
-    suggested: clusters.filter((cluster) => (cluster.status ?? "suggested") === "suggested").length,
-    review_later: clusters.filter((cluster) => cluster.status === "review_later").length,
-    versioned: clusters.filter((cluster) => cluster.status === "versioned").length,
-    separate: clusters.filter((cluster) => cluster.status === "separate").length,
-  };
-  useEffect(() => {
-    if (selectedId && filteredClusters.some((cluster) => cluster.id === selectedId)) return;
-    setSelectedId(filteredClusters[0]?.id);
-  }, [filteredClusters, selectedId]);
-  return (
-    <section className="resolutionPage">
-      <aside className="clusterList">
-        <div className="clusterHead"><h3>Candidate Versions</h3><span>{clusters.length}</span></div>
-        <div className="clusterFilters">
-          {(["all", "suggested", "review_later", "versioned", "separate"] as ResolutionFilter[]).map((item) => (
-            <button className={filter === item ? "active" : ""} key={item} onClick={() => setFilter(item)}>
-              {domainLabel(item)} <span>{resolutionCounts[item]}</span>
-            </button>
-          ))}
-        </div>
-        {filteredClusters.map((item) => (
-          <article className={item.id === selected?.id ? "clusterItem active" : "clusterItem"} key={item.id} onClick={() => setSelectedId(item.id)}>
-            <strong>{item.left_name ?? item.name ?? "Candidate"} </strong>
-            <p>{item.right_name ? `Possible version: ${item.right_name}` : "Review required"}</p>
-            <div className="clusterItemMeta">
-              <span>{Math.round(item.score * 100)}% Version signal</span>
-              <em className={`clusterStatus ${normalizeCandidateVersionStatus(item.status)}`}>{versionStatusLabel(item.status)}</em>
-            </div>
-          </article>
-        ))}
-        {!filteredClusters.length ? <p className="muted clusterEmpty">No clusters in this status.</p> : null}
-      </aside>
-      <main className="resolutionDetail">
-        {selected ? (
-          <>
-            <div className="resolutionHeader">
-              <div>
-                <h2>Version Stack: {selected.left_name ?? selected.name ?? "Candidate"}</h2>
-                <p>Matching identity signals are handled as candidate versions. Every uploaded file is preserved; no data is merged or deleted.</p>
-                <span className={`clusterStatus large ${selectedStatus}`}>Status: {versionStatusLabel(selected.status)}</span>
-              </div>
-              <div className="actions">
-                <button className="plain" disabled={selectedStatus === "review_later"} onClick={() => selected.id && decide(selected.id, "review-later")}>
-                  {selectedStatus === "review_later" ? "Marked Review Later" : "Review Later"}
-                </button>
-                <button className="plain" disabled={selectedStatus === "separate"} onClick={() => selected.id && decide(selected.id, "separate")}>
-                  {selectedStatus === "separate" ? "Kept Separate" : "Keep Separate"}
-                </button>
-                <button className="primary" disabled={selectedStatus === "versioned"} onClick={() => selected.id && decide(selected.id, "versioned")}>
-                  {selectedStatus === "versioned" ? "Marked as Versions" : "Mark as Versions"}
-                </button>
-              </div>
-            </div>
-            <section className="reasonBox">
-              <div><span>Version Signal</span><strong>{Math.round(selected.score * 100)}%</strong></div>
-              <ul>{selected.reasons.map((reason, index) => <li key={index}>{reason.type}: {reason.detail ?? reason.value ?? "match signal"}</li>)}</ul>
-            </section>
-            <section className="versionTimelinePanel">
-              <div className="cardTitle"><h3>Version Timeline</h3><span>Upload and parse metadata</span></div>
-              <div className="versionTimeline">
-                <VersionMetadataCard label={selected.left_name ?? "Candidate A"} version={selected.left_version} />
-                <VersionMetadataCard label={selected.right_name ?? "Candidate B"} version={selected.right_version} />
-              </div>
-            </section>
-            <section className="comparePanel">
-              <div className="cardTitle"><h3>Field Differences</h3><span>Every file remains preserved</span></div>
-              <div className="compareGrid">
-                <strong>Field</strong>
-                <strong>{selected.left_name ?? "Candidate A"}</strong>
-                <strong>{selected.right_name ?? "Candidate B"}</strong>
-                {candidateVersionCompareRows(selected).map((row) => (
-                  <div className={`compareRow ${row.status ?? "different"}`} key={row.label}>
-                    <span>
-                      {row.label}
-                      {row.status ? <b>{domainLabel(row.status)}</b> : null}
-                      {row.detail ? <em>{row.detail}</em> : null}
-                    </span>
-                    <p>{row.left || "Missing"}</p>
-                    <p>{row.right || "Missing"}</p>
-                  </div>
-                ))}
-              </div>
-            </section>
-            <section className="auditPanel">
-              <div className="cardTitle"><h3>Decision Audit Trail</h3><span>{selected.audit_events?.length ?? 0} events</span></div>
-              {selected.audit_events?.length ? (
-                <div className="auditList">
-                  {selected.audit_events.map((event, index) => (
-                    <article key={`${event.action}-${event.created_at}-${index}`}>
-                      <strong>{domainLabel(event.action.replace("entity_resolution.", "").replace("candidate_versions.", ""))}</strong>
-                      <span>{event.user_email ?? "Unknown user"} | {new Date(event.created_at).toLocaleString()}</span>
-                      {event.metadata?.status ? <p>Status: {event.metadata.status}</p> : null}
-                    </article>
-                  ))}
-                </div>
-              ) : <EmptyPanel title="No version decision recorded yet" body="Mark-as-versions, keep-separate, and review-later decisions will appear here after they are saved." />}
-            </section>
-          </>
-        ) : <p className="muted">No candidate version groups are pending.</p>}
-      </main>
-    </section>
-  );
-}
-
-function VersionMetadataCard({ label, version }: { label: string; version?: CandidateVersionMatch["left_version"] }) {
-  const latest = version?.latest_document;
-  const pageMethods = version?.page_methods ?? [];
-  return (
-    <article className="versionCard">
-      <div>
-        <strong>{label}</strong>
-        <span>{version?.document_id ?? "Missing document id"}</span>
-      </div>
-      <dl>
-        <dt>Uploaded</dt>
-        <dd>{formatDateTime(latest?.uploaded_at ?? version?.candidate_created_at)}</dd>
-        <dt>File</dt>
-        <dd>{latest?.original_filename ?? "No document metadata"}</dd>
-        <dt>Storage</dt>
-        <dd>{latest ? `${latest.storage_backend} / ${shortHash(latest.storage_key)}` : "Missing"}</dd>
-        <dt>Parse</dt>
-        <dd>{latest?.parse_status ? `${domainLabel(latest.parse_status)}${latest.parse_stage ? ` (${domainLabel(latest.parse_stage)})` : ""}` : "No parse job linked"}</dd>
-        <dt>Extraction</dt>
-        <dd>{pageMethods.length ? pageMethods.map((item) => `${domainLabel(item.extraction_method ?? "unknown")} ${item.page_count}p`).join(", ") : latest?.extraction_method ?? "Unknown"}</dd>
-        <dt>Size</dt>
-        <dd>{formatBytes(latest?.size_bytes)}</dd>
-      </dl>
-    </article>
   );
 }
 

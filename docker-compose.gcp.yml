@@ -35,6 +35,8 @@ services:
       DATABASE_URL_FILE: /run/candidatesignal-secrets/database-url
       BETTER_AUTH_SECRET_FILE: /run/candidatesignal-secrets/better-auth-secret
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      RESUME_INTEL_BUILD_SHA: ${RESUME_INTEL_BUILD_SHA:-}
+      RESUME_INTEL_ENV: production
       RESUME_INTEL_BOOTSTRAP_TOKEN_FILE: /run/candidatesignal-secrets/bootstrap-token
       RESUME_INTEL_ENABLE_LEGACY_AUTH: "0"
       RESUME_INTEL_ALLOW_UNSIGNED_BETTER_AUTH_BEARER: "0"
@@ -140,6 +142,8 @@ services:
       DATABASE_URL_FILE: /run/candidatesignal-staging-secrets/database-url
       BETTER_AUTH_SECRET_FILE: /run/candidatesignal-staging-secrets/better-auth-secret
       BETTER_AUTH_URL: ${STAGING_BETTER_AUTH_URL:-https://staging.candidatesignal.ai}
+      RESUME_INTEL_BUILD_SHA: ${RESUME_INTEL_BUILD_SHA:-}
+      RESUME_INTEL_ENV: staging
       RESUME_INTEL_BOOTSTRAP_TOKEN_FILE: /run/candidatesignal-staging-secrets/bootstrap-token
       RESUME_INTEL_ENABLE_LEGACY_AUTH: "0"
       RESUME_INTEL_ALLOW_UNSIGNED_BETTER_AUTH_BEARER: "0"

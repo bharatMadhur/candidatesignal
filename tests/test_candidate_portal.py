@@ -5,6 +5,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from fastapi import HTTPException
+
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -16,6 +18,7 @@ from resume_intel.candidate_portal import (
     _normalize_application_destination_type,
     _normalize_application_status,
     _normalize_privacy_settings,
+    _require_recruiter,
     _resume_for_external_share,
     finalize_candidate_oauth_account,
     render_cv_pdf,
@@ -80,6 +83,17 @@ class _CandidateOAuthDb:
 
 
 class CandidatePortalTests(unittest.TestCase):
+    def test_recruiter_guard_accepts_tenant_member_workspace(self) -> None:
+        _require_recruiter({"id": "user-1", "workspace_access": "tenant_member", "tenant_id": "tenant-1", "role": "recruiter"})
+
+    def test_recruiter_guard_rejects_candidate_persona_even_with_recruiter_platform_role(self) -> None:
+        with self.assertRaises(HTTPException):
+            _require_recruiter({"id": "user-1", "workspace_access": "candidate", "tenant_id": None, "role": "candidate", "platform_role": "recruiter"})
+
+    def test_recruiter_guard_rejects_platform_admin_even_if_tenant_id_is_present(self) -> None:
+        with self.assertRaises(HTTPException):
+            _require_recruiter({"id": "user-1", "workspace_access": "tenant_member", "tenant_id": "tenant-1", "role": "platform_admin", "platform_role": "platform_admin"})
+
     def test_google_candidate_finalize_allows_recruiter_candidate_persona(self) -> None:
         conn = _CandidateOAuthConnection()
 
@@ -290,6 +304,28 @@ class CandidatePortalTests(unittest.TestCase):
         self.assertEqual(profile["projects"][0]["name"], "Analytics Assistant")
         self.assertEqual(resume["headline"], "Senior Data Engineer")
         self.assertFalse(any(item["field"] == "projects" for item in review))
+
+    def test_parsed_resume_profile_does_not_invent_current_location_from_latest_role(self) -> None:
+        record = {
+            "name": "Asha Patel",
+            "contact": {"email": "asha@example.com"},
+            "experience": [{"title": "Engineer", "company": "Acme", "location": "India"}],
+            "derived": {
+                "hr_profile": {"current_title": "Engineer"},
+                "location_intelligence": {
+                    "current_location": None,
+                    "current_location_source": "not_stated",
+                    "latest_role_location": "India",
+                    "location_uncertainty": "Current location is not explicitly stated in the resume.",
+                },
+            },
+        }
+
+        profile = profile_from_parsed_resume(record)
+
+        self.assertEqual(profile["current_location"], "")
+        self.assertEqual(profile["latest_role_location"], "India")
+        self.assertIn("not explicitly stated", profile["location_uncertainty"])
 
     def test_duplicate_linkedin_does_not_become_portfolio(self) -> None:
         record = {

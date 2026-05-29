@@ -58,11 +58,23 @@ JSON_PASS_SCHEMAS: dict[str, JsonSchemaSpec] = {
     },
     "resume_record": {
         # Keep this shape check intentionally light. `validate_resume()` owns
-        # normalization/repair of optional resume arrays, while this guard
-        # catches accidental cross-prompt responses such as requirement or
-        # campaign-match JSON.
+        # normalization/repair of absent optional resume arrays. This guard
+        # still validates present resume containers so cross-prompt responses
+        # and wrong primitive shapes fail before entering the parser pipeline.
         "document_id": "string",
         "source_file": "string",
+        "contact": "optional_dict",
+        "skills": "optional_list",
+        "experience": "optional_list",
+        "education": "optional_list",
+        "projects": "optional_list",
+        "certifications": "optional_list",
+        "awards": "optional_list",
+        "publications": "optional_list",
+        "languages": "optional_list",
+        "notes": "optional_list",
+        "other_sections": "optional_dict",
+        "derived": "optional_dict",
     },
     "requirement_profile": {
         "title": "nullable_string",
@@ -751,6 +763,8 @@ def _validate_json_pass_output(pass_name: str, value: dict[str, Any]) -> dict[st
     for path, expected in schema.items():
         present, actual = _json_path_value(value, path)
         if not present:
+            if expected.startswith("optional_"):
+                continue
             errors.append(f"{path}: missing")
             continue
         if not _json_value_matches(actual, expected):
@@ -782,6 +796,10 @@ def _json_value_matches(value: Any, expected: str) -> bool:
         return isinstance(value, bool)
     if expected == "list":
         return isinstance(value, list)
+    if expected == "optional_list":
+        return value is None or isinstance(value, list)
     if expected == "dict":
         return isinstance(value, dict)
+    if expected == "optional_dict":
+        return value is None or isinstance(value, dict)
     return True

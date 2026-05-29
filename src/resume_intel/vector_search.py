@@ -234,53 +234,68 @@ def upsert_requirement_embedding(requirement_id: str, text: str, tenant_id: str 
 def semantic_candidate_scores(query_text: str, limit: int = 100, tenant_id: str | None = None) -> dict[str, dict[str, Any]]:
     query_embedding, model = embed_text_real(query_text)
     query_vector = vector_literal(_normalize_dim(query_embedding, OPENAI_EMBEDDING_DIMENSIONS))
+    chunk_limit = _semantic_chunk_recall_limit(limit)
     with db() as conn:
         if tenant_id:
             rows = conn.execute(
                 """
-                select candidate_search_chunks.document_id, max(1 - (embedding <=> %s::vector)) as score,
-                       (array_agg(chunk_type order by embedding <=> %s::vector))[1:5] as top_chunks,
+                with nearest_chunks as (
+                  select candidate_search_chunks.document_id, chunk_type, source_label, page_number,
+                         chunk_text, embedding_model, embedding <=> %s::vector as distance
+                  from candidate_search_chunks
+                  join candidates on candidates.document_id = candidate_search_chunks.document_id
+                    and candidates.tenant_id = candidate_search_chunks.tenant_id
+                  where candidate_search_chunks.tenant_id=%s
+                    and candidate_search_chunks.embedding_model=%s
+                    and candidates.deleted_at is null
+                  order by candidate_search_chunks.embedding <=> %s::vector
+                  limit %s
+                )
+                select nearest_chunks.document_id, max(1 - distance) as score,
+                       (array_agg(chunk_type order by distance))[1:5] as top_chunks,
                        (array_agg(jsonb_build_object(
                          'chunk_type', chunk_type,
                          'source_label', source_label,
                          'page_number', page_number,
                          'snippet', left(chunk_text, 420),
                          'embedding_model', embedding_model
-                       ) order by embedding <=> %s::vector))[1:5] as evidence
-                from candidate_search_chunks
-                join candidates on candidates.document_id = candidate_search_chunks.document_id
-                  and candidates.tenant_id = candidate_search_chunks.tenant_id
-                where candidate_search_chunks.tenant_id=%s
-                  and candidate_search_chunks.embedding_model=%s
-                  and candidates.deleted_at is null
-                group by candidate_search_chunks.document_id
+                       ) order by distance))[1:5] as evidence
+                from nearest_chunks
+                group by nearest_chunks.document_id
                 order by score desc
                 limit %s
                 """,
-                (query_vector, query_vector, query_vector, tenant_id, model, limit),
+                (query_vector, tenant_id, model, query_vector, chunk_limit, limit),
             ).fetchall()
         else:
             rows = conn.execute(
                 """
-                select candidate_search_chunks.document_id, max(1 - (embedding <=> %s::vector)) as score,
-                       (array_agg(chunk_type order by embedding <=> %s::vector))[1:5] as top_chunks,
+                with nearest_chunks as (
+                  select candidate_search_chunks.document_id, chunk_type, source_label, page_number,
+                         chunk_text, embedding_model, embedding <=> %s::vector as distance
+                  from candidate_search_chunks
+                  join candidates on candidates.document_id = candidate_search_chunks.document_id
+                    and candidates.tenant_id = candidate_search_chunks.tenant_id
+                  where candidate_search_chunks.embedding_model=%s
+                    and candidates.deleted_at is null
+                  order by candidate_search_chunks.embedding <=> %s::vector
+                  limit %s
+                )
+                select nearest_chunks.document_id, max(1 - distance) as score,
+                       (array_agg(chunk_type order by distance))[1:5] as top_chunks,
                        (array_agg(jsonb_build_object(
                          'chunk_type', chunk_type,
                          'source_label', source_label,
                          'page_number', page_number,
                          'snippet', left(chunk_text, 420),
                          'embedding_model', embedding_model
-                       ) order by embedding <=> %s::vector))[1:5] as evidence
-                from candidate_search_chunks
-                join candidates on candidates.document_id = candidate_search_chunks.document_id
-                  and candidates.tenant_id = candidate_search_chunks.tenant_id
-                where candidate_search_chunks.embedding_model=%s
-                  and candidates.deleted_at is null
-                group by candidate_search_chunks.document_id
+                       ) order by distance))[1:5] as evidence
+                from nearest_chunks
+                group by nearest_chunks.document_id
                 order by score desc
                 limit %s
                 """,
-                (query_vector, query_vector, query_vector, model, limit),
+                (query_vector, model, query_vector, chunk_limit, limit),
             ).fetchall()
     return _collapse_scores_to_canonical_versions({
         row["document_id"]: {
@@ -290,6 +305,12 @@ def semantic_candidate_scores(query_text: str, limit: int = 100, tenant_id: str 
         }
         for row in rows
     }, tenant_id, limit)
+
+
+def _semantic_chunk_recall_limit(candidate_limit: int) -> int:
+    """Bound nearest-chunk recall so ANN search stays cheap while preserving breadth."""
+
+    return max(250, min(2500, max(1, int(candidate_limit or 100)) * 12))
 
 
 def semantic_candidate_scores_for_ids(query_text: str, candidate_ids: list[str], tenant_id: str | None = None) -> dict[str, dict[str, Any]]:

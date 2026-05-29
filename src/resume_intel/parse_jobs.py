@@ -523,7 +523,7 @@ def run_job(job_id: str, tenant_id: str, worker_id: str | None = None) -> dict[s
         return job
     try:
         _raise_if_cancelled(job_id, tenant_id)
-        _set_job_stage(job_id, tenant_id, "running", "llm_factual_pass")
+        _set_job_stage(job_id, tenant_id, "running", "extracting_text")
         if worker_id:
             record_worker_heartbeat(worker_id, status="running", tenant_id=tenant_id, current_job_id=job_id)
         tenant_root = TENANT_DATA_DIR / tenant_id

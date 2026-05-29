@@ -17,6 +17,8 @@ export type CandidatePortalProfile = {
     headline?: string;
     summary?: string;
     current_location?: string;
+    latest_role_location?: string;
+    location_uncertainty?: string;
     email?: string;
     phone?: string;
     linkedin_url?: string;

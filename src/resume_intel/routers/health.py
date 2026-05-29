@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from fastapi import APIRouter, HTTPException
 
 from ..db import applied_migrations, db
@@ -15,7 +17,7 @@ def health() -> dict:
 
 @router.get("/healthz")
 def healthz() -> dict:
-    return {"ok": True, "service": "candidateSignal.ai-api"}
+    return {"ok": True, "service": "candidateSignal.ai-api", "build": build_metadata()}
 
 
 @router.get("/readyz")
@@ -39,10 +41,26 @@ def healthz_deep() -> dict:
     return {
         "ok": True,
         "service": "candidateSignal.ai-api",
+        "build": build_metadata(),
         "database": "ready",
         "migrations": {
             "status": "ready" if migrations else "missing",
             "applied_count": len(migrations),
             "latest": migrations[-1]["version"] if migrations else None,
         },
+    }
+
+
+def build_metadata() -> dict:
+    sha = (
+        os.getenv("RESUME_INTEL_BUILD_SHA")
+        or os.getenv("GIT_COMMIT")
+        or os.getenv("SOURCE_COMMIT")
+        or os.getenv("COMMIT_SHA")
+        or ""
+    ).strip()
+    env = (os.getenv("RESUME_INTEL_ENV") or os.getenv("APP_ENV") or os.getenv("NEXT_PUBLIC_DEPLOY_ENV") or "").strip()
+    return {
+        "sha": sha[:40] or None,
+        "environment": env or None,
     }

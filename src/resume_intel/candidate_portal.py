@@ -27,6 +27,8 @@ PROFILE_FIELDS = {
     "headline",
     "summary",
     "current_location",
+    "latest_role_location",
+    "location_uncertainty",
     "email",
     "phone",
     "linkedin_url",
@@ -1103,6 +1105,7 @@ def profile_from_parsed_resume(record: dict[str, Any]) -> dict[str, Any]:
     classified = _classify_links(links)
     derived = record.get("derived") or {}
     hr_profile = derived.get("hr_profile") or {}
+    location_intelligence = derived.get("location_intelligence") or {}
     skills = _unique_text_list([*_as_list(record.get("skills")), *_all_technologies(record)])
     profile = {
         "display_name": record.get("name") or "",
@@ -1110,7 +1113,9 @@ def profile_from_parsed_resume(record: dict[str, Any]) -> dict[str, Any]:
         "summary": record.get("summary") or "",
         "summary_highlights": _summary_highlights(record),
         "ai_enhancement": _candidate_llm_enhancement(record),
-        "current_location": contact.get("location") or _latest_location(record.get("experience")) or "",
+        "current_location": contact.get("location") or location_intelligence.get("current_location") or "",
+        "latest_role_location": location_intelligence.get("latest_role_location") or _latest_location(record.get("experience")) or "",
+        "location_uncertainty": location_intelligence.get("location_uncertainty") or "",
         "email": contact.get("email") or "",
         "phone": contact.get("phone") or "",
         "linkedin_url": classified.get("linkedin_url") or "",
@@ -1805,9 +1810,13 @@ def _require_candidate(user: dict[str, Any]) -> None:
 
 
 def _require_recruiter(user: dict[str, Any]) -> None:
-    if user.get("workspace_access") != "tenant" and not user.get("tenant_id"):
+    if user.get("platform_role") in {"admin", "platform_admin"} or user.get("role") in {"admin", "platform_admin"}:
+        raise HTTPException(status_code=403, detail="recruiter tenant account required")
+    if user.get("workspace_access") not in {None, "tenant_member"} and not user.get("tenant_id"):
         raise HTTPException(status_code=403, detail="recruiter tenant account required")
     if user.get("platform_role") == "candidate" or user.get("role") == "candidate":
+        raise HTTPException(status_code=403, detail="recruiter tenant account required")
+    if not user.get("tenant_id"):
         raise HTTPException(status_code=403, detail="recruiter tenant account required")
 
 
@@ -2500,7 +2509,19 @@ def _normalize_profile(profile: dict[str, Any]) -> dict[str, Any]:
     }
     normalized["other_sections"] = normalized.get("other_sections") if isinstance(normalized.get("other_sections"), dict) else {}
     normalized["ai_enhancement"] = normalized.get("ai_enhancement") if isinstance(normalized.get("ai_enhancement"), dict) else {}
-    for key in ["display_name", "headline", "summary", "current_location", "email", "phone", "linkedin_url", "portfolio_url", "github_url"]:
+    for key in [
+        "display_name",
+        "headline",
+        "summary",
+        "current_location",
+        "latest_role_location",
+        "location_uncertainty",
+        "email",
+        "phone",
+        "linkedin_url",
+        "portfolio_url",
+        "github_url",
+    ]:
         normalized[key] = _clean_optional_text(normalized.get(key)) or ""
     return normalized
 

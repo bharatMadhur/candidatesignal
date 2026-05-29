@@ -84,6 +84,18 @@ class LlmPromptSecurityTests(unittest.TestCase):
                 },
             )
 
+    def test_resume_record_rejects_wrong_resume_container_types_when_present(self) -> None:
+        with self.assertRaisesRegex(LlmJsonShapeError, "experience"):
+            _validate_json_pass_output(
+                "resume_record",
+                {
+                    "document_id": "doc-1",
+                    "source_file": "resume.pdf",
+                    "contact": {},
+                    "experience": {"company": "Not a list"},
+                },
+            )
+
     def test_campaign_judge_accepts_required_shape(self) -> None:
         payload = {
             "candidate_judgements": [],

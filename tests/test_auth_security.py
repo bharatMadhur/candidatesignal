@@ -285,11 +285,14 @@ class BetterAuthSecurityTests(unittest.TestCase):
         with (
             patch.object(health_router, "db", lambda: _HealthDb()),
             patch.object(health_router, "applied_migrations", return_value=[{"version": "baseline"}, {"version": "20260513_0005"}]),
+            patch.dict(os.environ, {"RESUME_INTEL_BUILD_SHA": "abc123def456", "RESUME_INTEL_ENV": "test"}, clear=False),
         ):
             payload = health_router.healthz_deep()
 
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["database"], "ready")
+        self.assertEqual(payload["build"]["sha"], "abc123def456")
+        self.assertEqual(payload["build"]["environment"], "test")
         self.assertEqual(payload["migrations"]["applied_count"], 2)
         self.assertEqual(payload["migrations"]["latest"], "20260513_0005")
 

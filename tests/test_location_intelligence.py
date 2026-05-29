@@ -28,6 +28,23 @@ class LocationIntelligenceTests(unittest.TestCase):
         self.assertTrue(intelligence["location_conflict"])
         self.assertEqual(candidate_current_location(record), "Pittsburgh, PA")
 
+    def test_latest_role_location_is_not_promoted_to_current_location(self) -> None:
+        record = {
+            "contact": {},
+            "experience": [
+                {"company": "Older Overseas Employer", "title": "Engineer", "location": "India"},
+            ],
+            "education": [{"school": "Carnegie Mellon University", "location": "Pittsburgh, PA"}],
+        }
+
+        intelligence = build_location_intelligence(record)
+        record["derived"] = {"location_intelligence": intelligence}
+
+        self.assertIsNone(intelligence["current_location"])
+        self.assertEqual(intelligence["current_location_source"], "not_stated")
+        self.assertEqual(intelligence["latest_role_location"], "India")
+        self.assertEqual(candidate_current_location(record), None)
+
 
 if __name__ == "__main__":
     unittest.main()

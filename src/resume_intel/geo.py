@@ -141,6 +141,7 @@ def build_location_intelligence(record: dict[str, Any], raw_text: str | None = N
         "current_location": best_current_location,
         "current_location_source": best_current_source,
         "current_location_confidence": best_current_source if best_current_location else "not_stated",
+        "location_uncertainty": None if best_current_location else "Current location is not explicitly stated in the resume.",
         "latest_role_location": latest_location,
         "current_job_location": latest_location,
         "resume_header_location": resume_header_location,
@@ -209,14 +210,12 @@ def current_job_location(record: dict[str, Any]) -> str | None:
 
 def candidate_current_location(record: dict[str, Any]) -> str | None:
     intelligence = (record.get("derived") or {}).get("location_intelligence") or {}
-    return _clean(record.get("contact", {}).get("location")) or _clean(intelligence.get("current_location")) or current_job_location(record)
+    return _clean(record.get("contact", {}).get("location")) or _clean(intelligence.get("current_location"))
 
 
 def _best_current_location(resume_header_location: str | None, latest_role_location: str | None) -> tuple[str | None, str]:
     if resume_header_location:
         return resume_header_location, "resume_header"
-    if latest_role_location:
-        return latest_role_location, "latest_role"
     return None, "not_stated"
 
 

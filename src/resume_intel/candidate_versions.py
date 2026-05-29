@@ -11,14 +11,59 @@ from .db import db
 
 def find_matches_for_record(record: dict[str, Any], limit: int = 10, tenant_id: str | None = None) -> list[dict[str, Any]]:
     tenant_id = tenant_id or record.get("tenant_id")
+    signals = _version_prefilter_signals(record)
+    if not signals["has_candidate_signal"]:
+        return []
+
+    candidate_limit = max(limit * 50, 250)
     with db() as conn:
         rows = conn.execute(
             """
-            select document_id, name, email, phone, record_json
+            with candidate_pool as (
+              select candidates.document_id
+              from candidates
+              where candidates.document_id <> %(document_id)s
+                and (%(tenant_id)s::uuid is null or candidates.tenant_id=%(tenant_id)s)
+                and candidates.deleted_at is null
+                and (
+                  (%(email)s <> '' and lower(candidates.email)=%(email)s)
+                  or (%(phone)s <> '' and right(regexp_replace(candidates.phone, '\\D', '', 'g'), 10)=%(phone)s)
+                  or (%(name)s <> '' and lower(candidates.name)=%(name)s)
+                  or (%(name_prefix)s <> '' and lower(candidates.name) like %(name_prefix)s)
+                )
+              union
+              select candidate_experience.document_id
+              from candidate_experience
+              where (%(tenant_id)s::uuid is null or candidate_experience.tenant_id=%(tenant_id)s)
+                and (%(company_names)s::text[] <> '{}'::text[])
+                and lower(candidate_experience.company) = any(%(company_names)s::text[])
+            )
+            select candidates.document_id, candidates.name, candidates.email, candidates.phone, candidates.record_json
             from candidates
-            where document_id <> %s and (%s::uuid is null or tenant_id=%s) and deleted_at is null
+            join candidate_pool on candidate_pool.document_id=candidates.document_id
+            where candidates.document_id <> %(document_id)s
+              and (%(tenant_id)s::uuid is null or candidates.tenant_id=%(tenant_id)s)
+              and candidates.deleted_at is null
+            order by
+              case
+                when %(email)s <> '' and lower(candidates.email)=%(email)s then 0
+                when %(phone)s <> '' and right(regexp_replace(candidates.phone, '\\D', '', 'g'), 10)=%(phone)s then 1
+                when %(name)s <> '' and lower(candidates.name)=%(name)s then 2
+                else 3
+              end,
+              candidates.updated_at desc
+            limit %(candidate_limit)s
             """,
-            (record["document_id"], tenant_id, tenant_id),
+            {
+                "document_id": record["document_id"],
+                "tenant_id": tenant_id,
+                "email": signals["email"],
+                "phone": signals["phone"],
+                "name": signals["name"],
+                "name_prefix": signals["name_prefix"],
+                "company_names": signals["company_names"],
+                "candidate_limit": candidate_limit,
+            },
         ).fetchall()
     matches = []
     for row in rows:
@@ -36,6 +81,25 @@ def find_matches_for_record(record: dict[str, Any], limit: int = 10, tenant_id: 
             )
     matches.sort(key=lambda item: item["score"], reverse=True)
     return matches[:limit]
+
+
+def _version_prefilter_signals(record: dict[str, Any]) -> dict[str, Any]:
+    contact = record.get("contact") or {}
+    name = _normalize_name(record.get("name"))
+    name_parts = [part for part in name.split() if part]
+    name_prefix = f"{name_parts[0]}%" if name_parts else ""
+    companies = sorted(_companies(record))
+    email = str(contact.get("email") or record.get("email") or "").strip().lower()
+    phone = _normalize_phone(record.get("phone") or contact.get("phone"))
+    company_names = [company for company in companies if company][:12]
+    return {
+        "email": email,
+        "phone": phone,
+        "name": name,
+        "name_prefix": name_prefix,
+        "company_names": company_names,
+        "has_candidate_signal": bool(email or phone or name),
+    }
 
 
 def persist_matches(record: dict[str, Any], matches: list[dict[str, Any]], tenant_id: str | None = None) -> None:

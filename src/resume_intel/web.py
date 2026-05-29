@@ -1125,10 +1125,6 @@ def candidate(document_id: str, user: dict = Depends(current_user)) -> dict:
         tenant_id = _tenant_id(user)
         raw_record = load_candidate_db(document_id, tenant_id)
         matches = list_matches_for_candidate(document_id, tenant_id)
-        if not matches:
-            live_matches = find_matches_for_record(raw_record, tenant_id=tenant_id)
-            persist_matches(raw_record, live_matches, tenant_id)
-            matches = list_matches_for_candidate(document_id, tenant_id)
         record = _public_candidate_for_user(raw_record, user)
         record["candidate_versions"] = {"matches": matches}
         record["reviewed_signals"] = reviewed_candidate_signals_db(document_id, tenant_id)
@@ -1635,10 +1631,6 @@ def candidate_versions_for_candidate(document_id: str, user: dict = Depends(curr
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="candidate not found") from exc
     matches = list_matches_for_candidate(document_id, tenant_id)
-    if not matches:
-        live_matches = find_matches_for_record(record, tenant_id=tenant_id)
-        persist_matches(record, live_matches, tenant_id)
-        matches = list_matches_for_candidate(document_id, tenant_id)
     return {"matches": matches, "requirements": candidate_version_requirements(), "user": user}
 
 
