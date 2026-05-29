@@ -83,7 +83,6 @@
 .stitchMetricCard,
 .stitchCampaignTable article,
 .profileSearchPanel,
-.profilesMetricStrip article,
 .uploadTypePanel,
 .stitchQueueTable,
 .campaignCleanHeader,
@@ -772,66 +771,6 @@
   gap: 12px;
 }
 
-.candidateHomeControlRows {
-  display: grid;
-  gap: 8px;
-}
-
-.candidateHomeControlRows button {
-  display: grid;
-  gap: 3px;
-  width: 100%;
-  padding: 11px;
-  border: 1px solid #e1e8ee;
-  border-radius: 11px;
-  background: #fbfcfd;
-  color: #172033;
-  text-align: left;
-}
-
-.candidateHomeControlRows button:not(:disabled):hover {
-  border-color: #b7c8d5;
-  background: #ffffff;
-}
-
-.candidateHomeControlRows button:disabled {
-  cursor: not-allowed;
-  opacity: 0.62;
-}
-
-.candidateHomeControlRows strong,
-.candidateHomeControlRows span {
-  display: block;
-}
-
-.candidateHomeControlRows strong {
-  color: #172033;
-  font-size: 13px;
-}
-
-.candidateHomeControlRows span {
-  color: #647486;
-  font-size: 12px;
-  line-height: 17px;
-}
-
-.candidateHomeTags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-
-.candidateHomeTags em {
-  padding: 6px 9px;
-  border: 1px solid #dfe8ef;
-  border-radius: 999px;
-  background: #fbfcfd;
-  color: #465b6d;
-  font-size: 12px;
-  font-style: normal;
-  font-weight: 800;
-}
-
 .candidateSubmissionSnapshot button {
   justify-content: center;
 }
@@ -841,7 +780,6 @@
 }
 
 .candidateVersionDatabasePage .profilesHeader,
-.candidateVersionDatabasePage .profilesMetricStrip,
 .candidateVersionDatabasePage .profileSearchPanel {
   margin-left: 0;
   margin-right: 0;
@@ -853,53 +791,6 @@
   gap: 18px;
   align-items: start;
   margin-top: 16px;
-}
-
-.candidateVersionWorkflowCard {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.9fr) auto;
-  gap: 16px;
-  align-items: center;
-  margin-top: 16px;
-  padding: 16px;
-  border: 1px solid #dfe8ef;
-  border-radius: 14px;
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.035);
-}
-
-.candidateVersionWorkflowCard h3 {
-  margin: 4px 0 5px;
-  color: #172033;
-  font-size: 20px;
-  letter-spacing: -0.035em;
-}
-
-.candidateVersionWorkflowCard p {
-  margin: 0;
-  color: #617182;
-  font-size: 13px;
-  line-height: 20px;
-}
-
-.candidateVersionWorkflowCard > div:nth-child(2) {
-  display: grid;
-  gap: 7px;
-}
-
-.candidateVersionWorkflowCard > div:nth-child(2) span {
-  padding: 8px 10px;
-  border: 1px solid #e1e8ee;
-  border-radius: 999px;
-  background: #fbfcfd;
-  color: #405364;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.candidateVersionWorkflowCard footer {
-  display: grid;
-  gap: 8px;
 }
 
 .candidateVersionTable {
@@ -1299,73 +1190,6 @@
   border-bottom: 1px solid #e4ebf1;
 }
 
-.candidateCoachChat {
-  align-content: start;
-}
-
-.candidateCoachMessages {
-  display: grid;
-  gap: 9px;
-  max-height: 330px;
-  overflow: auto;
-}
-
-.candidateCoachPrompts {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 7px;
-}
-
-.candidateCoachPrompts button {
-  justify-content: flex-start;
-  min-height: auto;
-  padding: 9px 10px;
-  border: 1px solid #e3eaf0;
-  border-radius: 10px;
-  background: #ffffff;
-  color: #405364;
-  font-size: 12px;
-  line-height: 17px;
-  text-align: left;
-}
-
-.candidateCoachPrompts button:hover {
-  border-color: #bfd0dc;
-  background: #f8fafb;
-}
-
-.candidateCoachMessages > div {
-  display: grid;
-  gap: 5px;
-  padding: 10px;
-  border: 1px solid #e3eaf0;
-  border-radius: 12px;
-  background: #fbfcfd;
-}
-
-.candidateCoachMessages > div.user {
-  background: #f5f8fa;
-}
-
-.candidateCoachMessages span {
-  color: #647486;
-  font-size: 11px;
-  font-weight: 900;
-  text-transform: uppercase;
-}
-
-.candidateCoachMessages p {
-  margin: 0;
-  color: #334155;
-  font-size: 13px;
-  line-height: 19px;
-}
-
-.candidateCoachComposer {
-  display: grid;
-  gap: 8px;
-}
-
 .candidatePortalFocus {
   min-height: 260px;
   align-content: start;
@@ -1598,132 +1422,6 @@
   gap: 18px;
   padding: 22px 36px;
   align-items: start;
-}
-
-.candidateEditorWorkspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(310px, 370px);
-  gap: 18px;
-  padding: 22px 36px;
-  align-items: start;
-}
-
-.candidateAiEditorShell {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(330px, 390px);
-  gap: 20px;
-  align-items: start;
-  max-width: 1440px;
-  margin: 0 auto;
-  padding: 22px 36px 42px;
-}
-
-.candidateAiEditorMain,
-.candidateAiEditorRail {
-  display: grid;
-  gap: 16px;
-  min-width: 0;
-}
-
-.candidateAiEditorHero {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 24px;
-  border: 1px solid #dfe8ef;
-  border-radius: 18px;
-  background:
-    radial-gradient(circle at 8% 12%, rgba(53, 92, 125, 0.08), transparent 26%),
-    linear-gradient(135deg, #ffffff 0%, #fbfdff 58%, #f5f9fc 100%);
-  box-shadow: 0 18px 44px rgba(29, 46, 63, 0.06);
-}
-
-.candidateAiEditorHero h1 {
-  max-width: 640px;
-  margin: 4px 0 6px;
-  color: #172033;
-  font-size: clamp(26px, 2.5vw, 36px);
-  line-height: 1.03;
-  letter-spacing: -0.035em;
-}
-
-.candidateAiEditorHero p {
-  max-width: 700px;
-  margin: 0;
-  color: #5f7080;
-  font-size: 15px;
-  line-height: 23px;
-}
-
-.candidateAiEditorHero > div:last-child {
-  display: flex;
-  flex: none;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.candidateAiEditorBody {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
-}
-
-.candidateEditorSectionNav {
-  position: sticky;
-  top: 128px;
-  display: grid;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid #dfe8ef;
-  border-radius: 16px;
-  background: linear-gradient(180deg, #ffffff 0%, #f7fafc 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88);
-}
-
-.candidateEditorSectionNav button {
-  display: grid;
-  gap: 3px;
-  width: 100%;
-  padding: 11px;
-  border: 1px solid transparent;
-  border-radius: 12px;
-  background: transparent;
-  text-align: left;
-}
-
-.candidateEditorSectionNav button:hover {
-  border-color: #dbe5ec;
-  background: #ffffff;
-  transform: translateX(2px);
-}
-
-.candidateEditorSectionNav strong {
-  color: #172033;
-  font-size: 13px;
-}
-
-.candidateEditorSectionNav span {
-  color: #647486;
-  font-size: 12px;
-  line-height: 17px;
-}
-
-.candidateEditorFormSurface {
-  display: grid;
-  gap: 16px;
-  min-width: 0;
-  padding: 22px;
-  border: 1px solid #dfe8ef;
-  border-radius: 18px;
-  background: linear-gradient(180deg, #ffffff 0%, #fbfcfd 100%);
-  box-shadow: 0 18px 44px rgba(29, 46, 63, 0.045);
-}
-
-.candidateEditorFormSurface [data-candidate-editor-section] {
-  scroll-margin-top: 140px;
 }
 
 .candidateEditorModeBar {
@@ -2329,11 +2027,6 @@
   background: #fbfcfd;
 }
 
-.candidateAiEditorRail {
-  position: sticky;
-  top: 128px;
-}
-
 .candidateResumeMain {
   min-width: 0;
 }
@@ -2467,79 +2160,6 @@
   gap: 8px;
 }
 
-.candidateJobAiEditor {
-  border-color: #d7e2ea;
-  background: #ffffff;
-}
-
-.candidateJobAiEditor textarea {
-  min-height: 132px;
-}
-
-.candidateJobAiActions {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-}
-
-.candidateJobAiActions button {
-  justify-content: center;
-}
-
-.candidateJobEditPlan {
-  display: grid;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid #dfe8ef;
-  border-radius: 12px;
-  background: #f8fafb;
-}
-
-.candidateJobEditPlan.empty {
-  background: #ffffff;
-}
-
-.candidateJobEditPlan header {
-  display: grid;
-  gap: 4px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #e4ebf1;
-}
-
-.candidateJobEditPlan header strong,
-.candidateJobEditPlan > strong {
-  color: #172033;
-  font-size: 15px;
-  letter-spacing: -0.02em;
-}
-
-.candidateJobEditPlan header span,
-.candidateJobEditPlan p {
-  margin: 0;
-  color: #617182;
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.candidateJobEditPlan > div {
-  display: grid;
-  gap: 8px;
-}
-
-.candidateJobEditPlan article {
-  display: grid;
-  gap: 4px;
-  padding: 10px;
-  border: 1px solid #e1e8ee;
-  border-radius: 10px;
-  background: #ffffff;
-}
-
-.candidateJobEditPlan article strong {
-  color: #1f2f3d;
-  font-size: 13px;
-}
-
 .candidateBulletRewriteCard {
   border-color: #d8e3eb;
   background: #ffffff;
@@ -2650,6 +2270,37 @@
   box-shadow: 0 12px 30px rgba(15, 23, 42, 0.07);
 }
 
+.candidateAiSuggestionPanel-inline {
+  margin: 0;
+  border-color: rgba(37, 99, 235, 0.22);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  box-shadow: none;
+}
+
+.candidateAiSuggestionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.candidateAiSuggestionHeader > div {
+  min-width: 0;
+}
+
+.candidateAiSuggestionHeader > span {
+  flex: 0 0 auto;
+  border: 1px solid rgba(37, 99, 235, 0.22);
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  padding: 6px 9px;
+  text-transform: uppercase;
+}
+
 .candidateAiSuggestionPanel h3 {
   margin: 4px 0 6px;
   color: #172033;
@@ -2691,10 +2342,42 @@
   text-transform: uppercase;
 }
 
+.candidateAiChangeReviewGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.candidateAiChangeReviewGrid label {
+  display: grid;
+  gap: 7px;
+}
+
+.candidateAiChangeReviewGrid label span {
+  color: #40536a;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.candidateAiChangeReviewGrid textarea {
+  min-height: 112px;
+  resize: vertical;
+  border: 1px solid #dbe5ee;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #172033;
+  font-size: 13px;
+  line-height: 19px;
+  padding: 10px;
+}
+
 .candidateAiSuggestionActions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  justify-content: flex-end;
 }
 
 .candidateControlDisclosure {
@@ -3020,7 +2703,6 @@
 }
 
 .candidatePortalCard label,
-.candidateEditorFormSurface label,
 .candidateWideField {
   display: grid;
   gap: 7px;
@@ -3032,10 +2714,7 @@
 
 .candidatePortalCard input,
 .candidatePortalCard textarea,
-.candidatePortalCard select,
-.candidateEditorFormSurface input,
-.candidateEditorFormSurface textarea,
-.candidateEditorFormSurface select {
+.candidatePortalCard select {
   width: 100%;
   border: 1px solid #dce5ec;
   border-radius: 10px;
@@ -3046,15 +2725,12 @@
 }
 
 .candidatePortalCard input,
-.candidatePortalCard select,
-.candidateEditorFormSurface input,
-.candidateEditorFormSurface select {
+.candidatePortalCard select {
   min-height: 40px;
   padding: 0 11px;
 }
 
-.candidatePortalCard textarea,
-.candidateEditorFormSurface textarea {
+.candidatePortalCard textarea {
   resize: vertical;
   padding: 10px 11px;
   line-height: 20px;
@@ -3487,59 +3163,6 @@
   color: #355c7d;
 }
 
-.candidateEditorCoachTools {
-  display: grid;
-  gap: 10px;
-  padding: 14px;
-  border: 1px solid #dbe5ec;
-  border-radius: 12px;
-  background: #fbfdfe;
-}
-
-.candidateEditorCoachTools h3 {
-  margin: 3px 0 5px;
-  color: #182230;
-  font-size: 16px;
-  letter-spacing: -0.025em;
-}
-
-.candidateEditorCoachTools p {
-  margin: 0;
-  color: #617182;
-  font-size: 13px;
-  line-height: 19px;
-}
-
-.candidateEditorCoachTools article {
-  display: grid;
-  gap: 6px;
-  padding: 10px;
-  border: 1px solid #e1e8ee;
-  border-radius: 10px;
-  background: #ffffff;
-}
-
-.candidateEditorCoachTools strong {
-  color: #172033;
-  font-size: 13px;
-}
-
-.candidateEditorCoachTools span {
-  color: #536576;
-  font-size: 13px;
-  line-height: 19px;
-}
-
-.candidateEditorCoachTools button {
-  justify-self: start;
-}
-
-.candidateCoachSuggestionActions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-
 .candidateToggleRow {
   grid-template-columns: auto 1fr;
   align-items: center;
@@ -3706,13 +3329,9 @@
   .candidatePortalHero,
   .candidatePortalGrid,
   .candidateResumeWorkspace,
-  .candidateEditorWorkspace,
   .candidateVersionDatabaseGrid,
-  .candidateVersionWorkflowCard,
   .candidateCommandCenter,
   .candidateCommandHero,
-  .candidateAiEditorShell,
-  .candidateAiEditorBody,
   .candidateReviewSplit,
   .candidatePortalKpis {
     grid-template-columns: 1fr;
@@ -3744,19 +3363,6 @@
   }
 
   .candidateHomeSide {
-    position: static;
-  }
-
-  .candidateAiEditorHero {
-    display: grid;
-  }
-
-  .candidateAiEditorHero > div:last-child {
-    justify-content: flex-start;
-  }
-
-  .candidateEditorSectionNav,
-  .candidateAiEditorRail {
     position: static;
   }
 
@@ -7679,96 +7285,25 @@ a:focus {
   line-height: 25px;
 }
 
-.profilesResultCount {
-  min-width: 150px;
-  display: grid;
-  justify-items: end;
-  gap: 2px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
-  padding: 14px 16px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
-}
-
-.profilesResultCount strong {
-  font-family: Manrope, Inter, sans-serif;
-  font-size: 34px;
-  line-height: 38px;
-}
-
-.profilesResultCount span {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.profilesMetricStrip {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.profilesMetricStrip article {
-  min-height: 128px;
-  display: grid;
-  gap: 8px;
-  align-content: space-between;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
-  padding: 18px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
-}
-
-.profilesMetricStrip article.attention {
-  border-color: #dce4ec;
-  background: var(--surface);
-}
-
-.profileMetricCardHead {
+.profilesHeaderStats {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: 520px;
 }
 
-.profileMetricHazard {
-  flex: 0 0 auto;
-  display: inline-grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border: 1px solid #d9e1ea;
+.profilesHeaderStats span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid #e1e8ef;
   border-radius: 999px;
   background: #ffffff;
-  color: var(--warn);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
-}
-
-.profilesMetricStrip span {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  line-height: 18px;
-  text-transform: uppercase;
-}
-
-.profilesMetricStrip strong {
-  color: #111827;
-  font-family: Manrope, Inter, sans-serif;
-  font-size: 34px;
-  line-height: 38px;
-}
-
-.profilesMetricStrip em {
-  color: var(--muted);
-  font-style: normal;
-  font-size: 13px;
-  line-height: 19px;
+  color: #5f7080;
+  font-size: 12px;
+  font-weight: 850;
 }
 
 .profileSearchPanel {
@@ -16009,7 +15544,6 @@ h3 {
 .stitchMetricCard,
 .stitchCampaignTable article,
 .profileSearchPanel,
-.profilesMetricStrip article,
 .uploadTypePanel,
 .stitchQueueTable,
 .campaignCleanHeader,
@@ -16399,49 +15933,6 @@ h3 {
   background: #f7fafc;
 }
 
-.candidateAiEditorShell {
-  max-width: 1480px;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
-  gap: 18px;
-  background: #ffffff;
-}
-
-.candidateAiEditorHero {
-  border-radius: 14px;
-  background: #ffffff;
-  box-shadow: none;
-}
-
-.candidateAiEditorHero h1 {
-  max-width: 780px;
-}
-
-.candidateAiEditorBody {
-  display: block;
-}
-
-.candidateEditorSectionNav {
-  display: none;
-}
-
-.candidateEditorFormSurface {
-  padding: 18px;
-  border-radius: 14px;
-  background: #ffffff;
-  box-shadow: none;
-}
-
-.candidateAiEditorRail {
-  position: sticky;
-  top: 126px;
-  gap: 12px;
-}
-
-.candidateAiEditorRail .candidatePortalCard {
-  border-radius: 12px;
-  box-shadow: none;
-}
-
 .candidateEditorModeBar {
   border-radius: 12px;
   background: #f8fafb;
@@ -16487,24 +15978,6 @@ h3 {
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
 }
 
-.candidateCoachMessages {
-  max-height: 230px;
-}
-
-.candidateCoachPrompts button {
-  text-align: left;
-}
-
-.candidateVersionWorkflowCard {
-  grid-template-columns: minmax(0, 1fr) auto;
-  border-radius: 12px;
-  box-shadow: none;
-}
-
-.candidateVersionWorkflowCard > div:nth-child(2) {
-  display: none;
-}
-
 .candidateVersionDatabaseGrid {
   grid-template-columns: minmax(0, 1fr) minmax(280px, 330px);
 }
@@ -16516,7 +15989,6 @@ h3 {
 @media (max-width: 1180px) {
   .candidateHomeResumeStage > header,
   .candidateHomeStudio,
-  .candidateAiEditorShell,
   .candidateVersionDatabaseGrid {
     grid-template-columns: 1fr;
   }
@@ -16525,7 +15997,6 @@ h3 {
     justify-content: flex-start;
   }
 
-  .candidateAiEditorRail,
   .candidateHomeSide,
   .candidateVersionCreateCard {
     position: static;
@@ -16708,6 +16179,33 @@ select:focus {
   min-height: 30px;
   padding: 0 10px;
   font-size: 11px;
+}
+
+.compactSearchCard {
+  grid-template-columns: minmax(160px, 240px) minmax(420px, 1fr);
+  padding: 10px 12px;
+}
+
+.compactSearchCard .sourceSearchHeader p {
+  display: none;
+}
+
+.compactSearchCard .semanticSearch {
+  min-height: 40px;
+  padding: 6px 7px 6px 11px;
+}
+
+.compactSearchCard .semanticSearch input {
+  font-size: 13px;
+}
+
+.compactSearchCard .filterRow {
+  padding-top: 2px;
+}
+
+.compactSearchCard .filterChip {
+  min-height: 28px;
+  padding: 0 9px;
 }
 
 .campaignCleanRail {
@@ -16968,6 +16466,40 @@ select:focus {
   padding: 14px;
 }
 
+.candidateVersionEditorPreviewCard {
+  overflow: hidden;
+}
+
+.candidateVersionEditorPreviewCard .candidatePortalSectionHead {
+  margin-bottom: 10px;
+}
+
+.candidateVersionEditorPreviewCard .candidateCvPreview {
+  max-height: 430px;
+  overflow: auto;
+  border: 1px solid #e6edf4;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 14px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.candidateVersionEditorPreviewCard .candidateCvPreview h1 {
+  font-size: 22px;
+  line-height: 26px;
+}
+
+.candidateVersionEditorPreviewCard .candidateCvPreview h2 {
+  margin: 14px 0 7px;
+  font-size: 10px;
+}
+
+.candidateVersionEditorPreviewCard .cvHeadline,
+.candidateVersionEditorPreviewCard .cvMeta {
+  margin-bottom: 8px;
+}
+
 .candidateVersionEditorLoading {
   display: grid;
   place-items: center;
@@ -17132,6 +16664,10 @@ select:focus {
     border-left: 0;
     border-top: 1px solid #e8eef4;
   }
+
+  .candidateAiChangeReviewGrid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Candidate upload simplification: one primary action, preview only after selection. */
@@ -17143,6 +16679,11 @@ select:focus {
   margin: 0 auto;
   padding: 18px 36px 34px;
   align-items: start;
+}
+
+.candidateUploadWorkspace.single {
+  grid-template-columns: minmax(0, 980px);
+  justify-content: center;
 }
 
 .candidateUploadPrimary {
@@ -17296,26 +16837,21 @@ select:focus {
   gap: 12px;
 }
 
-.candidateUploadNextCard {
-  gap: 8px;
-}
-
-.candidateUploadNextCard strong {
-  color: #172033;
-  font-size: 18px;
-  letter-spacing: -0.03em;
-}
-
-.candidateUploadNextCard p {
-  margin: 0;
-  color: #647486;
-  font-size: 13px;
-  line-height: 19px;
-}
-
 .candidateUploadHistoryCard {
   gap: 11px;
   padding: 14px;
+}
+
+.candidateUploadHistoryCard summary {
+  cursor: pointer;
+  color: #172033;
+  font-size: 13px;
+  font-weight: 900;
+  list-style: none;
+}
+
+.candidateUploadHistoryCard summary::-webkit-details-marker {
+  display: none;
 }
 
 .candidateUploadHistoryCard .candidatePortalSectionHead h2 {

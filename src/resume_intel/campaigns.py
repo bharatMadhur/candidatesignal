@@ -5,9 +5,7 @@ from typing import Any
 
 from psycopg.types.json import Jsonb
 
-from .candidate_facts import factual_current_company, factual_current_title
 from .db import db
-from .geo import candidate_current_location
 from .requirements import CAMPAIGN_MATCH_VISIBILITY_THRESHOLD, create_requirement_from_text, match_requirement, update_requirement_scorecard
 from .settings import load_settings
 
@@ -284,17 +282,28 @@ def list_campaigns(tenant_id: str) -> list[dict[str, Any]]:
                    requirements.extracted_json as requirement_extracted_json,
                    requirements.recruiter_answers as requirement_recruiter_answers,
                    requirements.final_profile as requirement_final_profile,
-                   count(distinct campaign_candidates.id) as candidate_count,
-                   count(distinct parse_batches.id) as upload_batch_count
+                   campaign_pipeline_summaries.candidate_count,
+                   campaign_pipeline_summaries.strong_match_count,
+                   campaign_pipeline_summaries.review_worthy_count,
+                   campaign_pipeline_summaries.weak_match_count,
+                   campaign_pipeline_summaries.below_threshold_count,
+                   campaign_pipeline_summaries.shortlisted_count,
+                   campaign_pipeline_summaries.active_pipeline_count,
+                   campaign_pipeline_summaries.rejected_count,
+                   campaign_pipeline_summaries.archived_count,
+                   campaign_pipeline_summaries.upload_batch_count,
+                   campaign_pipeline_summaries.failed_upload_count,
+                   campaign_pipeline_summaries.latest_match_job_id,
+                   campaign_pipeline_summaries.latest_match_job_status,
+                   campaign_pipeline_summaries.latest_match_job_stage,
+                   campaign_pipeline_summaries.latest_match_job_updated_at
             from job_campaigns
             left join requirements on requirements.id = job_campaigns.requirement_id
-            left join campaign_candidates on campaign_candidates.campaign_id = job_campaigns.id
-            left join parse_batches on parse_batches.campaign_id = job_campaigns.id
+            left join campaign_pipeline_summaries
+              on campaign_pipeline_summaries.tenant_id = job_campaigns.tenant_id
+             and campaign_pipeline_summaries.campaign_id = job_campaigns.id
             where job_campaigns.tenant_id=%s
               and job_campaigns.deleted_at is null
-            group by job_campaigns.id, requirements.id, requirements.title, requirements.status,
-                     requirements.original_text, requirements.extracted_json,
-                     requirements.recruiter_answers, requirements.final_profile
             order by job_campaigns.updated_at desc
             """,
             (tenant_id,),
@@ -313,27 +322,51 @@ def get_campaign(campaign_id: str, tenant_id: str) -> dict[str, Any]:
                    requirements.extracted_json as requirement_extracted_json,
                    requirements.recruiter_answers as requirement_recruiter_answers,
                    requirements.final_profile as requirement_final_profile,
-                   count(distinct campaign_candidates.id) as candidate_count,
-                   count(distinct parse_batches.id) as upload_batch_count
+                   campaign_pipeline_summaries.candidate_count,
+                   campaign_pipeline_summaries.strong_match_count,
+                   campaign_pipeline_summaries.review_worthy_count,
+                   campaign_pipeline_summaries.weak_match_count,
+                   campaign_pipeline_summaries.below_threshold_count,
+                   campaign_pipeline_summaries.shortlisted_count,
+                   campaign_pipeline_summaries.active_pipeline_count,
+                   campaign_pipeline_summaries.rejected_count,
+                   campaign_pipeline_summaries.archived_count,
+                   campaign_pipeline_summaries.upload_batch_count,
+                   campaign_pipeline_summaries.failed_upload_count,
+                   campaign_pipeline_summaries.latest_match_job_id,
+                   campaign_pipeline_summaries.latest_match_job_status,
+                   campaign_pipeline_summaries.latest_match_job_stage,
+                   campaign_pipeline_summaries.latest_match_job_updated_at
             from job_campaigns
             left join requirements on requirements.id = job_campaigns.requirement_id
-            left join campaign_candidates on campaign_candidates.campaign_id = job_campaigns.id
-            left join parse_batches on parse_batches.campaign_id = job_campaigns.id
+            left join campaign_pipeline_summaries
+              on campaign_pipeline_summaries.tenant_id = job_campaigns.tenant_id
+             and campaign_pipeline_summaries.campaign_id = job_campaigns.id
             where job_campaigns.id=%s and job_campaigns.tenant_id=%s
               and job_campaigns.deleted_at is null
-            group by job_campaigns.id, requirements.id, requirements.title, requirements.status,
-                     requirements.original_text, requirements.extracted_json,
-                     requirements.recruiter_answers, requirements.final_profile
             """,
             (campaign_id, tenant_id),
         ).fetchone()
         candidate_rows = conn.execute(
             """
-            select campaign_candidates.*, candidates.record_json, candidates.updated_at as candidate_updated_at
+            select campaign_candidates.*,
+                   candidates.updated_at as candidate_updated_at,
+                   candidate_profile_summaries.name as candidate_name,
+                   candidate_profile_summaries.email as candidate_email,
+                   candidate_profile_summaries.phone as candidate_phone,
+                   candidate_profile_summaries.current_title as candidate_current_title,
+                   candidate_profile_summaries.current_company as candidate_current_company,
+                   candidate_profile_summaries.current_location as candidate_current_location,
+                   candidate_profile_summaries.total_years_experience as candidate_total_years_experience,
+                   candidate_profile_summaries.seniority as candidate_seniority,
+                   candidate_profile_summaries.countries as candidate_countries
             from campaign_candidates
             join candidates on candidates.document_id = campaign_candidates.candidate_id
               and candidates.tenant_id = campaign_candidates.tenant_id
              and candidates.deleted_at is null
+            left join candidate_profile_summaries
+              on candidate_profile_summaries.tenant_id = campaign_candidates.tenant_id
+             and candidate_profile_summaries.document_id = campaign_candidates.candidate_id
             join job_campaigns on job_campaigns.id = campaign_candidates.campaign_id
               and job_campaigns.tenant_id = campaign_candidates.tenant_id
               and job_campaigns.deleted_at is null
@@ -696,6 +729,23 @@ def _campaign_row(row: dict[str, Any]) -> dict[str, Any]:
         "status": row["status"],
         "candidate_count": int(row.get("candidate_count") or 0),
         "upload_batch_count": int(row.get("upload_batch_count") or 0),
+        "pipeline_summary": {
+            "candidate_count": int(row.get("candidate_count") or 0),
+            "strong_match_count": int(row.get("strong_match_count") or 0),
+            "review_worthy_count": int(row.get("review_worthy_count") or 0),
+            "weak_match_count": int(row.get("weak_match_count") or 0),
+            "below_threshold_count": int(row.get("below_threshold_count") or 0),
+            "shortlisted_count": int(row.get("shortlisted_count") or 0),
+            "active_pipeline_count": int(row.get("active_pipeline_count") or 0),
+            "rejected_count": int(row.get("rejected_count") or 0),
+            "archived_count": int(row.get("archived_count") or 0),
+            "upload_batch_count": int(row.get("upload_batch_count") or 0),
+            "failed_upload_count": int(row.get("failed_upload_count") or 0),
+            "latest_match_job_id": str(row["latest_match_job_id"]) if row.get("latest_match_job_id") else None,
+            "latest_match_job_status": row.get("latest_match_job_status"),
+            "latest_match_job_stage": row.get("latest_match_job_stage"),
+            "latest_match_job_updated_at": row["latest_match_job_updated_at"].isoformat() if row.get("latest_match_job_updated_at") else None,
+        },
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
         "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
         "deleted_at": row["deleted_at"].isoformat() if row.get("deleted_at") else None,
@@ -740,7 +790,7 @@ def _requirement_exists(requirement_id: str, tenant_id: str) -> None:
 
 
 def _campaign_candidate_row(row: dict[str, Any], activity_events: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-    return _candidate_link_row(row, activity_events) | {"candidate": _candidate_summary(row["record_json"], row.get("candidate_updated_at"))}
+    return _candidate_link_row(row, activity_events) | {"candidate": _candidate_summary_from_row(row)}
 
 
 def _candidate_link_row(row: dict[str, Any], activity_events: list[dict[str, Any]] | None = None) -> dict[str, Any]:
@@ -774,29 +824,21 @@ def _activity_event_row(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _candidate_summary(record: dict[str, Any], updated_at: Any = None) -> dict[str, Any]:
-    hr_profile = record.get("derived", {}).get("hr_profile", {})
-    fact_verification = record.get("derived", {}).get("fact_verification") or {}
-    location_intelligence = record.get("derived", {}).get("location_intelligence") or {}
-    profile_freshness = record.get("derived", {}).get("profile_freshness") or {}
+def _candidate_summary_from_row(row: dict[str, Any]) -> dict[str, Any]:
     return {
-        "document_id": record.get("document_id"),
-        "name": record.get("name"),
-        "email": (record.get("contact") or {}).get("email"),
-        "phone": (record.get("contact") or {}).get("phone"),
-        "current_title": factual_current_title(record),
-        "current_company": factual_current_company(record),
-        "fact_verification_status": fact_verification.get("status"),
-        "current_role_verification_status": fact_verification.get("current_role_status"),
-        "current_role_flags": fact_verification.get("current_role_flags") or [],
-        "profile_freshness": profile_freshness if isinstance(profile_freshness, dict) else {},
-        "total_years_experience": hr_profile.get("total_years_experience"),
-        "seniority": hr_profile.get("seniority_level"),
-        "location": candidate_current_location(record),
-        "countries": [
-            item.get("country")
-            for item in record.get("derived", {}).get("countries_associated", [])
-            if isinstance(item, dict) and item.get("country")
-        ],
-        "updated_at": updated_at.isoformat() if updated_at else None,
+        "document_id": row.get("candidate_id"),
+        "name": row.get("candidate_name"),
+        "email": row.get("candidate_email"),
+        "phone": row.get("candidate_phone"),
+        "current_title": row.get("candidate_current_title"),
+        "current_company": row.get("candidate_current_company"),
+        "fact_verification_status": None,
+        "current_role_verification_status": None,
+        "current_role_flags": [],
+        "profile_freshness": {},
+        "total_years_experience": float(row["candidate_total_years_experience"]) if row.get("candidate_total_years_experience") is not None else None,
+        "seniority": row.get("candidate_seniority"),
+        "location": row.get("candidate_current_location"),
+        "countries": list(row.get("candidate_countries") or []),
+        "updated_at": row["candidate_updated_at"].isoformat() if row.get("candidate_updated_at") else None,
     }

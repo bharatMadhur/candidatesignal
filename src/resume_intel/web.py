@@ -64,7 +64,7 @@ from .collaboration import (
 )
 from .copilot_synthesis import COPILOT_SYNTHESIS_CANDIDATE_LIMIT, synthesize_copilot_answer
 from .copilot_threads import append_copilot_message, archive_copilot_thread, create_copilot_thread, get_copilot_thread, list_copilot_threads
-from .db import db, migrate
+from .db import db, migrate, reset_db_internal_access, reset_db_tenant_context, set_db_internal_access, set_db_tenant_context
 from .db_store import (
     add_note_db,
     candidate_document_metadata,
@@ -244,6 +244,8 @@ app.include_router(operations_router)
 
 @app.middleware("http")
 async def request_logging_middleware(request: Request, call_next):
+    tenant_context_token = set_db_tenant_context(None)
+    internal_access_token = set_db_internal_access(False)
     request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
     started = time.perf_counter()
     try:
@@ -260,6 +262,9 @@ async def request_logging_middleware(request: Request, call_next):
             },
         )
         raise
+    finally:
+        reset_db_tenant_context(tenant_context_token)
+        reset_db_internal_access(internal_access_token)
     latency_ms = int((time.perf_counter() - started) * 1000)
     response.headers["x-request-id"] = request_id
     http_logger.info(

@@ -9,7 +9,7 @@ import type {
 } from "../../lib/api";
 import { candidateResumeVersionPdfPath } from "../../lib/api";
 import { humanizeLabel, textValue, toTextList } from "../lib/format";
-import { CandidateAtsConfidencePanel, CandidateCvPreview } from "./candidate-resume-export-panels";
+import { CandidateCvPreview } from "./candidate-resume-export-panels";
 import { ProgressBar } from "./primitives";
 
 export function CandidateHomeCommandCenter({
@@ -30,7 +30,6 @@ export function CandidateHomeCommandCenter({
   startFromScratch,
   openEditor,
   openVersions,
-  openCreateVersion,
   openVersion,
   openJobBoard,
   openSubmissionTracker,
@@ -52,7 +51,6 @@ export function CandidateHomeCommandCenter({
   startFromScratch: () => void;
   openEditor: () => void;
   openVersions: () => void;
-  openCreateVersion: () => void;
   openVersion: (versionId: string) => void;
   openJobBoard: () => void;
   openSubmissionTracker: (versionId?: string) => void;
@@ -65,7 +63,6 @@ export function CandidateHomeCommandCenter({
   const recentApplication = applications[0] ?? null;
   const visibleFixes = needsReview.filter((item) => !candidateReviewItemAlreadyResolved(profile, item)).slice(0, 3);
   const readinessLabel = profileCompleteness >= 90 ? "Ready to apply" : profileCompleteness >= 70 ? "Almost ready" : "Needs review";
-  const versionSummary = latestVersion ? `${latestVersion.title} · ${latestVersion.target_role || "General"}` : "Create the first resume version after upload.";
   const nextActionTitle = uploadInProgress ? "Parsing your resume" : visibleFixes.length ? "Review the extracted facts" : versions.length ? "Tailor this resume to a job" : "Start your resume";
   const nextActionBody = uploadInProgress
     ? `${activeUpload?.stage_label ?? "Parsing"} · ${activeUpload?.progress ?? 0}%`
@@ -90,15 +87,8 @@ export function CandidateHomeCommandCenter({
             <button className="primary" type="button" onClick={latestUpload ? openEditor : openUpload}>
               {latestUpload ? "Edit resume" : "Upload resume"}
             </button>
-            <button className="secondary" type="button" onClick={startFromScratch}>
-              Start from scratch
-            </button>
-            <button className="secondary" type="button" onClick={openCreateVersion}>
-              Create version
-            </button>
-            <button className="secondary" type="button" disabled={!latestVersion} onClick={() => latestVersion ? openVersion(latestVersion.id) : undefined}>
-              Preview
-            </button>
+            <button className="secondary" type="button" onClick={startFromScratch}>Start blank</button>
+            <button className="secondary" type="button" disabled={!latestVersion} onClick={() => latestVersion ? openVersion(latestVersion.id) : undefined}>Preview</button>
           </div>
         </header>
         <article className="candidateHomeResumePaper" aria-label="Scrollable resume preview">
@@ -116,44 +106,6 @@ export function CandidateHomeCommandCenter({
           {!versions.length ? <button className="secondary fullWidth" type="button" onClick={startFromScratch}>Start from scratch</button> : null}
         </section>
 
-        <section className="candidateHomeSimpleCard candidateHomeControlCard">
-          <span className="eyebrow">Resume control</span>
-          <h2>{readinessLabel}</h2>
-          <p>{headline}</p>
-          <div className="candidateHomeControlRows">
-            <button type="button" onClick={openEditor}>
-              <strong>Master profile</strong>
-              <span>{profileCompleteness}% complete · {profile.current_location || "location unclear"}</span>
-            </button>
-            <button type="button" disabled={!latestVersion} onClick={() => latestVersion ? openVersion(latestVersion.id) : undefined}>
-              <strong>Current version</strong>
-              <span>{versionSummary}</span>
-            </button>
-            <button type="button" disabled={!latestVersion} onClick={() => latestVersion ? openSubmissionTracker(latestVersion.id) : undefined}>
-              <strong>Submission memory</strong>
-              <span>{recentApplication ? `${recentApplication.destination_name} · ${humanizeLabel(recentApplication.status)}` : "Nothing logged yet"}</span>
-            </button>
-          </div>
-          <div className="candidateHomeMiniActions">
-            <button className="secondary" type="button" onClick={openCreateVersion}>Create version</button>
-            <button className="secondary" type="button" onClick={openVersions} disabled={!versions.length}>All versions</button>
-            <button className="secondary" type="button" disabled={!latestVersion} onClick={() => latestVersion ? openSubmissionTracker(latestVersion.id) : undefined}>Log submission</button>
-            <button
-              className="secondary"
-              type="button"
-              disabled={!latestVersion}
-              onClick={() => {
-                if (latestVersion) window.location.href = candidateResumeVersionPdfPath(latestVersion.id, selectedTemplateId);
-              }}
-            >
-              Download PDF
-            </button>
-          </div>
-          {pendingAccessCount ? <p>{pendingAccessCount} recruiter access request{pendingAccessCount === 1 ? "" : "s"} waiting for your decision.</p> : null}
-        </section>
-
-        <CandidateAtsConfidencePanel profile={profile} resume={resume} selectedTemplateId={selectedTemplateId} versions={versions} applications={applications} />
-
         {recentApplication ? (
           <section className="candidateHomeSimpleCard candidateSubmissionSnapshot">
             <span className="eyebrow">Last shared</span>
@@ -169,6 +121,25 @@ export function CandidateHomeCommandCenter({
             <button className="secondary" type="button" disabled={!latestVersion} onClick={() => latestVersion ? openSubmissionTracker(latestVersion.id) : undefined}>Log first submission</button>
           </section>
         )}
+        <section className="candidateHomeSimpleCard candidateHomeControlCard">
+          <span className="eyebrow">Resume status</span>
+          <h2>{readinessLabel}</h2>
+          <p>{headline}</p>
+          <div className="candidateHomeMiniActions">
+            <button className="secondary" type="button" onClick={openVersions} disabled={!versions.length}>All versions</button>
+            <button
+              className="secondary"
+              type="button"
+              disabled={!latestVersion}
+              onClick={() => {
+                if (latestVersion) window.location.href = candidateResumeVersionPdfPath(latestVersion.id, selectedTemplateId);
+              }}
+            >
+              Download PDF
+            </button>
+          </div>
+          {pendingAccessCount ? <p>{pendingAccessCount} access request{pendingAccessCount === 1 ? "" : "s"} waiting.</p> : null}
+        </section>
       </aside>
     </section>
   );

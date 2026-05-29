@@ -5,30 +5,31 @@ from typing import Any
 
 from psycopg.types.json import Jsonb
 
-from resume_intel.db import db, migrate
+from resume_intel.db import db, db_internal_access, migrate
 from resume_intel.storage import document_storage
 
 
 def main() -> int:
     migrate()
     count = 0
-    with db() as conn:
-        rows = conn.execute(
-            """
-            select candidates.document_id, candidates.tenant_id, candidates.created_by_user_id,
-                   candidates.source_file, candidates.raw_text, candidates.record_json
-            from candidates
-            left join candidate_documents
-              on candidate_documents.tenant_id=candidates.tenant_id
-             and candidate_documents.document_id=candidates.document_id
-            where candidate_documents.id is null
-            order by candidates.updated_at desc
-            """
-        ).fetchall()
+    with db_internal_access():
+        with db() as conn:
+            rows = conn.execute(
+                """
+                select candidates.document_id, candidates.tenant_id, candidates.created_by_user_id,
+                       candidates.source_file, candidates.raw_text, candidates.record_json
+                from candidates
+                left join candidate_documents
+                  on candidate_documents.tenant_id=candidates.tenant_id
+                 and candidate_documents.document_id=candidates.document_id
+                where candidate_documents.id is null
+                order by candidates.updated_at desc
+                """
+            ).fetchall()
 
-    for row in rows:
-        if _backfill_candidate(row):
-            count += 1
+        for row in rows:
+            if _backfill_candidate(row):
+                count += 1
     print(f"backfilled {count} candidate documents")
     return 0
 

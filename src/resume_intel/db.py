@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import contextvars
 import hashlib
 import os
 import secrets
@@ -16,6 +17,9 @@ LOCAL_DEV_PASSWORD = "resume-intel"
 LOCAL_DEV_ADMIN_EMAIL = "admin@example.com"
 LOCAL_DEV_RECRUITER_EMAIL = "recruiter@example.com"
 LOCAL_DEV_CANDIDATE_EMAIL = "candidate@example.com"
+DEFAULT_RUNTIME_DB_ROLE = "resume_intel_app_runtime"
+_CURRENT_TENANT_ID: contextvars.ContextVar[str | None] = contextvars.ContextVar("resume_intel_current_tenant_id", default=None)
+_CURRENT_INTERNAL_DB_ACCESS: contextvars.ContextVar[bool] = contextvars.ContextVar("resume_intel_internal_db_access", default=False)
 
 
 def database_url() -> str:
@@ -58,13 +62,77 @@ def _seed_local_dev_users_enabled() -> bool:
 
 
 @contextmanager
-def db() -> Iterator[psycopg.Connection]:
+def db(*, internal: bool | None = None, apply_runtime_role: bool = True) -> Iterator[psycopg.Connection]:
     with psycopg.connect(database_url(), row_factory=dict_row) as conn:
+        if apply_runtime_role:
+            runtime_role = database_runtime_role()
+            if runtime_role:
+                conn.execute(f"set local role {_safe_identifier(runtime_role)}")
+        tenant_id = current_db_tenant_id()
+        internal_access = current_db_internal_access() if internal is None else bool(internal)
+        conn.execute("select set_config('app.current_tenant_id', %s, true)", (tenant_id or "",))
+        conn.execute("select set_config('app.internal_access', %s, true)", ("true" if internal_access else "false",))
         yield conn
 
 
+def database_runtime_role() -> str | None:
+    configured = os.getenv("RESUME_INTEL_DB_RUNTIME_ROLE")
+    if configured is not None:
+        value = configured.strip()
+        return value or None
+    return DEFAULT_RUNTIME_DB_ROLE
+
+
+def _safe_identifier(value: str) -> str:
+    if not value.replace("_", "").isalnum():
+        raise RuntimeError(f"unsafe database identifier: {value}")
+    return value
+
+
+def set_db_tenant_context(tenant_id: str | None) -> contextvars.Token[str | None]:
+    return _CURRENT_TENANT_ID.set(str(tenant_id) if tenant_id else None)
+
+
+def reset_db_tenant_context(token: contextvars.Token[str | None]) -> None:
+    _CURRENT_TENANT_ID.reset(token)
+
+
+def current_db_tenant_id() -> str | None:
+    return _CURRENT_TENANT_ID.get()
+
+
+def set_db_internal_access(enabled: bool = True) -> contextvars.Token[bool]:
+    return _CURRENT_INTERNAL_DB_ACCESS.set(bool(enabled))
+
+
+def reset_db_internal_access(token: contextvars.Token[bool]) -> None:
+    _CURRENT_INTERNAL_DB_ACCESS.reset(token)
+
+
+def current_db_internal_access() -> bool:
+    return bool(_CURRENT_INTERNAL_DB_ACCESS.get())
+
+
+@contextmanager
+def db_tenant_context(tenant_id: str | None) -> Iterator[None]:
+    token = set_db_tenant_context(tenant_id)
+    try:
+        yield
+    finally:
+        reset_db_tenant_context(token)
+
+
+@contextmanager
+def db_internal_access() -> Iterator[None]:
+    token = set_db_internal_access(True)
+    try:
+        yield
+    finally:
+        reset_db_internal_access(token)
+
+
 def migrate() -> None:
-    with db() as conn:
+    with db(internal=True, apply_runtime_role=False) as conn:
         conn.execute(
             """
             create table if not exists schema_migrations (
@@ -993,7 +1061,7 @@ def migrate() -> None:
 
 
 def applied_migrations() -> list[dict[str, str]]:
-    with db() as conn:
+    with db(internal=True, apply_runtime_role=False) as conn:
         conn.execute(
             """
             create table if not exists schema_migrations (

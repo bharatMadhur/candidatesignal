@@ -70,6 +70,7 @@ export function CandidateResumeDocumentEditor(props: {
     suggestion: CandidateAiSuggestion;
   } | null>(null);
   const loadedProfileKeyRef = useRef("");
+  const suggestionRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<ReturnType<typeof useEditor>>(null);
   const editor = useEditor({
     immediatelyRender: false,
@@ -126,6 +127,13 @@ export function CandidateResumeDocumentEditor(props: {
     editor.commands.setContent(candidateEditorHtmlFromProfile(draft), { emitUpdate: false });
     loadedProfileKeyRef.current = nextKey;
   }, [draft, editor]);
+
+  useEffect(() => {
+    if (!pendingSuggestion) return;
+    window.setTimeout(() => {
+      suggestionRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 40);
+  }, [pendingSuggestion]);
 
   async function saveDocument() {
     if (!editor) return;
@@ -329,6 +337,50 @@ export function CandidateResumeDocumentEditor(props: {
   ];
   const hasSelection = selectedTextPreview.trim().length > 0;
   const selectedTextLabel = selectedTextPreview.length > 110 ? `${selectedTextPreview.slice(0, 110)}...` : selectedTextPreview;
+  const suggestionPanel = pendingSuggestion ? (
+    <aside ref={suggestionRef} className="candidateAiSuggestionPanel candidateAiSuggestionPanel-inline">
+      <div className="candidateAiSuggestionHeader">
+        <div>
+          <span className="eyebrow">Candidate-approved AI edit</span>
+          <h3>{pendingSuggestion.suggestion.status === "needs_more_context" ? "More facts needed before changing this" : "Review the proposed change"}</h3>
+          <p>{pendingSuggestion.suggestion.assistant_message}</p>
+        </div>
+        <span>{pendingSuggestion.suggestion.suggested_text ? "1 change" : "Review only"}</span>
+      </div>
+      <div className="candidateAiChangeReviewGrid">
+        <label>
+          <span>Current text</span>
+          <textarea readOnly value={pendingSuggestion.original} rows={4} />
+        </label>
+        <label>
+          <span>Suggested text</span>
+          <textarea readOnly value={pendingSuggestion.suggestion.suggested_text || "No direct replacement. Add the missing facts first, then ask AI to rewrite the selected text."} rows={4} />
+        </label>
+      </div>
+      {pendingSuggestion.suggestion.rationale?.length ? (
+        <div className="candidateAiSuggestionNotes">
+          <strong>Why this change</strong>
+          <span>{pendingSuggestion.suggestion.rationale.join(" · ")}</span>
+        </div>
+      ) : null}
+      {pendingSuggestion.suggestion.missing_facts?.length ? (
+        <div className="candidateAiSuggestionNotes">
+          <strong>Missing facts</strong>
+          <span>{pendingSuggestion.suggestion.missing_facts.join(" · ")}</span>
+        </div>
+      ) : null}
+      {pendingSuggestion.suggestion.warnings?.length ? (
+        <div className="candidateAiSuggestionNotes">
+          <strong>Guardrails</strong>
+          <span>{pendingSuggestion.suggestion.warnings.join(" · ")}</span>
+        </div>
+      ) : null}
+      <div className="candidateAiSuggestionActions">
+        <button className="primary" type="button" disabled={!pendingSuggestion.suggestion.suggested_text} onClick={acceptPendingSuggestion}>Apply change</button>
+        <button className="secondary" type="button" onClick={rejectPendingSuggestion}>Keep current text</button>
+      </div>
+    </aside>
+  ) : null;
 
   return (
     <section className={`candidateDocumentEditor candidateDocumentEditor-${density} candidateDocumentEditor-align-${headerAlign}${compactChrome ? " candidateDocumentEditor-overlay" : ""}`}>
@@ -386,35 +438,6 @@ export function CandidateResumeDocumentEditor(props: {
         <p>Type slash commands like /experience, /project, /education, /skills, or use Smart blocks. Select weak text and use Improve selection.</p>
       </div>
 
-      {pendingSuggestion ? (
-        <aside className="candidateAiSuggestionPanel">
-          <div>
-            <span className="eyebrow">Candidate-approved AI edit</span>
-            <h3>{pendingSuggestion.suggestion.status === "needs_more_context" ? "More facts needed" : "Suggested rewrite"}</h3>
-            <p>{pendingSuggestion.suggestion.assistant_message}</p>
-          </div>
-          {pendingSuggestion.suggestion.suggested_text ? (
-            <blockquote>{pendingSuggestion.suggestion.suggested_text}</blockquote>
-          ) : null}
-          {pendingSuggestion.suggestion.missing_facts?.length ? (
-            <div className="candidateAiSuggestionNotes">
-              <strong>Missing facts</strong>
-              <span>{pendingSuggestion.suggestion.missing_facts.join(" · ")}</span>
-            </div>
-          ) : null}
-          {pendingSuggestion.suggestion.warnings?.length ? (
-            <div className="candidateAiSuggestionNotes">
-              <strong>Guardrails</strong>
-              <span>{pendingSuggestion.suggestion.warnings.join(" · ")}</span>
-            </div>
-          ) : null}
-          <div className="candidateAiSuggestionActions">
-            <button className="primary" type="button" disabled={!pendingSuggestion.suggestion.suggested_text} onClick={acceptPendingSuggestion}>Accept edit</button>
-            <button className="secondary" type="button" onClick={rejectPendingSuggestion}>Reject</button>
-          </div>
-        </aside>
-      ) : null}
-
       <article className="candidateDocumentPaperEditor candidateDocumentPaperTiptap" data-candidate-editor-section="Identity">
         <EditorContent editor={editor} className="candidateTiptapEditor" />
       </article>
@@ -431,6 +454,7 @@ export function CandidateResumeDocumentEditor(props: {
           </div>
           <span className="candidateAiComposerHint">⌘ Enter to run</span>
         </div>
+        {suggestionPanel}
         <div className="candidateAiQuickActions" aria-label="AI resume editing shortcuts">
           <button type="button" disabled={!editor || !hasSelection || aiRewriteBusy} onClick={() => void askAiFromComposer("Rewrite the selected text to be sharper, concise, quantified where facts already exist, and ATS-safe. Do not add new facts.")}>
             Tighten selected text

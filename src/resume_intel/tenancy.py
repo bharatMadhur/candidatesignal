@@ -11,7 +11,7 @@ from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
 from .auth import create_user, hash_password
-from .db import db
+from .db import db, db_internal_access, db_tenant_context
 
 
 TENANT_ROLES = {"tenant_owner", "tenant_admin", "recruiter", "reviewer", "readonly"}
@@ -69,9 +69,10 @@ def create_tenant(name: str, seat_limit: int, created_by_user_id: str | None) ->
         raise HTTPException(status_code=400, detail="tenant name is required")
     if seat_limit < 1 or seat_limit > 500:
         raise HTTPException(status_code=400, detail="seat limit must be between 1 and 500")
-    with db() as conn:
-        row = _insert_tenant(conn, name, seat_limit, created_by_user_id)
-        conn.commit()
+    with db_internal_access():
+        with db() as conn:
+            row = _insert_tenant(conn, name, seat_limit, created_by_user_id)
+            conn.commit()
     return _tenant_row(row)
 
 
@@ -94,52 +95,53 @@ def create_self_service_company(
     normalized_email = normalize_email(owner_email)
     requested_seats = seat_limit if seat_limit is not None else _self_signup_default_seats()
     validate_tenant_creation_request(clean_company_name, requested_seats, normalized_email, "tenant_owner")
-    with db() as conn:
-        _assert_self_signup_email_available(conn, normalized_email)
-        password_hash = hash_password(password)
-        user_row = conn.execute(
-            """
-            insert into users (email, password_hash, role, name, email_verified, updated_at)
-            values (%s, %s, 'recruiter', %s, false, now())
-            returning id, email, role, name, created_at
-            """,
-            (normalized_email, password_hash, clean_owner_name),
-        ).fetchone()
-        conn.execute(
-            """
-            insert into accounts (user_id, account_id, provider_id, password)
-            values (%s, %s, 'credential', %s)
-            """,
-            (user_row["id"], str(user_row["id"]), password_hash),
-        )
-        tenant_row = _insert_tenant(
-            conn,
-            clean_company_name,
-            requested_seats,
-            str(user_row["id"]),
-            plan="self_service_free",
-            audit_action="tenant.self_signup_created",
-        )
-        conn.execute(
-            """
-            insert into tenant_memberships (tenant_id, user_id, role, status, joined_at)
-            values (%s, %s, 'tenant_owner', 'active', now())
-            """,
-            (tenant_row["id"], user_row["id"]),
-        )
-        conn.execute(
-            """
-            insert into audit_logs (tenant_id, user_id, action, entity_type, entity_id, metadata)
-            values (%s, %s, 'member.self_signup_owner_created', 'user', %s, %s)
-            """,
-            (
-                tenant_row["id"],
-                user_row["id"],
+    with db_internal_access():
+        with db() as conn:
+            _assert_self_signup_email_available(conn, normalized_email)
+            password_hash = hash_password(password)
+            user_row = conn.execute(
+                """
+                insert into users (email, password_hash, role, name, email_verified, updated_at)
+                values (%s, %s, 'recruiter', %s, false, now())
+                returning id, email, role, name, created_at
+                """,
+                (normalized_email, password_hash, clean_owner_name),
+            ).fetchone()
+            conn.execute(
+                """
+                insert into accounts (user_id, account_id, provider_id, password)
+                values (%s, %s, 'credential', %s)
+                """,
+                (user_row["id"], str(user_row["id"]), password_hash),
+            )
+            tenant_row = _insert_tenant(
+                conn,
+                clean_company_name,
+                requested_seats,
                 str(user_row["id"]),
-                Jsonb({"email": normalized_email, "company_name": clean_company_name}),
-            ),
-        )
-        conn.commit()
+                plan="self_service_free",
+                audit_action="tenant.self_signup_created",
+            )
+            conn.execute(
+                """
+                insert into tenant_memberships (tenant_id, user_id, role, status, joined_at)
+                values (%s, %s, 'tenant_owner', 'active', now())
+                """,
+                (tenant_row["id"], user_row["id"]),
+            )
+            conn.execute(
+                """
+                insert into audit_logs (tenant_id, user_id, action, entity_type, entity_id, metadata)
+                values (%s, %s, 'member.self_signup_owner_created', 'user', %s, %s)
+                """,
+                (
+                    tenant_row["id"],
+                    user_row["id"],
+                    str(user_row["id"]),
+                    Jsonb({"email": normalized_email, "company_name": clean_company_name}),
+                ),
+            )
+            conn.commit()
     return {
         "tenant": _tenant_row(tenant_row),
         "user": _public_signup_user(user_row, tenant_row),
@@ -156,21 +158,22 @@ def create_tenant_with_owner_invitation(
     if owner_role not in TENANT_OWNER_INVITE_ROLES:
         raise HTTPException(status_code=400, detail="owner role must be tenant_owner or tenant_admin")
     normalized_owner_email = normalize_email(owner_email) if owner_email and owner_email.strip() else None
-    with db() as conn:
-        if normalized_owner_email:
-            _assert_invitee_available(conn, normalized_owner_email)
-        row = _insert_tenant(conn, name, seat_limit, created_by_user_id)
-        invitation_row = None
-        invitation_token = None
-        if normalized_owner_email:
-            invitation_row, invitation_token = _insert_invitation(
-                conn,
-                str(row["id"]),
-                normalized_owner_email,
-                owner_role,
-                created_by_user_id,
-            )
-        conn.commit()
+    with db_internal_access():
+        with db() as conn:
+            if normalized_owner_email:
+                _assert_invitee_available(conn, normalized_owner_email)
+            row = _insert_tenant(conn, name, seat_limit, created_by_user_id)
+            invitation_row = None
+            invitation_token = None
+            if normalized_owner_email:
+                invitation_row, invitation_token = _insert_invitation(
+                    conn,
+                    str(row["id"]),
+                    normalized_owner_email,
+                    owner_role,
+                    created_by_user_id,
+                )
+            conn.commit()
     owner_invitation = None
     if invitation_row:
         owner_invitation = _invitation_row(invitation_row)
@@ -314,41 +317,43 @@ def _insert_invitation(
 
 
 def list_tenants() -> list[dict[str, Any]]:
-    with db() as conn:
-        rows = conn.execute(
-            """
-            select tenants.*,
-                   count(distinct tenant_memberships.id) filter (where tenant_memberships.status='active') as member_count,
-                   count(distinct candidates.document_id) as candidate_count,
-                   count(distinct parse_jobs.id) as parse_job_count
-            from tenants
-            left join tenant_memberships on tenant_memberships.tenant_id = tenants.id
-            left join candidates on candidates.tenant_id = tenants.id
-            left join parse_jobs on parse_jobs.tenant_id = tenants.id
-            group by tenants.id
-            order by tenants.created_at desc
-            """
-        ).fetchall()
+    with db_internal_access():
+        with db() as conn:
+            rows = conn.execute(
+                """
+                select tenants.*,
+                       count(distinct tenant_memberships.id) filter (where tenant_memberships.status='active') as member_count,
+                       count(distinct candidates.document_id) as candidate_count,
+                       count(distinct parse_jobs.id) as parse_job_count
+                from tenants
+                left join tenant_memberships on tenant_memberships.tenant_id = tenants.id
+                left join candidates on candidates.tenant_id = tenants.id
+                left join parse_jobs on parse_jobs.tenant_id = tenants.id
+                group by tenants.id
+                order by tenants.created_at desc
+                """
+            ).fetchall()
     return [_tenant_row(row) for row in rows]
 
 
 def get_tenant(tenant_id: str) -> dict[str, Any]:
-    with db() as conn:
-        row = conn.execute(
-            """
-            select tenants.*,
-                   count(distinct tenant_memberships.id) filter (where tenant_memberships.status='active') as member_count,
-                   count(distinct candidates.document_id) as candidate_count,
-                   count(distinct parse_jobs.id) as parse_job_count
-            from tenants
-            left join tenant_memberships on tenant_memberships.tenant_id = tenants.id
-            left join candidates on candidates.tenant_id = tenants.id
-            left join parse_jobs on parse_jobs.tenant_id = tenants.id
-            where tenants.id=%s
-            group by tenants.id
-            """,
-            (tenant_id,),
-        ).fetchone()
+    with db_internal_access():
+        with db() as conn:
+            row = conn.execute(
+                """
+                select tenants.*,
+                       count(distinct tenant_memberships.id) filter (where tenant_memberships.status='active') as member_count,
+                       count(distinct candidates.document_id) as candidate_count,
+                       count(distinct parse_jobs.id) as parse_job_count
+                from tenants
+                left join tenant_memberships on tenant_memberships.tenant_id = tenants.id
+                left join candidates on candidates.tenant_id = tenants.id
+                left join parse_jobs on parse_jobs.tenant_id = tenants.id
+                where tenants.id=%s
+                group by tenants.id
+                """,
+                (tenant_id,),
+            ).fetchone()
     if not row:
         raise FileNotFoundError(tenant_id)
     return _tenant_row(row)
@@ -356,59 +361,60 @@ def get_tenant(tenant_id: str) -> dict[str, Any]:
 
 def tenant_admin_detail(tenant_id: str) -> dict[str, Any]:
     tenant = get_tenant(tenant_id)
-    with db() as conn:
-        jobs = conn.execute(
-            """
-            select id, original_filename, status, stage, error_message, created_at, updated_at
-            from parse_jobs
-            where tenant_id=%s
-            order by updated_at desc
-            limit 10
-            """,
-            (tenant_id,),
-        ).fetchall()
-        audits = conn.execute(
-            """
-            select audit_logs.id, audit_logs.action, audit_logs.entity_type, audit_logs.entity_id,
-                   audit_logs.metadata, audit_logs.created_at, users.email as user_email
-            from audit_logs
-            left join users on users.id = audit_logs.user_id
-            where audit_logs.tenant_id=%s
-            order by audit_logs.created_at desc
-            limit 20
-            """,
-            (tenant_id,),
-        ).fetchall()
-        candidates = conn.execute(
-            """
-            select document_id, name, source_file, updated_at
-            from candidates
-            where tenant_id=%s and deleted_at is null
-            order by updated_at desc
-            limit 10
-            """,
-            (tenant_id,),
-        ).fetchall()
-        requirements = conn.execute(
-            """
-            select id, title, status, source_type, updated_at
-            from requirements
-            where tenant_id=%s
-            order by updated_at desc
-            limit 10
-            """,
-            (tenant_id,),
-        ).fetchall()
-        usage = conn.execute(
-            """
-            select
-              coalesce(sum(candidate_documents.size_bytes), 0) as document_storage_bytes,
-              count(candidate_documents.id) as document_count
-            from candidate_documents
-            where tenant_id=%s
-            """,
-            (tenant_id,),
-        ).fetchone()
+    with db_internal_access():
+        with db() as conn:
+            jobs = conn.execute(
+                """
+                select id, original_filename, status, stage, error_message, created_at, updated_at
+                from parse_jobs
+                where tenant_id=%s
+                order by updated_at desc
+                limit 10
+                """,
+                (tenant_id,),
+            ).fetchall()
+            audits = conn.execute(
+                """
+                select audit_logs.id, audit_logs.action, audit_logs.entity_type, audit_logs.entity_id,
+                       audit_logs.metadata, audit_logs.created_at, users.email as user_email
+                from audit_logs
+                left join users on users.id = audit_logs.user_id
+                where audit_logs.tenant_id=%s
+                order by audit_logs.created_at desc
+                limit 20
+                """,
+                (tenant_id,),
+            ).fetchall()
+            candidates = conn.execute(
+                """
+                select document_id, name, source_file, updated_at
+                from candidates
+                where tenant_id=%s and deleted_at is null
+                order by updated_at desc
+                limit 10
+                """,
+                (tenant_id,),
+            ).fetchall()
+            requirements = conn.execute(
+                """
+                select id, title, status, source_type, updated_at
+                from requirements
+                where tenant_id=%s
+                order by updated_at desc
+                limit 10
+                """,
+                (tenant_id,),
+            ).fetchall()
+            usage = conn.execute(
+                """
+                select
+                  coalesce(sum(candidate_documents.size_bytes), 0) as document_storage_bytes,
+                  count(candidate_documents.id) as document_count
+                from candidate_documents
+                where tenant_id=%s
+                """,
+                (tenant_id,),
+            ).fetchone()
     return {
         "tenant": tenant,
         "members": list_members(tenant_id),
@@ -466,22 +472,23 @@ def tenant_admin_detail(tenant_id: str) -> dict[str, Any]:
 
 def list_audit_logs(tenant_id: str | None = None, action: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
     limit = max(1, min(limit, 500))
-    with db() as conn:
-        rows = conn.execute(
-            """
-            select audit_logs.id, audit_logs.tenant_id, tenants.name as tenant_name,
-                   audit_logs.action, audit_logs.entity_type, audit_logs.entity_id,
-                   audit_logs.metadata, audit_logs.created_at, users.email as user_email
-            from audit_logs
-            left join tenants on tenants.id = audit_logs.tenant_id
-            left join users on users.id = audit_logs.user_id
-            where (%s::uuid is null or audit_logs.tenant_id=%s)
-              and (%s::text is null or audit_logs.action ilike %s)
-            order by audit_logs.created_at desc
-            limit %s
-            """,
-            (tenant_id, tenant_id, action, f"%{action}%" if action else None, limit),
-        ).fetchall()
+    with db_internal_access():
+        with db() as conn:
+            rows = conn.execute(
+                """
+                select audit_logs.id, audit_logs.tenant_id, tenants.name as tenant_name,
+                       audit_logs.action, audit_logs.entity_type, audit_logs.entity_id,
+                       audit_logs.metadata, audit_logs.created_at, users.email as user_email
+                from audit_logs
+                left join tenants on tenants.id = audit_logs.tenant_id
+                left join users on users.id = audit_logs.user_id
+                where (%s::uuid is null or audit_logs.tenant_id=%s)
+                  and (%s::text is null or audit_logs.action ilike %s)
+                order by audit_logs.created_at desc
+                limit %s
+                """,
+                (tenant_id, tenant_id, action, f"%{action}%" if action else None, limit),
+            ).fetchall()
     return [
         {
             "id": str(row["id"]),
@@ -501,22 +508,23 @@ def list_audit_logs(tenant_id: str | None = None, action: str | None = None, lim
 def set_tenant_status(tenant_id: str, status: str, user_id: str) -> dict[str, Any]:
     if status not in {"active", "disabled", "pending"}:
         raise HTTPException(status_code=400, detail="invalid tenant status")
-    with db() as conn:
-        row = conn.execute(
-            """
-            update tenants
-            set status=%s, updated_at=now()
-            where id=%s
-            returning id, name, slug, status, plan, seat_limit, created_at, updated_at
-            """,
-            (status, tenant_id),
-        ).fetchone()
-        if row:
-            conn.execute(
-                "insert into audit_logs (tenant_id, user_id, action, entity_type, entity_id) values (%s, %s, %s, %s, %s)",
-                (tenant_id, user_id, f"tenant.{status}", "tenant", tenant_id),
-            )
-        conn.commit()
+    with db_internal_access():
+        with db() as conn:
+            row = conn.execute(
+                """
+                update tenants
+                set status=%s, updated_at=now()
+                where id=%s
+                returning id, name, slug, status, plan, seat_limit, created_at, updated_at
+                """,
+                (status, tenant_id),
+            ).fetchone()
+            if row:
+                conn.execute(
+                    "insert into audit_logs (tenant_id, user_id, action, entity_type, entity_id) values (%s, %s, %s, %s, %s)",
+                    (tenant_id, user_id, f"tenant.{status}", "tenant", tenant_id),
+                )
+            conn.commit()
     if not row:
         raise FileNotFoundError(tenant_id)
     return get_tenant(tenant_id)
@@ -604,39 +612,40 @@ def accept_invitation(token: str, name: str, password: str) -> dict[str, Any]:
             status_code=409,
             detail="platform admin accounts cannot accept company invitations",
         )
-    with db() as conn:
-        # The pending invitation already reserved a seat when it was created.
-        # During acceptance, only active members should count against capacity;
-        # otherwise the final available seat can never be accepted.
-        _assert_active_seat_available(conn, str(invitation["tenant_id"]))
-        existing = conn.execute(
-            """
-            select tenant_id from tenant_memberships
-            where user_id=%s and status='active' and tenant_id<>%s
-            limit 1
-            """,
-            (user["id"], invitation["tenant_id"]),
-        ).fetchone()
-        if existing:
-            raise HTTPException(status_code=409, detail="user already belongs to another company")
-        conn.execute(
-            """
-            insert into tenant_memberships (tenant_id, user_id, role, status, invited_by_user_id, joined_at)
-            values (%s, %s, %s, 'active', %s, now())
-            on conflict (tenant_id, user_id) do update set
-              role=excluded.role, status='active', joined_at=coalesce(tenant_memberships.joined_at, now()), updated_at=now()
-            """,
-            (invitation["tenant_id"], user["id"], invitation["role"], invitation["invited_by_user_id"]),
-        )
-        conn.execute(
-            "update tenant_invitations set status='accepted', accepted_at=now(), updated_at=now() where id=%s",
-            (invitation["id"],),
-        )
-        conn.execute(
-            "insert into audit_logs (tenant_id, user_id, action, entity_type, entity_id) values (%s, %s, %s, %s, %s)",
-            (invitation["tenant_id"], user["id"], "member.accepted_invite", "tenant_invitation", str(invitation["id"])),
-        )
-        conn.commit()
+    with db_tenant_context(str(invitation["tenant_id"])):
+        with db() as conn:
+            # The pending invitation already reserved a seat when it was created.
+            # During acceptance, only active members should count against capacity;
+            # otherwise the final available seat can never be accepted.
+            _assert_active_seat_available(conn, str(invitation["tenant_id"]))
+            existing = conn.execute(
+                """
+                select tenant_id from tenant_memberships
+                where user_id=%s and status='active' and tenant_id<>%s
+                limit 1
+                """,
+                (user["id"], invitation["tenant_id"]),
+            ).fetchone()
+            if existing:
+                raise HTTPException(status_code=409, detail="user already belongs to another company")
+            conn.execute(
+                """
+                insert into tenant_memberships (tenant_id, user_id, role, status, invited_by_user_id, joined_at)
+                values (%s, %s, %s, 'active', %s, now())
+                on conflict (tenant_id, user_id) do update set
+                  role=excluded.role, status='active', joined_at=coalesce(tenant_memberships.joined_at, now()), updated_at=now()
+                """,
+                (invitation["tenant_id"], user["id"], invitation["role"], invitation["invited_by_user_id"]),
+            )
+            conn.execute(
+                "update tenant_invitations set status='accepted', accepted_at=now(), updated_at=now() where id=%s",
+                (invitation["id"],),
+            )
+            conn.execute(
+                "insert into audit_logs (tenant_id, user_id, action, entity_type, entity_id) values (%s, %s, %s, %s, %s)",
+                (invitation["tenant_id"], user["id"], "member.accepted_invite", "tenant_invitation", str(invitation["id"])),
+            )
+            conn.commit()
     return {"user": user, "tenant_id": str(invitation["tenant_id"])}
 
 

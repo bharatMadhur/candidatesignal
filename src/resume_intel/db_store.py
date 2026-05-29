@@ -7,13 +7,12 @@ from typing import Any
 
 from psycopg.types.json import Jsonb
 
-from .candidate_facts import factual_current_company, factual_current_title
 from .candidate_versions import hidden_version_document_ids
 from .coverage import primary_key_coverage
 from .db import db
 from .derive import normalize_domain_years
 from .fact_verification import enrich_fact_verification
-from .geo import candidate_current_location, enrich_record_locations
+from .geo import enrich_record_locations
 from .note_signals import candidate_note_signal_summary, delete_note_signals, replace_note_signals
 from .pii import enrich_record_pii, redact_contact_pii_payload
 from .profile_freshness import enrich_profile_freshness
@@ -178,10 +177,31 @@ def list_candidates_db(tenant_id: str | None = None) -> list[dict[str, Any]]:
     with db() as conn:
         rows = conn.execute(
             """
-            select document_id, name, email, phone, source_file, record_json, created_at, updated_at
+            select candidates.document_id,
+                   coalesce(candidate_profile_summaries.name, candidates.name) as name,
+                   coalesce(candidate_profile_summaries.email, candidates.email) as email,
+                   coalesce(candidate_profile_summaries.phone, candidates.phone) as phone,
+                   candidates.source_file,
+                   candidates.record_json ->> 'original_filename' as original_filename,
+                   candidates.record_json #> '{derived,fact_verification}' as fact_verification,
+                   candidates.record_json #> '{derived,recruiter_note_signals}' as note_signal_summary,
+                   candidates.record_json #> '{derived,profile_freshness}' as profile_freshness,
+                   candidate_profile_summaries.current_title,
+                   candidate_profile_summaries.current_company,
+                   candidate_profile_summaries.current_location,
+                   candidate_profile_summaries.total_years_experience,
+                   candidate_profile_summaries.seniority,
+                   candidate_profile_summaries.domains,
+                   candidate_profile_summaries.countries,
+                   candidate_profile_summaries.completeness_score,
+                   candidates.created_at,
+                   candidates.updated_at
             from candidates
-            where tenant_id=%s and deleted_at is null
-            order by updated_at desc
+            left join candidate_profile_summaries
+              on candidate_profile_summaries.tenant_id=candidates.tenant_id
+             and candidate_profile_summaries.document_id=candidates.document_id
+            where candidates.tenant_id=%s and candidates.deleted_at is null
+            order by candidates.updated_at desc
             """,
             (tenant_id,),
         ).fetchall()
@@ -230,41 +250,32 @@ def list_candidates_db(tenant_id: str | None = None) -> list[dict[str, Any]]:
     for row in rows:
         if str(row["document_id"]) in hidden_version_ids:
             continue
-        record = row["record_json"]
-        normalize_domain_years(record)
-        hr_profile = record.get("derived", {}).get("hr_profile", {})
-        fact_verification = record.get("derived", {}).get("fact_verification") or {}
-        location_intelligence = record.get("derived", {}).get("location_intelligence") or {}
-        experience_by_domain = record.get("derived", {}).get("experience_by_domain") or {}
-        note_signal_summary = record.get("derived", {}).get("recruiter_note_signals") or {}
-        profile_freshness = record.get("derived", {}).get("profile_freshness") or {}
-        top_domains = sorted(experience_by_domain, key=lambda key: _domain_year_value(experience_by_domain.get(key)), reverse=True)[:5]
+        fact_verification = row.get("fact_verification") or {}
+        note_signal_summary = row.get("note_signal_summary") or {}
+        profile_freshness = row.get("profile_freshness") or {}
+        top_domains = [domain for domain in (row.get("domains") or []) if domain][:5]
         candidates.append(
             {
                 "document_id": row["document_id"],
                 "name": row["name"],
                 "email": row["email"],
                 "phone": row["phone"],
-                "current_title": factual_current_title(record),
-                "current_company": factual_current_company(record),
+                "current_title": row.get("current_title"),
+                "current_company": row.get("current_company"),
                 "fact_verification_status": fact_verification.get("status"),
                 "current_role_verification_status": fact_verification.get("current_role_status"),
                 "current_role_flags": fact_verification.get("current_role_flags") or [],
-                "total_years_experience": hr_profile.get("total_years_experience"),
-                "seniority": hr_profile.get("seniority_level"),
+                "total_years_experience": float(row["total_years_experience"]) if row.get("total_years_experience") is not None else None,
+                "seniority": row.get("seniority"),
                 "top_domains": top_domains,
-                "location": candidate_current_location(record),
-                "countries": [
-                    item.get("country")
-                    for item in record.get("derived", {}).get("countries_associated", [])
-                    if isinstance(item, dict) and item.get("country")
-                ],
+                "location": row.get("current_location"),
+                "countries": [country for country in (row.get("countries") or []) if country],
                 "note_signals": note_signal_summary.get("signals") if isinstance(note_signal_summary, dict) else [],
                 "profile_freshness": profile_freshness if isinstance(profile_freshness, dict) else {},
-                "coverage": record.get("primary_key_coverage", {}).get("score"),
+                "coverage": float(row["completeness_score"]) if row.get("completeness_score") is not None else None,
                 "reviewed_signals": reviewed_signals.get(row["document_id"], []),
                 **duplicate_risk.get(row["document_id"], {"duplicate_risk_score": 0, "duplicate_status": None}),
-                "source_file": record.get("original_filename") or Path(row["source_file"] or "Uploaded CV").name,
+                "source_file": row.get("original_filename") or Path(row["source_file"] or "Uploaded CV").name,
                 "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
             }
         )

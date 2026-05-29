@@ -54,6 +54,16 @@ Updated: 2026-05-29
 - Ignored generated local visual-QA artifacts so screenshots and temporary revert patches do not enter git.
 - Removed obsolete candidate-version test coverage for retired `entity-resolution` route aliases after confirming the API only exposes candidate-version routes.
 - Fixed Better Auth Google OAuth user creation by forcing UUID ID generation to match the production `users.id` UUID schema.
+- Added tenant schema hardening migrations with tenant-required checks, composite tenant/candidate foreign keys, tenant-scoped RLS policies, and high-growth table indexes.
+- Added `candidate_profile_summaries` so candidate database reads no longer need to scan full `record_json` blobs.
+- Added `campaign_pipeline_summaries` so campaign lists/details no longer compute live pipeline counts on every read.
+- Added request-scoped DB tenant context wiring so authenticated requests set `app.current_tenant_id` for DB-layer policies and reset it after each request.
+- Added retention policy infrastructure with dry-run/apply scripts, archive records, and retention run audit rows.
+- Added DB hardening verification scripts for required migrations, constraints, indexes, RLS tables, candidate summary coverage, and campaign summary coverage.
+- Replaced implicit RLS null-context bypass with explicit `app.internal_access` DB context.
+- Added forced RLS on tenant-scoped tables so table-owner connections are still subject to row policies.
+- Added limited `resume_intel_app_runtime` DB role and runtime `SET LOCAL ROLE` so app reads/writes execute without superuser/BYPASSRLS privileges.
+- Updated workers, maintenance scripts, self-service signup, invite acceptance, platform-admin tenant views, and retention jobs to use explicit tenant or internal DB context.
 
 ## In Progress
 - None for the latest hardening batch.
@@ -66,6 +76,7 @@ Updated: 2026-05-29
 - Continue splitting remaining recruiter/campaign surfaces out of `web/app/page.tsx`.
 - Split `web/app/styles.css` into feature-scoped styles after P0 launch checks pass.
 - Configure `.com` staging only if `staging.candidatesignal.com` is required; canonical staging remains `.ai`.
+- Audit deployment DB ownership after staging/prod rollout to confirm migrations run with owner privileges while app traffic uses the runtime DB role.
 
 ## Verified
 - Focused worker/upload/match tests passed.
@@ -95,3 +106,13 @@ Updated: 2026-05-29
 - Playwright authenticated smoke is present but intentionally blocked unless dedicated recruiter and candidate E2E credentials are provided.
 - Search/version scale indexes, bounded candidate-version detection, location truthfulness, build SHA health metadata, load-smoke script, and helper extractions passed Python compile, full backend tests (`209 passed`), frontend lint, Next.js production build, load-smoke help check, and `git diff --check`.
 - `npm run e2e:auth-required` fails closed as expected until `E2E_COMPANY_EMAIL`, `E2E_COMPANY_PASSWORD`, `E2E_CANDIDATE_EMAIL`, and `E2E_CANDIDATE_PASSWORD` are provided.
+- DB hardening migration applied locally through `20260528_0028_retention_and_campaign_summaries`.
+- Local DB hardening check passed with complete candidate and campaign summary coverage.
+- Local tenant hardening constraints validated successfully with no remaining invalid constraints.
+- Retention policy dry-run succeeded for `audit_logs` without deleting data.
+- Full backend test suite passed after DB hardening: 223 tests.
+- Next.js production build passed after DB hardening.
+- Strict/forced RLS migration applied locally through `20260528_0031_runtime_db_role`.
+- Runtime DB enforcement check passed locally: no tenant context sees `0` candidates; tenant context sees only that tenant's candidates; runtime role is not superuser and does not bypass RLS.
+- Full backend test suite passed after strict RLS/runtime-role changes: 230 tests.
+- Python compile and Next.js production build passed after strict RLS/runtime-role changes.

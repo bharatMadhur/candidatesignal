@@ -12,7 +12,7 @@ from typing import Any
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from .db import db
+from .db import db, set_db_internal_access, set_db_tenant_context
 
 
 security = HTTPBearer(auto_error=False)
@@ -202,6 +202,12 @@ def current_user(credentials: HTTPAuthorizationCredentials | None = Depends(secu
         user = _user_context(conn, session_token)
         if not user:
             raise HTTPException(status_code=401, detail="invalid or expired session")
+        if user.get("platform_role") in {"admin", "platform_admin"}:
+            set_db_internal_access(True)
+            set_db_tenant_context(None)
+        else:
+            set_db_internal_access(False)
+            set_db_tenant_context(user.get("tenant_id"))
         return user
 
 

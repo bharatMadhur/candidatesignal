@@ -1,11 +1,9 @@
 "use client";
 
-import { AlertTriangle, Search } from "lucide-react";
+import { Search } from "lucide-react";
 
 import type {
-  CandidateAccessRequest,
   CandidateApplication,
-  CandidateResumeShare,
   CandidateResumeVersion,
 } from "../../lib/api";
 import { formatDateTime, humanizeLabel, toTextList } from "../lib/format";
@@ -16,9 +14,7 @@ export function CandidateVersionDatabase({
   selectedVersionId,
   query,
   setQuery,
-  shares,
   applications,
-  accessRequests,
   versionTitle,
   setVersionTitle,
   targetRole,
@@ -32,9 +28,7 @@ export function CandidateVersionDatabase({
   selectedVersionId: string;
   query: string;
   setQuery: (value: string) => void;
-  shares: CandidateResumeShare[];
   applications: CandidateApplication[];
-  accessRequests: CandidateAccessRequest[];
   versionTitle: string;
   setVersionTitle: (value: string) => void;
   targetRole: string;
@@ -64,11 +58,6 @@ export function CandidateVersionDatabase({
       .toLowerCase();
     return haystack.includes(normalizedQuery);
   });
-  const roleCount = new Set(versions.map((version) => version.target_role).filter(Boolean)).size;
-  const activeShareCount = shares.filter((share) => share.status === "active").length;
-  const destinationCount = new Set(applications.map((item) => item.destination_name).filter(Boolean)).size;
-  const pendingAccessCount = accessRequests.filter((request) => request.status === "pending").length;
-
   return (
     <section className="databasePage candidateVersionDatabasePage">
       <header className="profilesHeader">
@@ -78,42 +67,6 @@ export function CandidateVersionDatabase({
           <p>Search, open, edit, export, and track every resume version from one place.</p>
         </div>
       </header>
-
-      <div className="profilesMetricStrip">
-        <article>
-          <div className="profileMetricCardHead">
-            <span>Total Versions</span>
-          </div>
-          <strong>{versions.length}</strong>
-          <em>Exportable resumes</em>
-        </article>
-        <article>
-          <div className="profileMetricCardHead">
-            <span>Target Roles</span>
-          </div>
-          <strong>{roleCount}</strong>
-          <em>Application directions</em>
-        </article>
-        <article>
-          <div className="profileMetricCardHead">
-            <span>Shared To</span>
-          </div>
-          <strong>{destinationCount}</strong>
-          <em>{activeShareCount} active links</em>
-        </article>
-        <article className={pendingAccessCount ? "attention" : ""}>
-          <div className="profileMetricCardHead">
-            <span>Access Requests</span>
-            {pendingAccessCount ? (
-              <i className="profileMetricHazard" aria-label="Needs attention">
-                <AlertTriangle size={14} />
-              </i>
-            ) : null}
-          </div>
-          <strong>{pendingAccessCount}</strong>
-          <em>Awaiting approval</em>
-        </article>
-      </div>
 
       <section className="candidateVersionDatabaseGrid">
         <div>

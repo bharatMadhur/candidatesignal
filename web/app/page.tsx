@@ -76,7 +76,6 @@ import {
   candidateSignup,
   companySignup,
   createCandidatePortalResumeVersion,
-  createCandidatePortalTargetedVersion,
   createCandidatePortalResumeShare,
   createCandidatePortalApplication,
   createCandidateAiLearningEvent,
@@ -178,14 +177,13 @@ import {
 } from "../lib/api";
 import { authClient, signInCandidateWithGoogle, signInWithBetterAuth } from "../lib/auth-client";
 import { BrandMark } from "./components/brand";
-import { CandidateCoachChat, CandidateEditorCoachTools, CandidateJobAiEditor, CandidateVisibilityPanel } from "./components/candidate-coach-panels";
+import { CandidateVisibilityPanel } from "./components/candidate-coach-panels";
 import { CollaborationPanel } from "./components/collaboration-panel";
 import { CandidateCorrectionPanel } from "./components/candidate-correction-panel";
 import { CandidateHomeCommandCenter } from "./components/candidate-home-command-center";
 import { CandidatePreParsePreview } from "./components/candidate-pre-parse-preview";
-import { CandidateResumeDocumentEditor, candidateStarterResumeProfile } from "./components/candidate-resume-document-editor";
+import { candidateStarterResumeProfile } from "./components/candidate-resume-document-editor";
 import { CandidateAtsConfidencePanel, CandidateCvPreview, CandidateTemplateSelector, CandidateVersionDiffPanel } from "./components/candidate-resume-export-panels";
-import { CandidateResumeGuidedForm } from "./components/candidate-resume-guided-form";
 import { CandidateAccessRequestsPanel, CandidateApplicationTracker, CandidateSharePanel } from "./components/candidate-sharing-panels";
 import {
   LinkedInVerificationSummary,
@@ -197,12 +195,12 @@ import {
   linkedinVerificationLabel,
   linkedinVerificationStatus,
 } from "./components/candidate-detail-widgets";
-import { CandidatePracticalJobBoard, CandidateScratchBuilderGuide } from "./components/candidate-job-board";
+import { CandidatePracticalJobBoard } from "./components/candidate-job-board";
 import { CandidateTable } from "./components/candidate-table";
 import { CandidateWorkEducationTimeline } from "./components/candidate-timeline-panel";
 import { CandidateUploadList } from "./components/candidate-upload-list";
 import { CandidateVersionDatabase } from "./components/candidate-version-database";
-import { CandidateVersionEditorOverlay } from "./components/candidate-version-editor-overlay";
+import { CandidateScratchEditorOverlay, CandidateVersionEditorOverlay } from "./components/candidate-version-editor-overlay";
 import { CandidateVersionReview } from "./components/candidate-version-review";
 import { EmptyPanel, Metric, ProgressBar } from "./components/primitives";
 import { MatchResults, RequirementIntake } from "./components/requirement-matching";
@@ -231,14 +229,10 @@ import {
   versionStatusLabel,
 } from "./lib/candidate-versions";
 import {
-  candidateCoachReply,
   candidatePortalCompleteness,
   candidatePortalSectionCopy,
   candidatePortalSectionFromSearch,
   candidateUploadPreviewKind,
-  normalizeEditableProfileItems,
-  normalizedAiEnhancement,
-  splitLineList,
   type CandidatePortalSection,
 } from "./lib/candidate-portal";
 import {
@@ -291,7 +285,6 @@ import {
   type CopilotFilters,
   type WorkspaceChatMessage,
 } from "./lib/copilot";
-import { inferTargetRoleFromRequirement } from "./lib/candidate-job-fit";
 import { candidateProfileHasContent, candidateResumeFromProfile } from "./lib/candidate-resume-profile";
 import { domainLabel, formatDateTime, humanizeLabel, splitCommaList, textValue, toTextList } from "./lib/format";
 import { DOCUMENT_FILE_ACCEPT, DOCUMENT_FORMAT_LABEL, resolveLoginIdentifier } from "./lib/login";
@@ -1781,13 +1774,6 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     return result.version;
   }
 
-  async function handleCreateCandidatePortalTargetedVersion(versionId: string, payload: { requirement_text: string; title?: string; target_role?: string }) {
-    const result = await run("Creating targeted resume version", () => createCandidatePortalTargetedVersion(token, versionId, payload));
-    if (!result) return null;
-    setCandidateResumeVersions((items) => [result.version, ...items.filter((item) => item.id !== result.version.id)]);
-    return result;
-  }
-
   async function handleUpdateCandidatePortalVersion(
     versionId: string,
     payload: { title?: string; target_role?: string | null; resume_json?: Record<string, any> },
@@ -2700,7 +2686,6 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
               saveProfile={handleSaveCandidatePortalProfile}
               savePrivacySettings={handleSaveCandidatePortalPrivacySettings}
               createVersion={handleCreateCandidatePortalVersion}
-              createTargetedVersion={handleCreateCandidatePortalTargetedVersion}
               updateVersion={handleUpdateCandidatePortalVersion}
               archiveVersion={handleArchiveCandidatePortalVersion}
               createShare={handleCreateCandidatePortalShare}
@@ -2752,7 +2737,6 @@ function CandidatePortalWorkspace({
   saveProfile,
   savePrivacySettings,
   createVersion,
-  createTargetedVersion,
   updateVersion,
   archiveVersion,
   createShare,
@@ -2783,7 +2767,6 @@ function CandidatePortalWorkspace({
   saveProfile: (profile: CandidatePortalProfile["profile"]) => Promise<void>;
   savePrivacySettings: (settings: CandidatePortalPrivacySettings) => Promise<void>;
   createVersion: (title: string, targetRole?: string, resumeJson?: Record<string, any>) => Promise<CandidateResumeVersion | null>;
-  createTargetedVersion: (versionId: string, payload: { requirement_text: string; title?: string; target_role?: string }) => Promise<{ version: CandidateResumeVersion; match: CandidateSelfMatch } | null>;
   updateVersion: (versionId: string, payload: { title?: string; target_role?: string | null; resume_json?: Record<string, any> }) => Promise<CandidateResumeVersion | null>;
   archiveVersion: (versionId: string) => Promise<CandidateResumeVersion | null>;
   createShare: (versionId: string, label: string, includePii?: boolean) => Promise<CandidateResumeShare | null>;
@@ -2823,16 +2806,6 @@ function CandidatePortalWorkspace({
   logout: () => void;
 }) {
   const [draft, setDraft] = useState<CandidatePortalProfile["profile"]>({});
-  const [skillsText, setSkillsText] = useState("");
-  const [certificationsText, setCertificationsText] = useState("");
-  const [awardsText, setAwardsText] = useState("");
-  const [publicationsText, setPublicationsText] = useState("");
-  const [languagesText, setLanguagesText] = useState("");
-  const [linksText, setLinksText] = useState("");
-  const [referencesText, setReferencesText] = useState("");
-  const [experienceItems, setExperienceItems] = useState<Array<Record<string, any>>>([]);
-  const [educationItems, setEducationItems] = useState<Array<Record<string, any>>>([]);
-  const [projectItems, setProjectItems] = useState<Array<Record<string, any>>>([]);
   const [activeSection, setActiveSection] = useState<CandidatePortalSection>(() => typeof window === "undefined" ? "dashboard" : candidatePortalSectionFromSearch(window.location.search));
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [resumePreviewUrl, setResumePreviewUrl] = useState("");
@@ -2858,6 +2831,7 @@ function CandidatePortalWorkspace({
   const [selectedVersion, setSelectedVersion] = useState<CandidateResumeVersion | null>(null);
   const [versionDetailOpen, setVersionDetailOpen] = useState(false);
   const [versionEditorOpen, setVersionEditorOpen] = useState(false);
+  const [scratchEditorOpen, setScratchEditorOpen] = useState(false);
   const [editingVersionId, setEditingVersionId] = useState("");
   const [editingVersionTitle, setEditingVersionTitle] = useState("");
   const [editingVersionTargetRole, setEditingVersionTargetRole] = useState("");
@@ -2865,16 +2839,7 @@ function CandidatePortalWorkspace({
   const [selectedTemplateId, setSelectedTemplateId] = useState("atlas");
   const [requirementText, setRequirementText] = useState("");
   const [selfMatch, setSelfMatch] = useState<CandidateSelfMatch | null>(null);
-  const [coachInput, setCoachInput] = useState("");
-  const [coachMessages, setCoachMessages] = useState<Array<{ role: "assistant" | "user"; content: string }>>([
-    { role: "assistant", content: "I can help improve positioning, tighten bullets, suggest missing evidence, and decide which resume version/template fits a job." },
-  ]);
-  const [coachBusy, setCoachBusy] = useState(false);
   const [, setLocalAiLearningEvents] = useState<Array<{ type: string; detail: string; created_at: string }>>([]);
-  const [scratchMode, setScratchMode] = useState(false);
-  const [candidateEditorMode, setCandidateEditorMode] = useState<"guided" | "canvas">("canvas");
-  const [editorHeaderAlign, setEditorHeaderAlign] = useState<"left" | "center">("center");
-  const [editorDensity, setEditorDensity] = useState<"comfortable" | "compact">("comfortable");
   const [localError, setLocalError] = useState("");
   const candidateUrlReadyRef = useRef(false);
 
@@ -2909,7 +2874,7 @@ function CandidatePortalWorkspace({
     const params = new URLSearchParams(window.location.search);
     params.set("login", "candidate");
     params.set("candidate_view", activeSection);
-    if ((activeSection === "review" || activeSection === "profile") && activeUpload?.id) params.set("upload", activeUpload.id);
+    if (activeSection === "review" && activeUpload?.id) params.set("upload", activeUpload.id);
     else params.delete("upload");
     if (((activeSection === "review" && versionDetailOpen) || activeSection === "match") && selectedVersionId) params.set("resume_version", selectedVersionId);
     else params.delete("resume_version");
@@ -2921,16 +2886,6 @@ function CandidatePortalWorkspace({
   useEffect(() => {
     const next = profile?.profile ?? {};
     setDraft(next);
-    setSkillsText((next.skills ?? []).join(", "));
-    setCertificationsText((next.certifications ?? []).join("\n"));
-    setAwardsText((next.awards ?? []).join("\n"));
-    setPublicationsText((next.publications ?? []).join("\n"));
-    setLanguagesText((next.languages ?? []).join(", "));
-    setLinksText((next.links ?? []).join("\n"));
-    setReferencesText(toTextList((next.other_sections ?? {}).references).join("\n"));
-    setExperienceItems(next.experience ?? []);
-    setEducationItems(next.education ?? []);
-    setProjectItems(next.projects ?? []);
   }, [profile]);
 
   useEffect(() => {
@@ -3006,53 +2961,21 @@ function CandidatePortalWorkspace({
     };
   }, [loadVersion, selectedVersionId, versions]);
 
-  function updateDraft(key: string, value: string) {
-    setDraft((current) => ({ ...current, [key]: value }));
-  }
-
   function applyStarterResume(skipConfirm = false) {
     if (!skipConfirm && candidateProfileHasContent(draft)) {
       const confirmed = window.confirm("Replace the current editor draft with the sample resume? Save first if you want to keep your current edits.");
       if (!confirmed) return;
     }
     const starter = candidateStarterResumeProfile();
-    setScratchMode(true);
     setDraft(starter);
-    setSkillsText((starter.skills ?? []).join(", "));
-    setCertificationsText((starter.certifications ?? []).join("\n"));
-    setAwardsText((starter.awards ?? []).join("\n"));
-    setPublicationsText((starter.publications ?? []).join("\n"));
-    setLanguagesText((starter.languages ?? []).join(", "));
-    setLinksText((starter.links ?? []).join("\n"));
-    setReferencesText(toTextList((starter.other_sections ?? {}).references).join("\n"));
-    setExperienceItems(starter.experience ?? []);
-    setEducationItems(starter.education ?? []);
-    setProjectItems(starter.projects ?? []);
     setVersionTitle("Software Engineer Starter Resume");
     setTargetRole(starter.headline ?? "Software Engineer");
-    setCoachMessages((items) => [
-      ...items,
-      {
-        role: "assistant",
-        content: "I loaded a sample resume into the editor. Replace every line with your real facts, then save and create a version. Do not keep sample claims that are not true.",
-      },
-    ]);
   }
 
   function handleStartFromScratch() {
-    setScratchMode(true);
     if (!candidateProfileHasContent(draft) && !versions.length && !latestUpload) applyStarterResume(true);
     if (!versionTitle.trim()) setVersionTitle("General Resume");
-    if (!draft.summary && !draft.headline) {
-      setCoachMessages((items) => [
-        ...items,
-        {
-          role: "assistant",
-          content: "Start with identity, target role, education, experience/projects, and skills. Write rough bullets; I will help convert them into resume-ready language without inventing facts.",
-        },
-      ]);
-    }
-    setActiveSection("profile");
+    setScratchEditorOpen(true);
   }
 
   function openSubmissionTracker(versionId?: string) {
@@ -3070,44 +2993,10 @@ function CandidatePortalWorkspace({
     setActiveSection("review");
   }
 
-  async function handleSave() {
-    setLocalError("");
-    try {
-      await saveProfile({
-        ...draft,
-        skills: splitCommaList(skillsText),
-        certifications: certificationsText.split("\n").map((item) => item.trim()).filter(Boolean),
-        experience: normalizeEditableProfileItems(experienceItems, "bullets"),
-        education: normalizeEditableProfileItems(educationItems, "details"),
-        projects: normalizeEditableProfileItems(projectItems, "bullets"),
-        awards: splitLineList(awardsText),
-        publications: splitLineList(publicationsText),
-        languages: splitCommaList(languagesText),
-        links: splitLineList(linksText),
-        other_sections: {
-          ...(draft.other_sections ?? {}),
-          references: splitLineList(referencesText),
-        },
-      });
-    } catch (error) {
-      setLocalError(readableError(error));
-    }
-  }
-
   async function handleSaveEditorProfile(nextProfile: CandidatePortalProfile["profile"]) {
     setLocalError("");
     try {
       setDraft(nextProfile);
-      setSkillsText((nextProfile.skills ?? []).join(", "));
-      setCertificationsText((nextProfile.certifications ?? []).join("\n"));
-      setAwardsText((nextProfile.awards ?? []).join("\n"));
-      setPublicationsText((nextProfile.publications ?? []).join("\n"));
-      setLanguagesText((nextProfile.languages ?? []).join(", "));
-      setLinksText((nextProfile.links ?? []).join("\n"));
-      setReferencesText(toTextList((nextProfile.other_sections ?? {}).references).join("\n"));
-      setExperienceItems(nextProfile.experience ?? []);
-      setEducationItems(nextProfile.education ?? []);
-      setProjectItems(nextProfile.projects ?? []);
       await saveProfile(nextProfile);
     } catch (error) {
       setLocalError(readableError(error));
@@ -3121,47 +3010,6 @@ function CandidatePortalWorkspace({
       if (version) {
         setSelectedVersionId(version.id);
         setSelectedVersion(version);
-        setVersionDetailOpen(true);
-        setActiveSection("review");
-      }
-    } catch (error) {
-      setLocalError(readableError(error));
-    }
-  }
-
-  async function handleSaveAndCreateVersion() {
-    await handleSave();
-    await handleCreateVersion();
-  }
-
-  async function handleCreateTargetedVersion() {
-    const inferredRole = targetRole.trim() || inferTargetRoleFromRequirement(requirementText) || "Target Job";
-    setLocalError("");
-    try {
-      const sourceVersionId = selectedVersionId || versions[0]?.id || "";
-      if (!sourceVersionId) {
-        const version = await createVersion(`${inferredRole} Resume`, inferredRole);
-        if (version) {
-          setSelectedVersionId(version.id);
-          setSelectedVersion(version);
-          setVersionDetailOpen(true);
-          setActiveSection("review");
-        }
-        return;
-      }
-      if (requirementText.trim().length < 20) {
-        setLocalError("Paste a job requirement first so the targeted version can be created from real evidence.");
-        return;
-      }
-      const result = await createTargetedVersion(sourceVersionId, {
-        requirement_text: requirementText,
-        title: `${inferredRole} Resume`,
-        target_role: inferredRole,
-      });
-      if (result?.version) {
-        setSelfMatch(result.match);
-        setSelectedVersionId(result.version.id);
-        setSelectedVersion(result.version);
         setVersionDetailOpen(true);
         setActiveSection("review");
       }
@@ -3293,35 +3141,6 @@ function CandidatePortalWorkspace({
     window.open(candidateResumeVersionHtmlPath(selectedVersionId, selectedTemplateId), "_blank", "noopener,noreferrer");
   }
 
-  async function sendCoachMessage() {
-    const message = coachInput.trim();
-    if (!message) return;
-    setCoachInput("");
-    setCoachBusy(true);
-    setCoachMessages((items) => [...items, { role: "user", content: message }]);
-    try {
-      const suggestion = await suggestAiEdit({
-        action: "coach",
-        instruction: message,
-        profile: draft,
-        target_role: targetRole,
-        requirement_text: requirementText,
-      });
-      const fallback = candidateCoachReply(profile?.profile ?? {}, message);
-      const reply = suggestion?.assistant_message || fallback;
-      setCoachMessages((items) => [...items, { role: "assistant", content: reply }]);
-      recordAiLearning("coach_prompt", `Asked coach: ${message.slice(0, 90)}`, {
-        original_text: message,
-        suggested_text: reply,
-        metadata: { status: suggestion?.status, learning_tags: suggestion?.learning_tags ?? [] },
-      });
-    } catch (error) {
-      setCoachMessages((items) => [...items, { role: "assistant", content: readableError(error) || candidateCoachReply(profile?.profile ?? {}, message) }]);
-    } finally {
-      setCoachBusy(false);
-    }
-  }
-
   function recordAiLearning(type: string, detail: string, event: Partial<{
     original_text: string;
     suggested_text: string;
@@ -3359,6 +3178,7 @@ function CandidatePortalWorkspace({
   const privacySettings = profile?.privacy_settings ?? {};
   const sectionCopy = candidatePortalSectionCopy(activeSection, latestUpload, versions.length);
   const selectedVersionApplications = applications.filter((item) => item.resume_version_id === selectedVersionId);
+  const showUploadSideRail = Boolean((activeUpload && ["queued", "running", "failed"].includes(activeUpload.status)) || uploads.length);
 
   function openVersionDetail(versionId: string) {
     setSelectedVersionId(versionId);
@@ -3391,101 +3211,6 @@ function CandidatePortalWorkspace({
     }
   }
 
-  function renderProfileEditor(context: "review" | "profile", showCoachTools = true) {
-    const isReview = context === "review";
-    return (
-      <>
-        <div className="candidatePortalSectionHead">
-          <div>
-            <span className="eyebrow">{isReview ? "Editable resume data" : "Master resume"}</span>
-            <h2>{isReview ? "Review and edit what was extracted" : "Edit the resume content"}</h2>
-            <p>{isReview ? "Correct names, dates, links, bullets, projects, education, and skills. Saving updates every future version." : "Use the canvas as the main writing surface. Switch to facts only when structured fields need cleanup."}</p>
-          </div>
-          <button className="primary" type="button" onClick={handleSave} disabled={busy}>{isReview ? "Save corrections" : "Save resume"}</button>
-        </div>
-        {showCoachTools ? <CandidateEditorCoachTools
-          enhancement={normalizedAiEnhancement(draft.ai_enhancement)}
-          applyHeadline={(value) => updateDraft("headline", value)}
-          applySummary={(value) => updateDraft("summary", value)}
-        /> : null}
-        <div className="candidateEditorModeBar">
-          <div>
-            <span className="eyebrow">Editing surface</span>
-            <strong>{candidateEditorMode === "canvas" ? "Resume Canvas is what you export" : "Facts keep the data clean"}</strong>
-            <small>{candidateEditorMode === "canvas" ? "Write like a document. Select text for AI help." : "Use this when parsing missed a date, link, project, or section."}</small>
-          </div>
-          <div className="candidateEditorModeToggle" role="tablist" aria-label="Resume editor mode">
-            <button type="button" role="tab" aria-selected={candidateEditorMode === "canvas"} className={candidateEditorMode === "canvas" ? "active" : ""} onClick={() => setCandidateEditorMode("canvas")}>Resume Canvas</button>
-            <button type="button" role="tab" aria-selected={candidateEditorMode === "guided"} className={candidateEditorMode === "guided" ? "active" : ""} onClick={() => setCandidateEditorMode("guided")}>Edit Facts</button>
-          </div>
-        </div>
-        {candidateEditorMode === "canvas" ? (
-          <CandidateResumeDocumentEditor
-            draft={draft}
-            updateDraft={updateDraft}
-            skillsText={skillsText}
-            setSkillsText={setSkillsText}
-            certificationsText={certificationsText}
-            setCertificationsText={setCertificationsText}
-            awardsText={awardsText}
-            setAwardsText={setAwardsText}
-            publicationsText={publicationsText}
-            setPublicationsText={setPublicationsText}
-            languagesText={languagesText}
-            setLanguagesText={setLanguagesText}
-            linksText={linksText}
-            setLinksText={setLinksText}
-            referencesText={referencesText}
-            setReferencesText={setReferencesText}
-            experienceItems={experienceItems}
-            setExperienceItems={setExperienceItems}
-            educationItems={educationItems}
-            setEducationItems={setEducationItems}
-            projectItems={projectItems}
-            setProjectItems={setProjectItems}
-            headerAlign={editorHeaderAlign}
-            setHeaderAlign={setEditorHeaderAlign}
-            density={editorDensity}
-            setDensity={setEditorDensity}
-            loadStarterResume={applyStarterResume}
-            saveEditorProfile={handleSaveEditorProfile}
-            requestAiSuggestion={(payload) => suggestAiEdit({ ...payload, profile: draft, target_role: targetRole, requirement_text: requirementText })}
-            onLearn={recordAiLearning}
-            busy={busy}
-          />
-        ) : (
-          <CandidateResumeGuidedForm
-            draft={draft}
-            updateDraft={updateDraft}
-            skillsText={skillsText}
-            setSkillsText={setSkillsText}
-            certificationsText={certificationsText}
-            setCertificationsText={setCertificationsText}
-            awardsText={awardsText}
-            setAwardsText={setAwardsText}
-            publicationsText={publicationsText}
-            setPublicationsText={setPublicationsText}
-            languagesText={languagesText}
-            setLanguagesText={setLanguagesText}
-            linksText={linksText}
-            setLinksText={setLinksText}
-            referencesText={referencesText}
-            setReferencesText={setReferencesText}
-            experienceItems={experienceItems}
-            setExperienceItems={setExperienceItems}
-            educationItems={educationItems}
-            setEducationItems={setEducationItems}
-            projectItems={projectItems}
-            setProjectItems={setProjectItems}
-            loadStarterResume={applyStarterResume}
-            save={handleSave}
-            busy={busy}
-          />
-        )}
-      </>
-    );
-  }
-
   return (
     <section className="candidatePortalShell">
       <header className="candidatePortalTopbar">
@@ -3513,7 +3238,7 @@ function CandidatePortalWorkspace({
           </button>
         ))}
       </nav>
-      {activeSection !== "dashboard" && activeSection !== "profile" ? (
+      {activeSection !== "dashboard" ? (
         <section className="candidatePortalHero compact">
           <div>
             <span className="eyebrow">{sectionCopy.eyebrow}</span>
@@ -3551,13 +3276,9 @@ function CandidatePortalWorkspace({
           openEditor={() => {
             const versionId = selectedVersionId || versions[0]?.id || "";
             if (versionId) openVersionEditor(versionId);
-            else setActiveSection("upload");
+            else handleStartFromScratch();
           }}
           openVersions={() => {
-            setVersionDetailOpen(false);
-            setActiveSection("review");
-          }}
-          openCreateVersion={() => {
             setVersionDetailOpen(false);
             setActiveSection("review");
           }}
@@ -3568,7 +3289,7 @@ function CandidatePortalWorkspace({
       ) : null}
 
       {activeSection === "upload" ? (
-        <section className="candidateUploadWorkspace">
+        <section className={showUploadSideRail ? "candidateUploadWorkspace" : "candidateUploadWorkspace single"}>
           <article className="candidatePortalCard candidateUploadPrimary">
             <div className="candidateUploadPrimaryHead">
               <div>
@@ -3622,6 +3343,7 @@ function CandidatePortalWorkspace({
               <span>After parsing, review facts in Resume before creating versions.</span>
             </div>
           </article>
+          {showUploadSideRail ? (
           <aside className="candidateUploadSideRail">
             {activeUpload && ["queued", "running", "failed"].includes(activeUpload.status) ? (
               <div className="candidateUploadStatusCard">
@@ -3629,32 +3351,24 @@ function CandidatePortalWorkspace({
                 <strong>{activeUpload.original_filename}</strong>
                 <ProgressBar value={activeUpload.progress} />
                 <p>{activeUpload.status === "succeeded" ? "Your resume is ready to review. Confirm the details before exporting." : activeUpload.stage_label ?? "We are preparing your editable profile."}</p>
-                <button className="secondary" type="button" onClick={() => setActiveSection(activeUpload.status === "succeeded" ? "profile" : "review")}>
-                  {activeUpload.status === "succeeded" ? "Review extracted facts" : "Open resume workspace"}
+                <button className="secondary" type="button" onClick={() => activeUpload.status === "succeeded" ? setScratchEditorOpen(true) : setActiveSection("review")}>
+                  {activeUpload.status === "succeeded" ? "Edit parsed resume" : "Open resume workspace"}
                 </button>
               </div>
-            ) : (
-              <article className="candidatePortalCard candidateUploadNextCard">
-                <span className="eyebrow">Next</span>
-                <strong>Parse once, edit forever.</strong>
-                <p>Your resume becomes a profile, a resume editor, versions, exports, and job-specific tailoring.</p>
-              </article>
-            )}
-            <article className="candidatePortalCard candidateUploadHistoryCard">
-            <div className="candidatePortalSectionHead">
-              <div>
-                <span className="eyebrow">Upload history</span>
-                <h2>Recent uploads</h2>
-              </div>
-            </div>
-            <CandidateUploadList
-              uploads={uploads}
-              activeUploadId={activeUpload?.id ?? ""}
-              selectUpload={(id) => { setActiveUploadId(id); setActiveSection("review"); }}
-              retryUpload={retryUpload}
-            />
-            </article>
+            ) : null}
+            {uploads.length ? (
+              <details className="candidatePortalCard candidateUploadHistoryCard">
+                <summary>Recent uploads</summary>
+                <CandidateUploadList
+                  uploads={uploads}
+                  activeUploadId={activeUpload?.id ?? ""}
+                  selectUpload={(id) => { setActiveUploadId(id); setActiveSection("review"); }}
+                  retryUpload={retryUpload}
+                />
+              </details>
+            ) : null}
           </aside>
+          ) : null}
         </section>
       ) : null}
 
@@ -3665,9 +3379,7 @@ function CandidatePortalWorkspace({
             selectedVersionId={selectedVersionId}
             query={versionQuery}
             setQuery={setVersionQuery}
-            shares={shares}
             applications={applications}
-            accessRequests={accessRequests}
             versionTitle={versionTitle}
             setVersionTitle={setVersionTitle}
             targetRole={targetRole}
@@ -3688,13 +3400,11 @@ function CandidatePortalWorkspace({
               </div>
               <div className="candidateVersionActions">
                 <button className="plain" type="button" onClick={() => setVersionDetailOpen(false)}>All versions</button>
-                <button className="primary" type="button" onClick={() => setActiveSection("profile")}>Edit resume</button>
+                <button className="primary" type="button" onClick={() => selectedVersionId ? openVersionEditor(selectedVersionId) : setScratchEditorOpen(true)}>Edit resume</button>
                 <button className="secondary" type="button" disabled={!selectedVersionId} onClick={() => openSubmissionTracker(selectedVersionId)}>Log submission</button>
-                <button className="secondary" type="button" disabled={!selectedVersionId} onClick={handlePreviewSelectedVersion}>Open HTML</button>
                 <button className="secondary" type="button" disabled={!selectedVersionId} onClick={handleExportSelectedVersion}>
                   <FileSearch size={15} /> Download PDF
                 </button>
-                <button className="secondary" type="button" disabled={!selectedVersionId} onClick={() => navigator.clipboard?.writeText(window.location.href)}>Copy link</button>
                 <button className="plain dangerText" type="button" disabled={!selectedVersionId} onClick={handleArchiveSelectedVersion}>Archive</button>
               </div>
             </div>
@@ -3704,17 +3414,6 @@ function CandidatePortalWorkspace({
             <CandidateTemplateSelector selectedTemplateId={selectedTemplateId} setSelectedTemplateId={setSelectedTemplateId} />
             <CandidateAtsConfidencePanel profile={profile?.profile ?? {}} resume={resume} selectedTemplateId={selectedTemplateId} versions={versions} applications={applications} />
             <CandidateVersionDiffPanel baseResume={candidateResumeFromProfile(profile?.profile ?? {})} version={selectedVersion} resume={resume} />
-            <article className="candidatePortalCard candidateNextActionCard">
-              <span className="eyebrow">What to do next</span>
-              <h2>{selectedVersionId ? "This version is ready to use" : "Create or select a version"}</h2>
-              <p>Edit the resume content, preview/export this version, or tailor it for a job.</p>
-              <div className="candidateNextActions">
-                <button className="primary" type="button" onClick={() => setActiveSection("profile")}>Edit resume</button>
-                <button className="secondary" type="button" onClick={() => setVersionDetailOpen(false)}>Manage versions</button>
-                <button className="secondary" type="button" disabled={!selectedVersionId} onClick={() => setActiveSection("match")}>Match to a job</button>
-                <button className="secondary" type="button" disabled={!selectedVersionId} onClick={() => openSubmissionTracker(selectedVersionId)}>Log where used</button>
-              </div>
-            </article>
             <CandidateApplicationTracker
               applications={selectedVersionApplications}
               selectedVersionId={selectedVersionId}
@@ -3738,26 +3437,6 @@ function CandidatePortalWorkspace({
               save={handleCreateApplication}
               updateStatus={handleUpdateApplicationStatus}
             />
-            <article id="candidate-version-card" className="candidatePortalCard">
-              <div className="candidatePortalSectionHead">
-                <div>
-                  <span className="eyebrow">Versions</span>
-                  <h2>Application vault</h2>
-                  <p>Create targeted versions from the same approved profile data.</p>
-                </div>
-              </div>
-              <label>Version title<input value={versionTitle} onChange={(event) => setVersionTitle(event.target.value)} /></label>
-              <label>Target role<input value={targetRole} onChange={(event) => setTargetRole(event.target.value)} placeholder="Data Engineer, Reliability Engineer..." /></label>
-              <button className="primary fullWidth" type="button" onClick={handleCreateVersion} disabled={busy || !versionTitle.trim()}>Create version</button>
-              <div className="candidateVersionList compact">
-                {versions.length ? versions.map((version) => (
-                  <button key={version.id} className={selectedVersionId === version.id ? "active" : ""} type="button" onClick={() => setSelectedVersionId(version.id)}>
-                    <strong>{version.title}</strong>
-                    <span>{version.target_role || "General"} · {formatDateTime(version.updated_at)}</span>
-                  </button>
-                )) : <EmptyPanel title="No versions yet" body="Upload and parse a resume, then create the first version." />}
-              </div>
-            </article>
             <details className="candidateControlDisclosure">
               <summary>Recruiter visibility and sharing</summary>
               <CandidateVisibilityPanel
@@ -3785,81 +3464,6 @@ function CandidatePortalWorkspace({
           </aside>
         </section>
         )
-      ) : null}
-
-      {activeSection === "profile" ? (
-        <section className="candidateAiEditorShell">
-          <article className="candidateAiEditorMain">
-            <header className="candidateAiEditorHero">
-              <div>
-                <span className="eyebrow">Master resume</span>
-                <h1>Edit once. Create versions when you apply.</h1>
-                <p>Write in the resume canvas, ask the coach for sharper wording, and keep facts clean before export.</p>
-              </div>
-              <div>
-                <button className="secondary" type="button" onClick={() => setActiveSection("review")}>Versions</button>
-                <button className="secondary" type="button" onClick={() => setActiveSection("match")}>Jobs</button>
-                <button className="primary" type="button" onClick={handleSave} disabled={busy}>Save changes</button>
-              </div>
-            </header>
-            {scratchMode || (!latestUpload && !versions.length) ? (
-              <CandidateScratchBuilderGuide
-                busy={busy}
-                saveProfile={handleSave}
-                createVersion={handleSaveAndCreateVersion}
-              />
-            ) : null}
-            <div className="candidateAiEditorBody">
-              <div className="candidateEditorFormSurface">
-                {renderProfileEditor("profile", false)}
-              </div>
-            </div>
-          </article>
-          <aside className="candidateAiEditorRail">
-            <CandidateCoachChat
-              messages={coachMessages}
-              input={coachInput}
-              setInput={setCoachInput}
-              send={sendCoachMessage}
-              busy={coachBusy}
-              enhancement={normalizedAiEnhancement(draft.ai_enhancement)}
-              applyHeadline={(value) => updateDraft("headline", value)}
-              applySummary={(value) => updateDraft("summary", value)}
-            />
-            <CandidateJobAiEditor
-              versions={versions}
-              selectedVersionId={selectedVersionId}
-              setSelectedVersionId={setSelectedVersionId}
-              targetRole={targetRole}
-              setTargetRole={setTargetRole}
-              requirementText={requirementText}
-              setRequirementText={updateRequirementText}
-              match={selfMatch}
-              busy={busy}
-              analyze={handleMatchRequirement}
-              createTargetedVersion={handleCreateTargetedVersion}
-              openJobBoard={() => setActiveSection("match")}
-            />
-            <article className="candidatePortalCard">
-              <div className="candidatePortalSectionHead">
-                <div>
-                  <span className="eyebrow">Readiness</span>
-                  <h2>{needsReview.length ? `${needsReview.length} review items` : "Looks clean"}</h2>
-                  <p>Fix only the items that would hurt the resume or confuse a recruiter.</p>
-                </div>
-              </div>
-              <div className="candidateNeedsList">
-                {needsReview.length ? needsReview.map((item, index) => (
-                  <article key={`${item.field ?? "review"}-${index}`}>
-                    <strong>{item.label ?? item.field}</strong>
-                    <span>{item.reason}</span>
-                  </article>
-                )) : <EmptyPanel title="No blocking checks" body="Still verify dates, links, and role titles before exporting." />}
-              </div>
-              <button className="secondary fullWidth" type="button" onClick={() => setActiveSection("review")}>Preview/export</button>
-            </article>
-          </aside>
-        </section>
       ) : null}
 
       {activeSection === "match" ? (
@@ -3922,6 +3526,26 @@ function CandidatePortalWorkspace({
           previewVersion={handlePreviewSelectedVersion}
           exportVersion={handleExportSelectedVersion}
           requestAiSuggestion={(payload) => suggestAiEdit({ ...payload, target_role: editingVersionTargetRole, requirement_text: requirementText })}
+          recordAiLearning={recordAiLearning}
+          busy={busy}
+        />
+      ) : null}
+      {scratchEditorOpen ? (
+        <CandidateScratchEditorOverlay
+          profile={draft}
+          title={versionTitle}
+          setTitle={setVersionTitle}
+          targetRole={targetRole}
+          setTargetRole={setTargetRole}
+          selectedTemplateId={selectedTemplateId}
+          setSelectedTemplateId={setSelectedTemplateId}
+          close={() => setScratchEditorOpen(false)}
+          saveProfile={handleSaveEditorProfile}
+          createVersion={async () => {
+            await handleCreateVersion();
+            setScratchEditorOpen(false);
+          }}
+          requestAiSuggestion={(payload) => suggestAiEdit({ ...payload, target_role: targetRole, requirement_text: requirementText })}
           recordAiLearning={recordAiLearning}
           busy={busy}
         />
@@ -4697,7 +4321,6 @@ function DatabaseView({
   const readyCount = candidates.filter((candidate) => (candidate.coverage ?? 0) >= 0.8 && Number(candidate.duplicate_risk_score ?? 0) < 0.75).length;
   const needsReviewCount = candidates.filter((candidate) => (candidate.coverage ?? 0) < 0.8 || Number(candidate.duplicate_risk_score ?? 0) >= 0.75).length;
   const missingLocationCount = candidates.filter((candidate) => !candidate.location && !(candidate.countries ?? []).length).length;
-  const versionSignalCount = candidates.filter((candidate) => Number(candidate.duplicate_risk_score ?? 0) >= 0.75).length;
   const countryFilters = useMemo(() => {
     const countries = new Set<string>();
     candidates.forEach((candidate) => (candidate.countries ?? []).forEach((country) => country && countries.add(country)));
@@ -4740,48 +4363,19 @@ function DatabaseView({
           <h2>Candidate Profiles</h2>
           <p>Search the company resume database using profile fields, recruiter notes, locations, and raw resume evidence.</p>
         </div>
+        <div className="profilesHeaderStats" aria-label="Database summary">
+          <span>{candidates.length} profiles</span>
+          <span>{readyCount} ready</span>
+          {needsReviewCount ? <span>{needsReviewCount} review</span> : null}
+          {missingLocationCount ? <span>{missingLocationCount} missing location</span> : null}
+        </div>
       </header>
 
-      <div className="profilesMetricStrip">
-        <article>
-          <div className="profileMetricCardHead"><span>Total Profiles</span></div>
-          <strong>{candidates.length}</strong>
-          <em>Company database</em>
-        </article>
-        <article>
-          <div className="profileMetricCardHead"><span>Ready</span></div>
-          <strong>{readyCount}</strong>
-          <em>Enough data for matching</em>
-        </article>
-        <article className={needsReviewCount ? "attention" : ""}>
-          <div className="profileMetricCardHead">
-            <span>Needs Review</span>
-            {needsReviewCount ? <i className="profileMetricHazard" aria-label="Needs attention"><AlertTriangle size={14} /></i> : null}
-          </div>
-          <strong>{needsReviewCount}</strong>
-          <em>Needs a recruiter decision</em>
-        </article>
-        <article className={missingLocationCount ? "attention" : ""}>
-          <div className="profileMetricCardHead">
-            <span>Missing Location</span>
-            {missingLocationCount ? <i className="profileMetricHazard" aria-label="Needs attention"><AlertTriangle size={14} /></i> : null}
-          </div>
-          <strong>{missingLocationCount}</strong>
-          <em>Country/location not captured</em>
-        </article>
-        <article>
-          <div className="profileMetricCardHead"><span>Version Signals</span></div>
-          <strong>{versionSignalCount}</strong>
-          <em>Possible repeated candidate uploads</em>
-        </article>
-      </div>
-
-      <section className="profileSearchPanel sourceSearchCard">
+      <section className="profileSearchPanel sourceSearchCard compactSearchCard">
         <div className="sourceSearchHeader">
           <div>
             <span className="eyebrow">Your DB</span>
-            <h3>Search your company candidate database</h3>
-            <p>Search parsed fields, recruiter notes, raw resume text, countries, companies, skills, and version signals.</p>
+            <h3>Search candidates</h3>
           </div>
         </div>
         <form className="semanticSearch" onSubmit={(event) => event.preventDefault()}>
