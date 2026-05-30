@@ -3,7 +3,7 @@
 Updated: 2026-05-29
 
 ## Done
-- Deployed the launch-hardening build to staging and production from Git commit `54ab42551d4b`.
+- Deployed the latest launch-hardening build to staging and production from the synced Git branches.
 - Applied production Cloud SQL backup/PITR/delete-protection posture: automated backups, 8 retained backups, 3-day PITR transaction logs, and deletion protection.
 - Verified production GCS document bucket object versioning is enabled.
 - Created dedicated staging E2E recruiter and candidate accounts so authenticated Playwright tests no longer skip.
@@ -88,9 +88,9 @@ Updated: 2026-05-29
 - External webhook delivery remains unconfigured by product decision; operational alerts stay in-app until a webhook destination is provided.
 
 ## Verified
-- Git sync verified: local `HEAD`, `origin/main`, `origin/staging`, and `origin/codex/v1-redesign` all point to `54ab42551d4b`.
-- Staging health verified: build SHA `54ab42551d4b`, environment `staging`, DB ready, 31 migrations applied, latest `20260528_0031_runtime_db_role`.
-- Production health verified: build SHA `54ab42551d4b`, environment `production`, DB ready, 31 migrations applied, latest `20260528_0031_runtime_db_role`.
+- Git sync verified: local `HEAD`, `origin/main`, `origin/staging`, and `origin/codex/v1-redesign` point to the same current launch commit.
+- Staging health verified: environment `staging`, DB ready, 31 migrations applied, latest `20260528_0031_runtime_db_role`.
+- Production health verified: environment `production`, DB ready, 31 migrations applied, latest `20260528_0031_runtime_db_role`.
 - Staging DB hardening check passed with no missing constraints, indexes, migrations, RLS tables, forced RLS tables, strict policies, runtime DB role checks, or vector indexes.
 - Production DB hardening check passed with no missing constraints, indexes, migrations, RLS tables, forced RLS tables, strict policies, runtime DB role checks, or vector indexes.
 - Production runtime DB role verified: `resume_intel_app_runtime` is not superuser, does not bypass RLS, and sees zero candidates without tenant context.
