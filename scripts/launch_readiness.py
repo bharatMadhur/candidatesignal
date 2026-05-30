@@ -115,7 +115,7 @@ def git_gates(expected_sha: str, remote: str, refs: tuple[str, ...]) -> list[Gat
     for ref in refs:
         full_ref = f"refs/heads/{ref}"
         actual = remote_refs.get(full_ref)
-        gates.append(GateResult(f"remote {ref}", actual == expected_sha, f"{actual or 'missing'} expected {expected_sha}"))
+        gates.append(GateResult(f"remote {ref}", sha_matches(actual or "", expected_sha), f"{actual or 'missing'} expected {expected_sha}"))
     return gates
 
 
@@ -148,7 +148,7 @@ def validate_deep_health(payload: Any, expected_sha: str, environment: str) -> l
         errors.append("build metadata missing")
     else:
         sha = str(build.get("sha") or "")
-        if not expected_sha.startswith(sha) and not sha.startswith(expected_sha[:12]):
+        if not sha_matches(sha, expected_sha):
             errors.append(f"build sha {sha or 'missing'} does not match {expected_sha}")
         if build.get("environment") != environment:
             errors.append(f"environment {build.get('environment')!r} is not {environment!r}")
@@ -170,7 +170,7 @@ def validate_deep_health(payload: Any, expected_sha: str, environment: str) -> l
 def command_match_gate(name: str, command: list[str], expected: str) -> GateResult:
     result = run_command(command, cwd=ROOT)
     actual = result.stdout.strip()
-    return GateResult(name, result.returncode == 0 and actual == expected, f"{actual or one_line(result.stderr)} expected {expected}")
+    return GateResult(name, result.returncode == 0 and sha_matches(actual, expected), f"{actual or one_line(result.stderr)} expected {expected}")
 
 
 def command_gate(name: str, command: list[str], cwd: Path, env: dict[str, str] | None = None) -> GateResult:
@@ -197,6 +197,14 @@ def parse_ls_remote(output: str) -> dict[str, str]:
         if len(parts) == 2:
             refs[parts[1]] = parts[0]
     return refs
+
+
+def sha_matches(actual: str, expected: str) -> bool:
+    actual = actual.strip()
+    expected = expected.strip()
+    if not actual or not expected:
+        return False
+    return actual == expected or actual.startswith(expected) or expected.startswith(actual)
 
 
 def one_line(value: str) -> str:

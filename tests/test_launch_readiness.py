@@ -10,7 +10,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts import launch_readiness
-from scripts.launch_readiness import GateResult, parse_ls_remote, validate_deep_health
+from scripts.launch_readiness import GateResult, parse_ls_remote, sha_matches, validate_deep_health
 
 
 class LaunchReadinessTests(unittest.TestCase):
@@ -45,6 +45,14 @@ class LaunchReadinessTests(unittest.TestCase):
         output = "aaa111\trefs/heads/main\nbbb222\trefs/heads/staging\n"
 
         self.assertEqual(parse_ls_remote(output), {"refs/heads/main": "aaa111", "refs/heads/staging": "bbb222"})
+
+    def test_sha_matches_accepts_full_or_short_prefix(self) -> None:
+        full = "ac5ab85d134334af24233c307ff512de10ce19df"
+
+        self.assertTrue(sha_matches(full, "ac5ab85"))
+        self.assertTrue(sha_matches("ac5ab85", full))
+        self.assertTrue(sha_matches(full, full))
+        self.assertFalse(sha_matches(full, "24bf438"))
 
     def test_main_returns_failure_when_any_gate_fails(self) -> None:
         with (
