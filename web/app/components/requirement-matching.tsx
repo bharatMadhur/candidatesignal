@@ -18,7 +18,12 @@ import type { View } from "../lib/workspace-route";
 import { RECRUITER_COPY } from "./recruiter-language";
 import { Metric } from "./primitives";
 
-type RequirementProfile = Record<string, any>;
+type RequirementProfile = Record<string, unknown> & {
+  min_years_experience?: string | number | null;
+  must_have_skills?: unknown[];
+  required_locations?: unknown[];
+  required_countries?: unknown[];
+};
 
 export function RequirementIntake(props: {
   requirement: Requirement | null;
