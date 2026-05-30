@@ -61,6 +61,7 @@ Updated: 2026-05-30
 - Extracted the shared collaboration/team-handoff panel into a standalone component.
 - Extracted the campaign workspace surface into `web/app/components/campaigns-view.tsx`.
 - Extracted the recruiter candidate intelligence/detail surface into `web/app/components/candidate-detail.tsx`.
+- Extracted the candidate database/search surface into `web/app/components/database-view.tsx`.
 - Split a large portion of `web/app/styles.css` into feature-scoped stylesheet imports for candidate portal, recruiter workflows, visual polish, and upload flows.
 - Tightened newly extracted frontend helper modules to avoid broad `any` signatures in matching, candidate-portal, evidence, and timeline helpers.
 - Ignored generated local visual-QA artifacts so screenshots and temporary revert patches do not enter git.
@@ -121,6 +122,7 @@ Updated: 2026-05-30
 - Collaboration panel extraction passed frontend lint and production build.
 - Campaign workspace component extraction passed frontend lint and production build.
 - Candidate detail component extraction passed frontend lint and production build.
+- Candidate database component extraction passed frontend lint and production build.
 - Feature-scoped stylesheet extraction passed `git diff --check`, frontend lint, and Next.js production build.
 - Python compile and full backend/service suite passed after the latest frontend cleanup batch: `230 passed`.
 - Extracted-helper type tightening passed frontend lint and production build.
