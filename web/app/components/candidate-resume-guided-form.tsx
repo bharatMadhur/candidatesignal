@@ -4,6 +4,9 @@ import type { CandidatePortalProfile } from "../../lib/api";
 import { textValue, toTextList } from "../lib/format";
 import { EmptyPanel } from "./primitives";
 
+type EditableResumeItem = Record<string, unknown>;
+type SetEditableResumeItems = (items: EditableResumeItem[]) => void;
+
 export function CandidateResumeGuidedForm({
   draft,
   updateDraft,
@@ -47,21 +50,21 @@ export function CandidateResumeGuidedForm({
   setLinksText: (value: string) => void;
   referencesText: string;
   setReferencesText: (value: string) => void;
-  experienceItems: Array<Record<string, any>>;
-  setExperienceItems: (items: Array<Record<string, any>>) => void;
-  educationItems: Array<Record<string, any>>;
-  setEducationItems: (items: Array<Record<string, any>>) => void;
-  projectItems: Array<Record<string, any>>;
-  setProjectItems: (items: Array<Record<string, any>>) => void;
+  experienceItems: EditableResumeItem[];
+  setExperienceItems: SetEditableResumeItems;
+  educationItems: EditableResumeItem[];
+  setEducationItems: SetEditableResumeItems;
+  projectItems: EditableResumeItem[];
+  setProjectItems: SetEditableResumeItems;
   loadStarterResume: () => void;
   save: () => Promise<void>;
   busy: boolean;
 }) {
-  function updateListItem(setItems: (items: Array<Record<string, any>>) => void, items: Array<Record<string, any>>, index: number, key: string, value: string) {
+  function updateListItem(setItems: SetEditableResumeItems, items: EditableResumeItem[], index: number, key: string, value: string) {
     setItems(items.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item));
   }
 
-  function updateListDetails(setItems: (items: Array<Record<string, any>>) => void, items: Array<Record<string, any>>, index: number, key: "bullets" | "details", value: string) {
+  function updateListDetails(setItems: SetEditableResumeItems, items: EditableResumeItem[], index: number, key: "bullets" | "details", value: string) {
     setItems(items.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: splitLineList(value) } : item));
   }
 

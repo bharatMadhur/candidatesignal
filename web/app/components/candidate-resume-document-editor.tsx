@@ -2,12 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
+import type { Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import { Loader2, Sparkles } from "lucide-react";
 import type { CandidateAiSuggestion, CandidatePortalProfile } from "../../lib/api";
 import { splitCommaList, textValue, toTextList, uniqueTextList } from "../lib/format";
 import { CANDIDATE_RESUME_TEMPLATES } from "./candidate-resume-export-panels";
+
+type EditableResumeItem = Record<string, unknown>;
+type AiLearningMetadata = Record<string, unknown>;
 
 export function CandidateResumeDocumentEditor(props: {
   draft: CandidatePortalProfile["profile"];
@@ -26,12 +30,12 @@ export function CandidateResumeDocumentEditor(props: {
   setLinksText: (value: string) => void;
   referencesText: string;
   setReferencesText: (value: string) => void;
-  experienceItems: Array<Record<string, any>>;
-  setExperienceItems: (items: Array<Record<string, any>>) => void;
-  educationItems: Array<Record<string, any>>;
-  setEducationItems: (items: Array<Record<string, any>>) => void;
-  projectItems: Array<Record<string, any>>;
-  setProjectItems: (items: Array<Record<string, any>>) => void;
+  experienceItems: EditableResumeItem[];
+  setExperienceItems: (items: EditableResumeItem[]) => void;
+  educationItems: EditableResumeItem[];
+  setEducationItems: (items: EditableResumeItem[]) => void;
+  projectItems: EditableResumeItem[];
+  setProjectItems: (items: EditableResumeItem[]) => void;
   headerAlign: "left" | "center";
   setHeaderAlign: (value: "left" | "center") => void;
   density: "comfortable" | "compact";
@@ -44,7 +48,7 @@ export function CandidateResumeDocumentEditor(props: {
     instruction?: string;
     resume_html?: string;
   }) => Promise<CandidateAiSuggestion | null>;
-  onLearn?: (type: string, detail: string, event?: Partial<{ original_text: string; suggested_text: string; accepted: boolean; metadata: Record<string, any> }>) => void;
+  onLearn?: (type: string, detail: string, event?: Partial<{ original_text: string; suggested_text: string; accepted: boolean; metadata: AiLearningMetadata }>) => void;
   busy: boolean;
   compactChrome?: boolean;
   templateId?: string;
@@ -492,7 +496,7 @@ export function CandidateResumeDocumentEditor(props: {
   );
 }
 
-function candidateResumeFromProfile(profile: CandidatePortalProfile["profile"]): Record<string, any> {
+function candidateResumeFromProfile(profile: CandidatePortalProfile["profile"]): Record<string, unknown> {
   return {
     name: profile.display_name || "",
     headline: profile.headline || "",
@@ -670,7 +674,7 @@ function candidateEditorContactFromLine(line: string, fallback: CandidatePortalP
   };
 }
 
-function candidateEditorItemHtml(item: Record<string, any>, kind: "experience" | "project" | "education") {
+function candidateEditorItemHtml(item: EditableResumeItem, kind: "experience" | "project" | "education") {
   const title = kind === "education" ? textValue(item.degree || item.title) : textValue(item.title || item.name || item.role);
   const place = kind === "education" ? textValue(item.school) : kind === "experience" ? textValue(item.company) : textValue(item.role || item.company);
   const heading = [title, place].filter(Boolean).join(" — ");
@@ -686,9 +690,9 @@ function candidateEditorItemHtml(item: Record<string, any>, kind: "experience" |
   ].join("\n");
 }
 
-function candidateEditorParseItems(elements: Element[], kind: "experience" | "project" | "education", fallbackItems: Array<Record<string, any>>) {
-  const parsed: Array<Record<string, any>> = [];
-  let current: Record<string, any> | null = null;
+function candidateEditorParseItems(elements: Element[], kind: "experience" | "project" | "education", fallbackItems: EditableResumeItem[]) {
+  const parsed: EditableResumeItem[] = [];
+  let current: EditableResumeItem | null = null;
   let metaConsumed = false;
   function pushCurrent() {
     if (!current) return;
@@ -855,7 +859,7 @@ function strengthenResumeSelection(value: string) {
   return strengthenResumeBullet(cleaned, null);
 }
 
-function strengthenResumeBullet(bullet: string, role: Record<string, any> | null) {
+function strengthenResumeBullet(bullet: string, role: EditableResumeItem | null) {
   const clean = textValue(bullet).replace(/^[-•]\s*/, "");
   const roleLabel = [role?.title, role?.company].filter(Boolean).join(" at ");
   if (!clean) return "";
@@ -901,7 +905,7 @@ function candidateEditorNormalizeComparableText(value: string) {
   return textValue(value).replace(/\s+/g, " ").trim();
 }
 
-function candidateEditorRewriteRangeSafety(editor: any, from: number, to: number, originalText?: string): { safe: boolean; reason?: string } {
+function candidateEditorRewriteRangeSafety(editor: Editor | null | undefined, from: number, to: number, originalText?: string): { safe: boolean; reason?: string } {
   const state = editor?.state;
   if (!state || !Number.isFinite(from) || !Number.isFinite(to) || from >= to) {
     return { safe: false, reason: "Select one sentence, bullet, or paragraph before asking AI to improve it." };
@@ -923,7 +927,7 @@ function candidateEditorRewriteRangeSafety(editor: any, from: number, to: number
     }
     let hasHeading = false;
     let blockCount = 0;
-    state.doc.nodesBetween(from, to, (node: any) => {
+    state.doc.nodesBetween(from, to, (node) => {
       if (node.type?.name === "heading") hasHeading = true;
       if (node.isBlock) blockCount += 1;
       return !hasHeading;

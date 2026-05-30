@@ -89,6 +89,7 @@ Updated: 2026-05-30
 - Centralized repeated frontend error, role-label, and active workflow status helpers so candidate detail, operations, settings, and workspace routing use one implementation.
 - Tightened candidate resume export/ATS preview JSON handling so malformed resume sections are normalized through `unknown`-safe record/list helpers instead of loose `any` casts.
 - Added `scripts/launch_readiness.py`, a repeatable launch gate for Git sync, staging/production deep health, production smoke, authenticated staging E2E, and load smoke before broad rollout.
+- Tightened candidate resume editor/guided-form/component overlay types so the candidate AI editor, fact editor, and export-preview bridge no longer use broad `any` shapes.
 
 ## In Progress
 - None for the launch-hardening batch.
@@ -152,6 +153,7 @@ Updated: 2026-05-30
 - Shared frontend utility consolidation passed `git diff --check`, frontend lint, and Next.js production build.
 - Python compile and full backend/service suite passed after the shared frontend utility consolidation: `230 passed`.
 - Candidate resume export JSON hardening passed frontend lint and Next.js production build.
+- Candidate resume editor type hardening passed `git diff --check`, frontend lint, and Next.js production build.
 - Launch readiness gate tests cover health payload validation, remote-ref parsing, failure propagation, and the full `--launch` command set.
 - Feature-scoped stylesheet extraction passed `git diff --check`, frontend lint, and Next.js production build.
 - Python compile and full backend/service suite passed after the latest frontend cleanup batch: `230 passed`.

@@ -11,6 +11,9 @@ import { CandidateResumeGuidedForm } from "./candidate-resume-guided-form";
 import { CandidateAtsConfidencePanel, CandidateCvPreview, CandidateTemplateSelector } from "./candidate-resume-export-panels";
 
 type ResumeEditorMode = "canvas" | "guided";
+type EditableResumeItem = Record<string, unknown>;
+type AiLearningMetadata = Record<string, unknown>;
+type AiLearningEventDraft = Partial<{ original_text: string; suggested_text: string; accepted: boolean; metadata: AiLearningMetadata }>;
 
 function useCandidateModalResumeEditor(
   initialProfile: CandidatePortalProfile["profile"],
@@ -26,9 +29,9 @@ function useCandidateModalResumeEditor(
   const [languagesText, setLanguagesText] = useState(toTextList(initialProfile.languages).join(", "));
   const [linksText, setLinksText] = useState(toTextList(initialProfile.links).join("\n"));
   const [referencesText, setReferencesText] = useState(toTextList((initialProfile.other_sections ?? {}).references).join("\n"));
-  const [experienceItems, setExperienceItems] = useState<Array<Record<string, any>>>(initialProfile.experience ?? []);
-  const [educationItems, setEducationItems] = useState<Array<Record<string, any>>>(initialProfile.education ?? []);
-  const [projectItems, setProjectItems] = useState<Array<Record<string, any>>>(initialProfile.projects ?? []);
+  const [experienceItems, setExperienceItems] = useState<EditableResumeItem[]>(initialProfile.experience ?? []);
+  const [educationItems, setEducationItems] = useState<EditableResumeItem[]>(initialProfile.education ?? []);
+  const [projectItems, setProjectItems] = useState<EditableResumeItem[]>(initialProfile.projects ?? []);
   const [headerAlign, setHeaderAlign] = useState<"left" | "center">("center");
   const [density, setDensity] = useState<"comfortable" | "compact">("comfortable");
   const initialProfileRef = useRef(initialProfile);
@@ -172,7 +175,7 @@ function CandidateModalEditorSurface({
     target_role?: string;
     requirement_text?: string;
   }) => Promise<CandidateAiSuggestion | null>;
-  recordAiLearning: (type: string, detail: string, event?: Partial<{ original_text: string; suggested_text: string; accepted: boolean; metadata: Record<string, any> }>) => void;
+  recordAiLearning: (type: string, detail: string, event?: AiLearningEventDraft) => void;
   busy: boolean;
 }) {
   return (
@@ -287,7 +290,7 @@ export function CandidateVersionEditorOverlay({
     target_role?: string;
     requirement_text?: string;
   }) => Promise<CandidateAiSuggestion | null>;
-  recordAiLearning: (type: string, detail: string, event?: Partial<{ original_text: string; suggested_text: string; accepted: boolean; metadata: Record<string, any> }>) => void;
+  recordAiLearning: (type: string, detail: string, event?: AiLearningEventDraft) => void;
   busy: boolean;
 }) {
   const initialProfile = candidateProfileFromResume(version?.resume_json ?? candidateResumeFromProfile(fallbackProfile), fallbackProfile);
@@ -387,7 +390,7 @@ export function CandidateScratchEditorOverlay({
     target_role?: string;
     requirement_text?: string;
   }) => Promise<CandidateAiSuggestion | null>;
-  recordAiLearning: (type: string, detail: string, event?: Partial<{ original_text: string; suggested_text: string; accepted: boolean; metadata: Record<string, any> }>) => void;
+  recordAiLearning: (type: string, detail: string, event?: AiLearningEventDraft) => void;
   busy: boolean;
 }) {
   const editor = useCandidateModalResumeEditor(profile, "scratch-editor", saveProfile);
