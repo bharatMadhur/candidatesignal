@@ -28,12 +28,16 @@ test.describe("candidate portal workflows", () => {
     const firstVersion = page.locator(".candidateVersionTable .tableRow").nth(1);
     if (await firstVersion.count()) {
       await firstVersion.getByRole("button", { name: /^Edit$/i }).click();
-      await expect(page.getByRole("dialog", { name: /resume version editor/i })).toBeVisible();
-      await expect(page.locator(".candidateTiptapEditor .ProseMirror")).toBeVisible();
-      await expect(page.getByText(/AI resume editor/i)).toBeVisible();
-      await expect(page.getByRole("button", { name: /review whole resume/i })).toBeVisible();
-      await expect(page.getByRole("button", { name: /export pdf/i })).toBeVisible();
-      await page.getByRole("button", { name: /close/i }).click();
+      const editorDialog = page.getByRole("dialog", { name: /resume version editor/i });
+      await expect(editorDialog).toBeVisible();
+      await expect(editorDialog.locator(".candidateTiptapEditor .ProseMirror")).toBeVisible();
+      await expect(editorDialog.getByText(/AI resume editor/i)).toBeVisible();
+      await expect(editorDialog.getByRole("button", { name: /review whole resume/i })).toBeVisible();
+      await expect(editorDialog.getByRole("button", { name: /export pdf/i })).toBeVisible();
+      await editorDialog.getByRole("button", { name: /Modern/ }).click();
+      await expect(editorDialog.locator(".candidateDocumentEditor")).toHaveClass(/candidateDocumentEditor-template-modern/);
+      await expect(editorDialog.locator(".candidateCvPreview")).toHaveClass(/candidateCvTemplate-modern/);
+      await editorDialog.getByRole("button", { name: /close/i }).click();
     }
 
     await navButton(page, "Jobs").click();
