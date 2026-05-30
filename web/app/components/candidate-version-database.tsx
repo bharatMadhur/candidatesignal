@@ -240,10 +240,12 @@ function CandidateSubmissionHistory({
   );
 }
 
-function versionEvidenceSummary(resume: Record<string, any>) {
+function versionEvidenceSummary(resume: Record<string, unknown>) {
   const skills = toTextList(resume.skills).slice(0, 3);
   const experience = Array.isArray(resume.experience) ? resume.experience : [];
-  const latest = experience[0] ?? {};
+  const latest = experience[0] && typeof experience[0] === "object" && !Array.isArray(experience[0])
+    ? experience[0] as Record<string, unknown>
+    : {};
   return [
     latest.title && latest.company ? `${latest.title} at ${latest.company}` : latest.title || latest.company,
     skills.length ? skills.join(", ") : "",

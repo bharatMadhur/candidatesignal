@@ -7,7 +7,7 @@ export function CandidateVisibilityPanel({
   busy,
   toggleNativeSearch,
 }: {
-  settings: Record<string, any>;
+  settings: Record<string, unknown>;
   busy: boolean;
   toggleNativeSearch: (enabled: boolean) => Promise<void>;
 }) {

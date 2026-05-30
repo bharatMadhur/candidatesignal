@@ -140,8 +140,8 @@ function practicalJobCardsForCandidate(profile: CandidatePortalProfile["profile"
   });
 }
 
-function normalizedAiEnhancement(value: unknown): Record<string, any> {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : {};
+function normalizedAiEnhancement(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function cvTextList(value: unknown): string[] {

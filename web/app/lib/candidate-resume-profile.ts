@@ -1,7 +1,13 @@
 import type { CandidatePortalProfile } from "../../lib/api";
 import { textValue, toTextList } from "./format";
 
-export function candidateResumeFromProfile(profile: CandidatePortalProfile["profile"]): Record<string, any> {
+type ResumeJson = Record<string, unknown>;
+
+function objectValue(value: unknown): ResumeJson {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as ResumeJson : {};
+}
+
+export function candidateResumeFromProfile(profile: CandidatePortalProfile["profile"]): ResumeJson {
   return {
     name: profile.display_name || "",
     headline: profile.headline || "",
@@ -30,8 +36,11 @@ export function candidateResumeFromProfile(profile: CandidatePortalProfile["prof
   };
 }
 
-export function candidateProfileFromResume(resume: Record<string, any>, fallback: CandidatePortalProfile["profile"] = {}): CandidatePortalProfile["profile"] {
-  const contact = resume.contact && typeof resume.contact === "object" ? resume.contact as Record<string, any> : {};
+export function candidateProfileFromResume(resume: ResumeJson, fallback: CandidatePortalProfile["profile"] = {}): CandidatePortalProfile["profile"] {
+  const contact = objectValue(resume.contact);
+  const skillGroups = objectValue(resume.skill_groups) as CandidatePortalProfile["profile"]["skill_groups"];
+  const otherSections = objectValue(resume.other_sections) as CandidatePortalProfile["profile"]["other_sections"];
+  const aiEnhancement = objectValue(resume.ai_enhancement) as CandidatePortalProfile["profile"]["ai_enhancement"];
   return {
     ...fallback,
     display_name: textValue(resume.name) || textValue(fallback.display_name),
@@ -45,7 +54,7 @@ export function candidateProfileFromResume(resume: Record<string, any>, fallback
     portfolio_url: textValue(contact.portfolio_url) || textValue(fallback.portfolio_url),
     github_url: textValue(contact.github_url) || textValue(fallback.github_url),
     skills: toTextList(resume.skills).length ? toTextList(resume.skills) : fallback.skills,
-    skill_groups: resume.skill_groups && typeof resume.skill_groups === "object" ? resume.skill_groups : fallback.skill_groups,
+    skill_groups: Object.keys(skillGroups ?? {}).length ? skillGroups : fallback.skill_groups,
     experience: Array.isArray(resume.experience) ? resume.experience : fallback.experience,
     education: Array.isArray(resume.education) ? resume.education : fallback.education,
     certifications: toTextList(resume.certifications).length ? toTextList(resume.certifications) : fallback.certifications,
@@ -54,8 +63,8 @@ export function candidateProfileFromResume(resume: Record<string, any>, fallback
     languages: toTextList(resume.languages).length ? toTextList(resume.languages) : fallback.languages,
     projects: Array.isArray(resume.projects) ? resume.projects : fallback.projects,
     links: toTextList(resume.links).length ? toTextList(resume.links) : fallback.links,
-    other_sections: resume.other_sections && typeof resume.other_sections === "object" ? resume.other_sections : fallback.other_sections,
-    ai_enhancement: resume.ai_enhancement && typeof resume.ai_enhancement === "object" ? resume.ai_enhancement : fallback.ai_enhancement,
+    other_sections: Object.keys(otherSections ?? {}).length ? otherSections : fallback.other_sections,
+    ai_enhancement: Object.keys(aiEnhancement ?? {}).length ? aiEnhancement : fallback.ai_enhancement,
   };
 }
 

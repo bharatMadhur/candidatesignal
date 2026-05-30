@@ -12,6 +12,9 @@ import { humanizeLabel, textValue, toTextList } from "../lib/format";
 import { CandidateCvPreview } from "./candidate-resume-export-panels";
 import { ProgressBar } from "./primitives";
 
+type CandidateReviewItem = Record<string, unknown>;
+type ResumeJson = Record<string, unknown>;
+
 export function CandidateHomeCommandCenter({
   profile,
   latestUpload,
@@ -41,8 +44,8 @@ export function CandidateHomeCommandCenter({
   applications: CandidateApplication[];
   accessRequests: CandidateAccessRequest[];
   profileCompleteness: number;
-  needsReview: Array<Record<string, any>>;
-  resume: Record<string, any>;
+  needsReview: CandidateReviewItem[];
+  resume: ResumeJson;
   selectedVersion: CandidateResumeVersion | null;
   selectedTemplateId: string;
   busy: boolean;
@@ -67,7 +70,7 @@ export function CandidateHomeCommandCenter({
   const nextActionBody = uploadInProgress
     ? `${activeUpload?.stage_label ?? "Parsing"} · ${activeUpload?.progress ?? 0}%`
     : visibleFixes.length
-      ? visibleFixes[0]?.reason ?? "Verify the extracted fields before exporting."
+      ? textValue(visibleFixes[0]?.reason) || "Verify the extracted fields before exporting."
       : versions.length
         ? "Use AI to compare this version against a job brief and create a sharper application copy."
         : "Upload an existing file or start from scratch with a guided builder. You approve every fact before export.";
@@ -145,7 +148,7 @@ export function CandidateHomeCommandCenter({
   );
 }
 
-function candidateReviewItemAlreadyResolved(profile: CandidatePortalProfile["profile"], item: Record<string, any>) {
+function candidateReviewItemAlreadyResolved(profile: CandidatePortalProfile["profile"], item: CandidateReviewItem) {
   const label = String(item.field ?? item.label ?? "").toLowerCase();
   const hasValue = (value: unknown) => Boolean(textValue(value).trim());
   if (label.includes("location")) return hasValue(profile.current_location);
