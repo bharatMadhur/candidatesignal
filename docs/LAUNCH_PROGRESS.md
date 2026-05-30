@@ -139,6 +139,7 @@ Updated: 2026-05-30
 - Team settings extraction passed `git diff --check`, frontend lint, and Next.js production build.
 - Python compile and full backend/service suite passed after the team settings extraction: `230 passed`.
 - Workspace shell extraction passed `git diff --check`, frontend lint, and Next.js production build.
+- Python compile and full backend/service suite passed after the workspace shell extraction: `230 passed`.
 - Feature-scoped stylesheet extraction passed `git diff --check`, frontend lint, and Next.js production build.
 - Python compile and full backend/service suite passed after the latest frontend cleanup batch: `230 passed`.
 - Extracted-helper type tightening passed frontend lint and production build.
