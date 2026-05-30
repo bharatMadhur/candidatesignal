@@ -7,7 +7,6 @@ import {
   Database,
   FileSearch,
   FileUp,
-  GitBranch,
   Loader2,
   LogIn,
   LogOut,
@@ -15,7 +14,6 @@ import {
   Plus,
   Rocket,
   Search,
-  Settings,
   ShieldCheck,
   UploadCloud,
   Users,
@@ -189,9 +187,10 @@ import { AdminSettings } from "./components/admin-settings";
 import { OperationsView } from "./components/operations-view";
 import { TeamSettings } from "./components/team-settings";
 import { UploadResumeView } from "./components/upload-resume-view";
+import { AccessDeniedPanel, AdminShellTopBar, EnvironmentBanner, WorkspaceTopNav } from "./components/workspace-shell";
 import { EmptyPanel, ProgressBar } from "./components/primitives";
 import { MatchResults, RequirementIntake } from "./components/requirement-matching";
-import { RECRUITER_COPY, WORKSPACE_NAV_LABELS } from "./components/recruiter-language";
+import { RECRUITER_COPY } from "./components/recruiter-language";
 import { mergeCampaignCandidateUpdate } from "./lib/campaign-workflow";
 import { normalizeCandidateVersionStatus } from "./lib/candidate-versions";
 import {
@@ -230,6 +229,7 @@ import { candidateProfileHasContent, candidateResumeFromProfile } from "./lib/ca
 import { domainLabel, humanizeLabel, splitCommaList } from "./lib/format";
 import { DOCUMENT_FILE_ACCEPT, DOCUMENT_FORMAT_LABEL, resolveLoginIdentifier } from "./lib/login";
 import { copyCurrentUrl, parseWorkspaceRoute, routeHasDeepLink, type CampaignDetailTab, type CandidateDetailTab, type View, type WorkspaceRoute } from "./lib/workspace-route";
+import { isCandidateUser, isPlatformAdmin, isTenantAdmin } from "./lib/user-roles";
 
 type ReviewCenterItem = {
   title: string;
@@ -2117,7 +2117,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     if (showMergedHome) {
       return (
         <main className="stitchPublicHome">
-          <EnvironmentBanner />
+          <EnvironmentBanner isStaging={IS_STAGING_ENV} />
           <header className="stitchPublicNav">
             <a className="publicBrand stitchPublicBrand" href="/">
               <BrandMark />
@@ -2314,7 +2314,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
 
     return (
       <main className="loginShell">
-        <EnvironmentBanner />
+        <EnvironmentBanner isStaging={IS_STAGING_ENV} />
         <section className="landingIntro loginIntroCompact">
           <span className="eyebrow">candidateSignal.ai</span>
           <h1>{inviteMode ? "Accept recruiter invite." : isAdminLogin ? "Platform admin login." : "Recruiter workspace login."}</h1>
@@ -2342,7 +2342,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
   if (token && !currentUser) {
     return (
       <main className="loginShell">
-        <EnvironmentBanner />
+        <EnvironmentBanner isStaging={IS_STAGING_ENV} />
         <section className="landingIntro loginIntroCompact">
           <span className="eyebrow">candidateSignal.ai</span>
           <h1>Checking session.</h1>
@@ -2368,7 +2368,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
 
   return (
     <main className="appShell topNavShell">
-      <EnvironmentBanner />
+      <EnvironmentBanner isStaging={IS_STAGING_ENV} />
       <section className="appMain">
         {useWorkspaceTopNav ? <WorkspaceTopNav view={view} setView={setView} user={currentUser} status={status} busy={busy} logout={handleLogout} /> : null}
         {!useWorkspaceTopNav && useAdminTopBar ? <AdminShellTopBar user={currentUser} status={status} busy={busy} logout={handleLogout} /> : null}
@@ -2648,16 +2648,6 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
         </section>
       </section>
     </main>
-  );
-}
-
-function EnvironmentBanner() {
-  if (!IS_STAGING_ENV) return null;
-  return (
-    <aside className="environmentBanner" role="note" aria-label="Staging environment">
-      <strong>Staging Environment</strong>
-      <span>Test data only. Do not upload production resumes or customer information.</span>
-    </aside>
   );
 }
 
@@ -3495,150 +3485,6 @@ function CandidatePortalWorkspace({
   );
 }
 
-function NavButton({ icon, label, active, onClick }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void }) {
-  return <button className={active ? "topNavLink active" : "topNavLink"} onClick={onClick}>{icon}<span>{label}</span></button>;
-}
-
-function AdminShellTopBar({ user, status, busy, logout }: { user: CurrentUser | null; status: string; busy: boolean; logout: () => void }) {
-  return (
-    <header className="shellTopBar adminShellTopBar">
-      <div>
-        <BrandMark />
-        <strong>candidateSignal.ai</strong>
-      </div>
-      <div className="topNavActions">
-        <button
-          className="shellUploadButton"
-          type="button"
-          onClick={() => document.getElementById("new-company-form")?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        >
-          <Plus size={18} /> New Company
-        </button>
-        <AccountSettingsMenu user={user} status={status} busy={busy} logout={logout} />
-      </div>
-    </header>
-  );
-}
-
-function WorkspaceTopNav({
-  view,
-  setView,
-  user,
-  status,
-  busy,
-  logout,
-}: {
-  view: View;
-  setView: (view: View) => void;
-  user: CurrentUser | null;
-  status: string;
-  busy: boolean;
-  logout: () => void;
-}) {
-  return (
-    <header className="workspaceTopNav">
-      <div className="workspaceTopBrand">
-        <button className="workspaceBrandButton" type="button" aria-label="Open workspace home" onClick={() => setView("dashboard")}>
-          <BrandMark />
-        </button>
-        <strong>candidateSignal.ai</strong>
-      </div>
-      <nav>
-        <NavButton icon={<Database size={18} />} label={WORKSPACE_NAV_LABELS.home} active={view === "dashboard"} onClick={() => setView("dashboard")} />
-        <NavButton icon={<Users size={18} />} label={WORKSPACE_NAV_LABELS.candidates} active={view === "database" || view === "candidate"} onClick={() => setView("database")} />
-        <NavButton icon={<Rocket size={18} />} label={WORKSPACE_NAV_LABELS.campaigns} active={view === "campaigns"} onClick={() => setView("campaigns")} />
-        <NavButton icon={<Search size={18} />} label={WORKSPACE_NAV_LABELS.copilot} active={view === "copilot" || view === "requirement" || view === "matches"} onClick={() => setView("copilot")} />
-      </nav>
-      <div className="topNavActions">
-        {isTenantAdmin(user) ? (
-          <button className={view === "operations" ? "shellUploadButton active queueTopButton" : "shellUploadButton queueTopButton"} type="button" onClick={() => setView("operations")}>
-            <AlertTriangle size={18} /> {WORKSPACE_NAV_LABELS.review}
-          </button>
-        ) : null}
-        <button className={view === "upload" ? "shellUploadButton active" : "shellUploadButton"} type="button" onClick={() => setView("upload")}>
-          <UploadCloud size={18} /> {WORKSPACE_NAV_LABELS.upload}
-        </button>
-        <AccountSettingsMenu user={user} status={status} busy={busy} logout={logout} setView={setView} active={view === "team" || view === "operations" || view === "versions"} />
-      </div>
-    </header>
-  );
-}
-
-function AccountSettingsMenu({
-  user,
-  status,
-  busy,
-  logout,
-  setView,
-  active = false,
-}: {
-  user: CurrentUser | null;
-  status: string;
-  busy: boolean;
-  logout: () => void;
-  setView?: (view: View) => void;
-  active?: boolean;
-}) {
-  const role = user?.tenant_role ?? user?.role ?? user?.platform_role ?? "user";
-  const canManageWorkspaceSettings = isTenantAdmin(user);
-  function switchLogin(path: "/" | "/admin") {
-    logout();
-    window.location.href = path;
-  }
-  return (
-    <details className="accountMenu">
-      <summary className={active ? "settingsSummary active" : "settingsSummary"}>
-        <Settings size={18} /> Settings
-      </summary>
-      <section className="accountMenuPanel">
-        <div className="accountIdentity">
-          <span className="avatarButton">{(user?.email ?? "CS").slice(0, 2).toUpperCase()}</span>
-          <div>
-            <strong>{user?.name ?? user?.email ?? "Signed in"}</strong>
-            <small>{user?.email ?? "No email"}</small>
-          </div>
-        </div>
-        <div className="accountMeta">
-          <span>Workspace</span>
-          <strong>{user?.tenant_name ?? (isPlatformAdmin(user) ? "Platform Admin" : "Company")}</strong>
-        </div>
-        <div className="accountMeta">
-          <span>Role</span>
-          <strong>{domainLabel(role)}</strong>
-        </div>
-        <div className="accountMeta">
-          <span>Status</span>
-          <strong>{busy ? "Working..." : status}</strong>
-        </div>
-        {setView ? (
-          <div className="accountMenuActions">
-            {canManageWorkspaceSettings ? <button type="button" onClick={() => setView("team")}><ShieldCheck size={16} /> Team Settings</button> : null}
-            {canManageWorkspaceSettings ? <button type="button" onClick={() => setView("operations")}><AlertTriangle size={16} /> Upload Review</button> : null}
-            <button type="button" onClick={() => setView("versions")}><GitBranch size={16} /> Candidate Versions</button>
-          </div>
-        ) : null}
-        <div className="accountMenuActions">
-          <button type="button" onClick={() => switchLogin("/")}><LogIn size={16} /> Recruiter Login</button>
-          <button type="button" onClick={() => switchLogin("/admin")}><ShieldCheck size={16} /> Admin Login</button>
-        </div>
-        <button className="logoutButton" type="button" onClick={logout}><LogOut size={16} /> Logout</button>
-      </section>
-    </details>
-  );
-}
-
-function AccessDeniedPanel({ title, body }: { title: string; body: string }) {
-  return (
-    <section className="panel accessDeniedPanel">
-      <ShieldCheck size={26} />
-      <div>
-        <h2>{title}</h2>
-        <p>{body}</p>
-      </div>
-    </section>
-  );
-}
-
 function Dashboard({
   candidates,
   campaigns,
@@ -4289,16 +4135,4 @@ function readableError(error: unknown) {
   if (raw === "Failed to fetch") return "Cannot reach the backend. Check that the API is running on 127.0.0.1:8010.";
   if (raw.includes("Login did not return a session")) return "Login succeeded but the session could not be restored. Refresh the page and try again.";
   return raw;
-}
-
-function isPlatformAdmin(user: CurrentUser | null) {
-  return user?.platform_role === "platform_admin" || user?.platform_role === "admin" || user?.role === "platform_admin" || user?.role === "admin";
-}
-
-function isCandidateUser(user: CurrentUser | null) {
-  return user?.workspace_access === "candidate" || user?.platform_role === "candidate" || user?.role === "candidate";
-}
-
-function isTenantAdmin(user: CurrentUser | null) {
-  return ["tenant_owner", "tenant_admin"].includes(user?.tenant_role ?? "");
 }

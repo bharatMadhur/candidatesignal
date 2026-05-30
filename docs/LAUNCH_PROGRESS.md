@@ -83,6 +83,7 @@ Updated: 2026-05-30
 - Added deterministic authenticated candidate-portal E2E coverage to verify resume template changes update both the editable canvas and live preview from the Start Blank editor.
 - Extracted the platform admin/company management surface into `web/app/components/admin-settings.tsx` without changing the admin UX.
 - Extracted the team privacy/member governance settings surface into `web/app/components/team-settings.tsx` without changing the recruiter settings UX.
+- Extracted shared workspace shell/navigation components into `web/app/components/workspace-shell.tsx` and centralized workspace role helpers in `web/app/lib/user-roles.ts`.
 
 ## In Progress
 - None for the launch-hardening batch.
@@ -137,6 +138,7 @@ Updated: 2026-05-30
 - Python compile and full backend/service suite passed after the admin settings extraction: `230 passed`.
 - Team settings extraction passed `git diff --check`, frontend lint, and Next.js production build.
 - Python compile and full backend/service suite passed after the team settings extraction: `230 passed`.
+- Workspace shell extraction passed `git diff --check`, frontend lint, and Next.js production build.
 - Feature-scoped stylesheet extraction passed `git diff --check`, frontend lint, and Next.js production build.
 - Python compile and full backend/service suite passed after the latest frontend cleanup batch: `230 passed`.
 - Extracted-helper type tightening passed frontend lint and production build.
