@@ -196,14 +196,16 @@ git push origin HEAD:staging
 STAGING_GIT_REF=staging deploy/gcp/10_deploy_staging.sh
 ```
 
-Promote only after staging QA passes:
+Promote only after the staging QA gate passes:
 
 ```bash
+python scripts/launch_readiness.py --expected-sha "$(git rev-parse HEAD)" --staging-qa
 git checkout main
 git pull --ff-only origin main
 git merge --ff-only staging
 git push origin main
 PRODUCTION_GIT_REF=main deploy/gcp/11_deploy_production.sh
+python scripts/launch_readiness.py --expected-sha "$(git rev-parse HEAD)" --launch
 ```
 
 For a tagged release instead:
@@ -217,6 +219,13 @@ PRODUCTION_GIT_REF=release-YYYYMMDD deploy/gcp/11_deploy_production.sh
 `deploy/gcp/11_deploy_production.sh` refuses production deploys from arbitrary
 feature branches unless `ALLOW_NON_PRODUCTION_REF=1` is set deliberately. That
 escape hatch is for emergency rollback or hotfix only.
+
+The launch readiness gate checks local/remote Git ref alignment, staging and
+production `/healthz/deep` build SHA/database/migration status, and, with
+`--launch`, runs production smoke, authenticated staging E2E, and production plus
+staging load smoke. Use `--staging-qa` before production promotion because
+production is not expected to be on the new SHA yet. If any gate fails, do not
+roll out to users.
 
 ## Cheap Data Protection Defaults
 
