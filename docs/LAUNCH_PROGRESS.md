@@ -82,6 +82,7 @@ Updated: 2026-05-30
 - Wired candidate resume template selection into the editable Resume Canvas so template changes are visible while editing, not only in export preview.
 - Added deterministic authenticated candidate-portal E2E coverage to verify resume template changes update both the editable canvas and live preview from the Start Blank editor.
 - Extracted the platform admin/company management surface into `web/app/components/admin-settings.tsx` without changing the admin UX.
+- Extracted the team privacy/member governance settings surface into `web/app/components/team-settings.tsx` without changing the recruiter settings UX.
 
 ## In Progress
 - None for the launch-hardening batch.
@@ -134,6 +135,7 @@ Updated: 2026-05-30
 - Candidate template regression test passed frontend lint and Next.js production build.
 - Admin settings extraction passed `git diff --check`, frontend lint, and Next.js production build.
 - Python compile and full backend/service suite passed after the admin settings extraction: `230 passed`.
+- Team settings extraction passed `git diff --check`, frontend lint, and Next.js production build.
 - Feature-scoped stylesheet extraction passed `git diff --check`, frontend lint, and Next.js production build.
 - Python compile and full backend/service suite passed after the latest frontend cleanup batch: `230 passed`.
 - Extracted-helper type tightening passed frontend lint and production build.
