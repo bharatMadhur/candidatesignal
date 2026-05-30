@@ -85,6 +85,7 @@ Updated: 2026-05-30
 - Extracted the team privacy/member governance settings surface into `web/app/components/team-settings.tsx` without changing the recruiter settings UX.
 - Extracted shared workspace shell/navigation components into `web/app/components/workspace-shell.tsx` and centralized workspace role helpers in `web/app/lib/user-roles.ts`.
 - Extracted the recruiter dashboard surface into `web/app/components/recruiter-dashboard.tsx` without changing the recruiter dashboard UX.
+- Extracted the recruiter Copilot/search and requirement assistant surface into `web/app/components/recruiter-copilot.tsx` without changing the Copilot UX.
 
 ## In Progress
 - None for the launch-hardening batch.
@@ -143,6 +144,7 @@ Updated: 2026-05-30
 - Python compile and full backend/service suite passed after the workspace shell extraction: `230 passed`.
 - Recruiter dashboard extraction passed `git diff --check`, frontend lint, and Next.js production build.
 - Python compile and full backend/service suite passed after the recruiter dashboard extraction: `230 passed`.
+- Recruiter Copilot extraction passed `git diff --check`, frontend lint, and Next.js production build.
 - Feature-scoped stylesheet extraction passed `git diff --check`, frontend lint, and Next.js production build.
 - Python compile and full backend/service suite passed after the latest frontend cleanup batch: `230 passed`.
 - Extracted-helper type tightening passed frontend lint and production build.
