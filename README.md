@@ -538,6 +538,24 @@ Use `E2E_BASE_URL=https://your-host` to run the same suite against an already-ru
 
 For staging and production release checks, use dedicated throwaway recruiter/candidate accounts. Do not use a real customer user for `E2E_COMPANY_EMAIL` or `E2E_CANDIDATE_EMAIL`.
 
+For staging, keep those throwaway credentials in Secret Manager and run:
+
+```bash
+scripts/run_staging_e2e_from_secrets.sh
+```
+
+Default secret names:
+
+```text
+staging-basic-auth-password
+e2e-company-email
+e2e-company-password
+e2e-candidate-email
+e2e-candidate-password
+```
+
+The script exports credentials only for the Playwright process and does not print secret values.
+
 Set `RESUME_INTEL_BUILD_SHA` during deploy so `/healthz` and `/healthz/deep` can prove which Git revision is running. The GCP deploy scripts set this automatically from the checked-out commit.
 
 Before inviting a larger user group, run a small concurrent smoke against staging or production:

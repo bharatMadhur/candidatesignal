@@ -1,12 +1,14 @@
 # candidateSignal.ai Launch Hardening Progress
 
-Updated: 2026-05-29
+Updated: 2026-05-30
 
 ## Done
 - Deployed the latest launch-hardening build to staging and production from the synced Git branches.
 - Applied production Cloud SQL backup/PITR/delete-protection posture: automated backups, 8 retained backups, 3-day PITR transaction logs, and deletion protection.
 - Verified production GCS document bucket object versioning is enabled.
 - Created dedicated staging E2E recruiter and candidate accounts so authenticated Playwright tests no longer skip.
+- Stored dedicated staging E2E credentials in Secret Manager.
+- Added `scripts/run_staging_e2e_from_secrets.sh` so authenticated staging Playwright can run without hardcoded credentials.
 - Ran authenticated Playwright coverage against staging for recruiter login, candidate login, homepage login consolidation, candidate database, upload queue, Copilot, campaigns, notes/version entry points, candidate resume editor, and candidate job-board reachability.
 - Verified staging and production health endpoints report the same deployed build SHA and latest DB migration.
 - Verified staging and production DB hardening posture after deployment, including strict tenant RLS, forced RLS, runtime DB role enforcement, required indexes, candidate summaries, campaign summaries, and vector indexes.
@@ -97,6 +99,7 @@ Updated: 2026-05-29
 - Production security posture check passed: GCS object versioning enabled and Cloud SQL has no authorized public networks.
 - Production config check passed; only expected warning is that external alert webhook is not configured.
 - Authenticated staging Playwright passed: 4 tests.
+- Secret Manager-backed authenticated staging Playwright passed: 4 tests.
 - Production public smoke passed against `https://app.candidatesignal.ai`.
 - Python compile, `git diff --check`, frontend lint, Next.js production build, and full backend/service suite passed after final launch deploy: `230 passed`.
 - Focused worker/upload/match tests passed.
@@ -127,7 +130,7 @@ Updated: 2026-05-29
 - Python compile, frontend lint, Next.js production build, and public smoke passed after cleanup.
 - Google OAuth Better Auth adapter probe passed against production schema after UUID ID generation fix.
 - Playwright public smoke passed.
-- Playwright authenticated smoke is present but intentionally blocked unless dedicated recruiter and candidate E2E credentials are provided.
+- Playwright authenticated smoke fails closed unless dedicated recruiter and candidate E2E credentials are provided; staging now has those credentials available through Secret Manager.
 - Search/version scale indexes, bounded candidate-version detection, location truthfulness, build SHA health metadata, load-smoke script, and helper extractions passed Python compile, full backend tests (`209 passed`), frontend lint, Next.js production build, load-smoke help check, and `git diff --check`.
 - `npm run e2e:auth-required` fails closed as expected until `E2E_COMPANY_EMAIL`, `E2E_COMPANY_PASSWORD`, `E2E_CANDIDATE_EMAIL`, and `E2E_CANDIDATE_PASSWORD` are provided.
 - DB hardening migration applied locally through `20260528_0028_retention_and_campaign_summaries`.
