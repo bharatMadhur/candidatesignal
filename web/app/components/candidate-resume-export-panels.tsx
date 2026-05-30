@@ -5,6 +5,8 @@ import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import type { CandidateApplication, CandidatePortalProfile, CandidateResumeVersion } from "../../lib/api";
 import { humanizeLabel, textValue, toTextList, uniqueTextList } from "../lib/format";
 
+type ResumeJson = Record<string, unknown>;
+
 export const CANDIDATE_RESUME_TEMPLATES = [
   { id: "atlas", name: "Atlas", tone: "Balanced", note: "Clean professional default for most roles." },
   { id: "classic", name: "Classic", tone: "Traditional", note: "Best for conservative HR and academic-style readers." },
@@ -62,7 +64,7 @@ export function CandidateAtsConfidencePanel({
   applications,
 }: {
   profile: CandidatePortalProfile["profile"];
-  resume: Record<string, any>;
+  resume: ResumeJson;
   selectedTemplateId: string;
   versions: CandidateResumeVersion[];
   applications: CandidateApplication[];
@@ -100,16 +102,17 @@ export function CandidateVersionDiffPanel({
   version,
   resume,
 }: {
-  baseResume: Record<string, any>;
+  baseResume: ResumeJson;
   version: CandidateResumeVersion | null;
-  resume: Record<string, any>;
+  resume: ResumeJson;
 }) {
   const baseSkills = toTextList(baseResume.skills).map((item) => item.toLowerCase());
   const versionSkills = toTextList(resume.skills);
   const prioritizedSkills = versionSkills.filter((item) => !baseSkills.includes(item.toLowerCase())).slice(0, 8);
-  const targetRole = textValue(resume.job_tailoring?.target_role || version?.target_role || resume.headline);
-  const matchedTerms = toTextList(resume.job_tailoring?.matched_terms).slice(0, 8);
-  const missingTerms = toTextList(resume.job_tailoring?.missing_or_unclear_terms).slice(0, 8);
+  const jobTailoring = recordValue(resume.job_tailoring);
+  const targetRole = textValue(jobTailoring.target_role || version?.target_role || resume.headline);
+  const matchedTerms = toTextList(jobTailoring.matched_terms).slice(0, 8);
+  const missingTerms = toTextList(jobTailoring.missing_or_unclear_terms).slice(0, 8);
   const changes = [
     {
       label: "Headline",
@@ -161,14 +164,14 @@ export function CandidateVersionDiffPanel({
   );
 }
 
-export function CandidateCvPreview({ resume, templateId = "atlas" }: { resume: Record<string, any>; templateId?: string }) {
-  const contact = resume.contact ?? {};
+export function CandidateCvPreview({ resume, templateId = "atlas" }: { resume: ResumeJson; templateId?: string }) {
+  const contact = recordValue(resume.contact);
   const skills = toTextList(resume.skills);
   const summaryHighlights = toTextList(resume.summary_highlights);
   const skillGroups = skillGroupEntries(resume.skill_groups, skills);
-  const experience = Array.isArray(resume.experience) ? resume.experience : [];
-  const education = Array.isArray(resume.education) ? resume.education : [];
-  const projects = Array.isArray(resume.projects) ? resume.projects : [];
+  const experience = recordList(resume.experience);
+  const education = recordList(resume.education);
+  const projects = recordList(resume.projects);
   const certifications = toTextList(resume.certifications);
   const awards = toTextList(resume.awards);
   const publications = toTextList(resume.publications);
@@ -199,19 +202,19 @@ export function CandidateCvPreview({ resume, templateId = "atlas" }: { resume: R
       {experience.length ? (
         <section>
           <h2>Experience</h2>
-          {experience.map((item, index) => <CvItem key={`${item.company || item.title || "experience"}-${index}`} item={item} />)}
+          {experience.map((item, index) => <CvItem key={`${textValue(item.company || item.title || "experience")}-${index}`} item={item} />)}
         </section>
       ) : null}
       {projects.length ? (
         <section>
           <h2>Projects</h2>
-          {projects.map((item, index) => <CvItem key={`${item.name || item.role || "project"}-${index}`} item={item} />)}
+          {projects.map((item, index) => <CvItem key={`${textValue(item.name || item.role || "project")}-${index}`} item={item} />)}
         </section>
       ) : null}
       {education.length ? (
         <section>
           <h2>Education</h2>
-          {education.map((item, index) => <CvItem key={`${item.school || item.degree || "education"}-${index}`} item={item} />)}
+          {education.map((item, index) => <CvItem key={`${textValue(item.school || item.degree || "education")}-${index}`} item={item} />)}
         </section>
       ) : null}
       <TextListSection title="Certifications" items={certifications} />
@@ -230,15 +233,15 @@ export function selectedTemplateLabel(templateId: string) {
 
 function candidateAtsSignals(
   profile: CandidatePortalProfile["profile"],
-  resume: Record<string, any>,
+  resume: ResumeJson,
   selectedTemplateId: string,
   versions: CandidateResumeVersion[],
   applications: CandidateApplication[],
 ) {
-  const contact = resume.contact ?? {};
-  const experience = Array.isArray(resume.experience) ? resume.experience : [];
-  const education = Array.isArray(resume.education) ? resume.education : [];
-  const projects = Array.isArray(resume.projects) ? resume.projects : [];
+  const contact = recordValue(resume.contact);
+  const experience = recordList(resume.experience);
+  const education = recordList(resume.education);
+  const projects = recordList(resume.projects);
   const skills = toTextList(resume.skills);
   const hasDates = experience.some((item) => textValue(item.start_date) || textValue(item.end_date));
   const hasLinks = Boolean(contact.linkedin_url || contact.portfolio_url || contact.github_url || profile.linkedin_url || profile.portfolio_url || profile.github_url);
@@ -281,7 +284,7 @@ function TextListSection({ title, items }: { title: string; items: string[] }) {
   );
 }
 
-function CvItem({ item }: { item: Record<string, any> }) {
+function CvItem({ item }: { item: ResumeJson }) {
   const title = textValue(item.title || item.name || item.degree);
   const place = textValue(item.company || item.school || item.role);
   const location = textValue(item.location);
@@ -289,7 +292,7 @@ function CvItem({ item }: { item: Record<string, any> }) {
   const technologies = cvTextList(item.technologies);
   const links = cvTextList(item.links);
   const bullets = cvTextList(item.bullets || item.details || item.description);
-  const workstreams = Array.isArray(item.workstreams) ? item.workstreams : [];
+  const workstreams = recordList(item.workstreams);
   return (
     <article className="cvItem">
       <h3>{[title, place].filter(Boolean).join(" — ")}</h3>
@@ -298,7 +301,7 @@ function CvItem({ item }: { item: Record<string, any> }) {
       {workstreams.length ? (
         <div className="cvWorkstreams">
           {workstreams.map((workstream, index) => (
-            <CvItem key={`${workstream.name || workstream.role || "workstream"}-${index}`} item={workstream} />
+            <CvItem key={`${textValue(workstream.name || workstream.role || "workstream")}-${index}`} item={workstream} />
           ))}
         </div>
       ) : null}
@@ -310,11 +313,24 @@ function cvTextList(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.map((item) => {
       if (typeof item === "string") return item;
-      if (item && typeof item === "object") return textValue((item as any).name || (item as any).title || (item as any).label || (item as any).value);
+      if (item && typeof item === "object") {
+        const objectItem = item as Record<string, unknown>;
+        return textValue(objectItem.name || objectItem.title || objectItem.label || objectItem.value);
+      }
       return textValue(item);
     }).filter(Boolean);
   }
   return toTextList(value);
+}
+
+function recordValue(value: unknown): ResumeJson {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as ResumeJson : {};
+}
+
+function recordList(value: unknown): ResumeJson[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is ResumeJson => Boolean(item && typeof item === "object" && !Array.isArray(item)))
+    : [];
 }
 
 function skillGroupEntries(groups: unknown, fallbackSkills: string[]) {
