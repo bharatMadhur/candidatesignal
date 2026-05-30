@@ -155,12 +155,14 @@ function CandidateModalEditorModeBar({
 function CandidateModalEditorSurface({
   editor,
   targetRole,
+  selectedTemplateId,
   requestAiSuggestion,
   recordAiLearning,
   busy,
 }: {
   editor: ReturnType<typeof useCandidateModalResumeEditor>;
   targetRole: string;
+  selectedTemplateId: string;
   requestAiSuggestion: (payload: {
     action: "coach" | "rewrite_selection" | "tailor_section" | "gap_check";
     selected_text?: string;
@@ -209,6 +211,7 @@ function CandidateModalEditorSurface({
           requestAiSuggestion={(payload) => requestAiSuggestion({ ...payload, profile: editor.draft, target_role: targetRole })}
           onLearn={recordAiLearning}
           busy={busy}
+          templateId={selectedTemplateId}
           compactChrome
         />
       ) : (
@@ -318,6 +321,7 @@ export function CandidateVersionEditorOverlay({
               <CandidateModalEditorSurface
                 editor={editor}
                 targetRole={targetRole}
+                selectedTemplateId={selectedTemplateId}
                 requestAiSuggestion={requestAiSuggestion}
                 recordAiLearning={recordAiLearning}
                 busy={busy}
@@ -416,6 +420,7 @@ export function CandidateScratchEditorOverlay({
             <CandidateModalEditorSurface
               editor={editor}
               targetRole={targetRole}
+              selectedTemplateId={selectedTemplateId}
               requestAiSuggestion={requestAiSuggestion}
               recordAiLearning={recordAiLearning}
               busy={busy}

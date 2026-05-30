@@ -7,6 +7,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { Loader2, Sparkles } from "lucide-react";
 import type { CandidateAiSuggestion, CandidatePortalProfile } from "../../lib/api";
 import { splitCommaList, textValue, toTextList, uniqueTextList } from "../lib/format";
+import { CANDIDATE_RESUME_TEMPLATES } from "./candidate-resume-export-panels";
 
 export function CandidateResumeDocumentEditor(props: {
   draft: CandidatePortalProfile["profile"];
@@ -46,6 +47,7 @@ export function CandidateResumeDocumentEditor(props: {
   onLearn?: (type: string, detail: string, event?: Partial<{ original_text: string; suggested_text: string; accepted: boolean; metadata: Record<string, any> }>) => void;
   busy: boolean;
   compactChrome?: boolean;
+  templateId?: string;
 }) {
   const {
     draft,
@@ -59,6 +61,7 @@ export function CandidateResumeDocumentEditor(props: {
     onLearn,
     busy,
     compactChrome = false,
+    templateId = "atlas",
   } = props;
   const [aiRewriteBusy, setAiRewriteBusy] = useState(false);
   const [aiInstruction, setAiInstruction] = useState("");
@@ -337,6 +340,7 @@ export function CandidateResumeDocumentEditor(props: {
   ];
   const hasSelection = selectedTextPreview.trim().length > 0;
   const selectedTextLabel = selectedTextPreview.length > 110 ? `${selectedTextPreview.slice(0, 110)}...` : selectedTextPreview;
+  const normalizedTemplateId = CANDIDATE_RESUME_TEMPLATES.some((template) => template.id === templateId) ? templateId : "atlas";
   const suggestionPanel = pendingSuggestion ? (
     <aside ref={suggestionRef} className="candidateAiSuggestionPanel candidateAiSuggestionPanel-inline">
       <div className="candidateAiSuggestionHeader">
@@ -383,7 +387,7 @@ export function CandidateResumeDocumentEditor(props: {
   ) : null;
 
   return (
-    <section className={`candidateDocumentEditor candidateDocumentEditor-${density} candidateDocumentEditor-align-${headerAlign}${compactChrome ? " candidateDocumentEditor-overlay" : ""}`}>
+    <section className={`candidateDocumentEditor candidateDocumentEditor-${density} candidateDocumentEditor-align-${headerAlign} candidateDocumentEditor-template-${normalizedTemplateId}${compactChrome ? " candidateDocumentEditor-overlay" : ""}`}>
       <div className="candidateDocumentToolbar" aria-label="Resume editor toolbar">
         <div>
           <span className="eyebrow">Resume editor</span>

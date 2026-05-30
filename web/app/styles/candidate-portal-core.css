@@ -1545,6 +1545,153 @@
   text-align: center;
 }
 
+.candidateDocumentEditor-template-classic .candidateDocumentPaperTiptap {
+  border-color: #1f2933;
+}
+
+.candidateDocumentEditor-template-classic .candidateTiptapEditor .ProseMirror {
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.candidateDocumentEditor-template-classic .candidateTiptapEditor .ProseMirror h1,
+.candidateDocumentEditor-template-classic .candidateTiptapEditor .ProseMirror h2,
+.candidateDocumentEditor-template-classic .candidateTiptapEditor .ProseMirror h3,
+.candidateDocumentEditor-template-executive .candidateTiptapEditor .ProseMirror h1,
+.candidateDocumentEditor-template-executive .candidateTiptapEditor .ProseMirror h2,
+.candidateDocumentEditor-template-executive .candidateTiptapEditor .ProseMirror h3,
+.candidateDocumentEditor-template-academic .candidateTiptapEditor .ProseMirror h1,
+.candidateDocumentEditor-template-academic .candidateTiptapEditor .ProseMirror h2,
+.candidateDocumentEditor-template-academic .candidateTiptapEditor .ProseMirror h3 {
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.candidateDocumentEditor-template-classic .candidateTiptapEditor .ProseMirror > h1,
+.candidateDocumentEditor-template-classic .candidateTiptapEditor .ProseMirror > h1 + p,
+.candidateDocumentEditor-template-classic .candidateTiptapEditor .ProseMirror > h1 + p + p,
+.candidateDocumentEditor-template-academic .candidateTiptapEditor .ProseMirror > h1,
+.candidateDocumentEditor-template-academic .candidateTiptapEditor .ProseMirror > h1 + p,
+.candidateDocumentEditor-template-academic .candidateTiptapEditor .ProseMirror > h1 + p + p {
+  text-align: center;
+}
+
+.candidateDocumentEditor-template-modern .candidateDocumentPaperTiptap {
+  border-color: #c8d7de;
+}
+
+.candidateDocumentEditor-template-modern .candidateTiptapEditor .ProseMirror,
+.candidateDocumentEditor-template-consulting .candidateTiptapEditor .ProseMirror,
+.candidateDocumentEditor-template-minimal .candidateTiptapEditor .ProseMirror {
+  font-family: Aptos, Calibri, Arial, sans-serif;
+}
+
+.candidateDocumentEditor-template-modern .candidateTiptapEditor .ProseMirror h1,
+.candidateDocumentEditor-template-modern .candidateTiptapEditor .ProseMirror h2,
+.candidateDocumentEditor-template-modern .candidateTiptapEditor .ProseMirror h3,
+.candidateDocumentEditor-template-consulting .candidateTiptapEditor .ProseMirror h1,
+.candidateDocumentEditor-template-consulting .candidateTiptapEditor .ProseMirror h2,
+.candidateDocumentEditor-template-consulting .candidateTiptapEditor .ProseMirror h3,
+.candidateDocumentEditor-template-minimal .candidateTiptapEditor .ProseMirror h1,
+.candidateDocumentEditor-template-minimal .candidateTiptapEditor .ProseMirror h2,
+.candidateDocumentEditor-template-minimal .candidateTiptapEditor .ProseMirror h3 {
+  font-family: Aptos, Calibri, Arial, sans-serif;
+}
+
+.candidateDocumentEditor-template-modern .candidateTiptapEditor .ProseMirror h1,
+.candidateDocumentEditor-template-modern .candidateTiptapEditor .ProseMirror h2 {
+  color: #1f4d5a;
+}
+
+.candidateDocumentEditor-template-compact .candidateDocumentPaperTiptap {
+  border-color: #d7dde5;
+}
+
+.candidateDocumentEditor-template-compact .candidateTiptapEditor .ProseMirror {
+  padding: 36px 44px;
+  font-family: Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.34;
+}
+
+.candidateDocumentEditor-template-compact .candidateTiptapEditor .ProseMirror h1,
+.candidateDocumentEditor-template-compact .candidateTiptapEditor .ProseMirror h2,
+.candidateDocumentEditor-template-compact .candidateTiptapEditor .ProseMirror h3,
+.candidateDocumentEditor-template-startup .candidateTiptapEditor .ProseMirror h1,
+.candidateDocumentEditor-template-startup .candidateTiptapEditor .ProseMirror h2,
+.candidateDocumentEditor-template-startup .candidateTiptapEditor .ProseMirror h3 {
+  font-family: Arial, sans-serif;
+}
+
+.candidateDocumentEditor-template-compact .candidateTiptapEditor .ProseMirror h1 {
+  font-size: 34px;
+}
+
+.candidateDocumentEditor-template-compact .candidateTiptapEditor .ProseMirror h2 {
+  margin-top: 16px;
+  font-size: 12px;
+}
+
+.candidateDocumentEditor-template-executive .candidateDocumentPaperTiptap {
+  border-top: 7px solid #384152;
+}
+
+.candidateDocumentEditor-template-executive .candidateTiptapEditor .ProseMirror,
+.candidateDocumentEditor-template-academic .candidateTiptapEditor .ProseMirror {
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.candidateDocumentEditor-template-executive .candidateTiptapEditor .ProseMirror h1 {
+  color: #252b35;
+}
+
+.candidateDocumentEditor-template-executive .candidateTiptapEditor .ProseMirror h2 {
+  color: #384152;
+}
+
+.candidateDocumentEditor-template-technical .candidateDocumentPaperTiptap {
+  border-left: 7px solid #234e70;
+}
+
+.candidateDocumentEditor-template-technical .candidateTiptapEditor .ProseMirror {
+  font-family: "IBM Plex Sans", Arial, sans-serif;
+}
+
+.candidateDocumentEditor-template-technical .candidateTiptapEditor .ProseMirror h1,
+.candidateDocumentEditor-template-technical .candidateTiptapEditor .ProseMirror h2,
+.candidateDocumentEditor-template-technical .candidateTiptapEditor .ProseMirror h3 {
+  font-family: "IBM Plex Sans", Arial, sans-serif;
+}
+
+.candidateDocumentEditor-template-technical .candidateTiptapEditor .ProseMirror h2 {
+  color: #234e70;
+}
+
+.candidateDocumentEditor-template-startup .candidateDocumentPaperTiptap {
+  border-top: 7px solid #164e63;
+}
+
+.candidateDocumentEditor-template-startup .candidateTiptapEditor .ProseMirror {
+  font-family: Arial, sans-serif;
+}
+
+.candidateDocumentEditor-template-startup .candidateTiptapEditor .ProseMirror h1,
+.candidateDocumentEditor-template-startup .candidateTiptapEditor .ProseMirror h2 {
+  color: #164e63;
+}
+
+.candidateDocumentEditor-template-minimal .candidateDocumentPaperTiptap {
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.candidateDocumentEditor-template-minimal .candidateTiptapEditor .ProseMirror h1 {
+  font-size: 34px;
+}
+
+.candidateDocumentEditor-template-minimal .candidateTiptapEditor .ProseMirror h2 {
+  color: #111827;
+  font-size: 12px;
+}
+
 .candidateTiptapEditor .ProseMirror h1 {
   margin: 0 0 6px;
   color: #151d2f;

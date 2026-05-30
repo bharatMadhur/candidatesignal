@@ -79,6 +79,7 @@ Updated: 2026-05-30
 - Added forced RLS on tenant-scoped tables so table-owner connections are still subject to row policies.
 - Added limited `resume_intel_app_runtime` DB role and runtime `SET LOCAL ROLE` so app reads/writes execute without superuser/BYPASSRLS privileges.
 - Updated workers, maintenance scripts, self-service signup, invite acceptance, platform-admin tenant views, and retention jobs to use explicit tenant or internal DB context.
+- Wired candidate resume template selection into the editable Resume Canvas so template changes are visible while editing, not only in export preview.
 
 ## In Progress
 - None for the launch-hardening batch.
@@ -127,6 +128,7 @@ Updated: 2026-05-30
 - Candidate database component extraction passed frontend lint and production build.
 - Upload/intake component extraction passed frontend lint and production build.
 - Operations component extraction passed `git diff --check`, frontend lint, and Next.js production build.
+- Candidate resume template wiring passed `git diff --check`, frontend lint, and Next.js production build.
 - Feature-scoped stylesheet extraction passed `git diff --check`, frontend lint, and Next.js production build.
 - Python compile and full backend/service suite passed after the latest frontend cleanup batch: `230 passed`.
 - Extracted-helper type tightening passed frontend lint and production build.

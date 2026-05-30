@@ -5,7 +5,7 @@ import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import type { CandidateApplication, CandidatePortalProfile, CandidateResumeVersion } from "../../lib/api";
 import { humanizeLabel, textValue, toTextList, uniqueTextList } from "../lib/format";
 
-const CANDIDATE_RESUME_TEMPLATES = [
+export const CANDIDATE_RESUME_TEMPLATES = [
   { id: "atlas", name: "Atlas", tone: "Balanced", note: "Clean professional default for most roles." },
   { id: "classic", name: "Classic", tone: "Traditional", note: "Best for conservative HR and academic-style readers." },
   { id: "modern", name: "Modern", tone: "Sharp", note: "Stronger hierarchy without breaking ATS safety." },
@@ -224,7 +224,7 @@ export function CandidateCvPreview({ resume, templateId = "atlas" }: { resume: R
   );
 }
 
-function selectedTemplateLabel(templateId: string) {
+export function selectedTemplateLabel(templateId: string) {
   return CANDIDATE_RESUME_TEMPLATES.find((template) => template.id === templateId)?.name ?? "Atlas";
 }
 
