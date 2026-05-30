@@ -20,7 +20,16 @@ test.describe("candidate portal workflows", () => {
 
   test("resume home, version review, editor, and job board remain reachable", async ({ page }) => {
     await expect(page.getByRole("button", { name: /home/i })).toBeVisible();
-    await expect(page.getByText(/resume you control|candidateSignal native/i).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: /resume.*control/i })).toBeVisible();
+
+    await page.getByRole("button", { name: /start blank/i }).click();
+    const scratchDialog = page.getByRole("dialog", { name: /start resume from scratch/i });
+    await expect(scratchDialog).toBeVisible();
+    await expect(scratchDialog.locator(".candidateTiptapEditor .ProseMirror")).toBeVisible();
+    await scratchDialog.getByRole("button", { name: /Modern/ }).click();
+    await expect(scratchDialog.locator(".candidateDocumentEditor")).toHaveClass(/candidateDocumentEditor-template-modern/);
+    await expect(scratchDialog.locator(".candidateCvPreview")).toHaveClass(/candidateCvTemplate-modern/);
+    await scratchDialog.getByRole("button", { name: /close/i }).click();
 
     await navButton(page, "My Resumes").click();
     await expect(page.getByText(/application vault|resume versions/i).first()).toBeVisible();
