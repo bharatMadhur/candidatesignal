@@ -1,5 +1,5 @@
 export type EvidenceRowInput = { label: string; value?: unknown; source: string; query?: string[] };
-type EvidenceMapItem = { claim?: unknown; evidence?: unknown };
+export type EvidenceMapItem = { claim?: unknown; evidence?: unknown };
 
 export function buildRecruiterEvidenceRows(facts: EvidenceRowInput[], inferences: EvidenceRowInput[], evidenceMap: EvidenceMapItem[], rawText: string) {
   const rows = [

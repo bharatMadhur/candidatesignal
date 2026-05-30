@@ -92,6 +92,7 @@ Updated: 2026-05-30
 - Tightened candidate resume editor/guided-form/component overlay types so the candidate AI editor, fact editor, and export-preview bridge no longer use broad `any` shapes.
 - Tightened requirement intake scorecard typing so editable requirement profiles use bounded unknown-safe fields instead of broad `any`.
 - Tightened candidate-side profile conversion, home, job-board, visibility, and version-summary helper types to use unknown-safe resume JSON shapes.
+- Tightened remaining app-level candidate evidence, note-signal, Copilot metadata, candidate resume-version, and candidate AI learning-event shapes so `web/app` no longer contains broad TypeScript `any` usage.
 
 ## In Progress
 - None for the launch-hardening batch.
@@ -158,6 +159,7 @@ Updated: 2026-05-30
 - Candidate resume editor type hardening passed `git diff --check`, frontend lint, and Next.js production build.
 - Requirement intake scorecard type hardening passed `git diff --check`, frontend lint, and Next.js production build.
 - Candidate-side profile helper type hardening passed `git diff --check`, frontend lint, and Next.js production build.
+- Remaining app-level `any` cleanup passed `git diff --check`, frontend lint, and Next.js production build; `web/app` now only contains the word "any" in user-facing copy/regex text.
 - Launch readiness gate tests cover health payload validation, remote-ref parsing, failure propagation, and the full `--launch` command set.
 - Feature-scoped stylesheet extraction passed `git diff --check`, frontend lint, and Next.js production build.
 - Python compile and full backend/service suite passed after the latest frontend cleanup batch: `230 passed`.

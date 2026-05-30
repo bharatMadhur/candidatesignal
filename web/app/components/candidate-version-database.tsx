@@ -6,7 +6,7 @@ import type {
   CandidateApplication,
   CandidateResumeVersion,
 } from "../../lib/api";
-import { formatDateTime, humanizeLabel, toTextList } from "../lib/format";
+import { formatDateTime, humanizeLabel, textValue, toTextList } from "../lib/format";
 import { EmptyPanel } from "./primitives";
 
 export function CandidateVersionDatabase({
@@ -46,11 +46,14 @@ export function CandidateVersionDatabase({
       version.title,
       version.target_role,
       version.status,
-      resume.headline,
-      resume.summary,
+      textValue(resume.headline),
+      textValue(resume.summary),
       ...toTextList(resume.skills),
       ...(Array.isArray(resume.experience)
-        ? resume.experience.flatMap((item) => [item.title, item.company, ...toTextList(item.bullets)])
+        ? resume.experience.flatMap((item) => {
+          const record = objectValue(item);
+          return [textValue(record.title), textValue(record.company), ...toTextList(record.bullets)];
+        })
         : []),
     ]
       .filter(Boolean)
@@ -117,7 +120,7 @@ export function CandidateVersionDatabase({
                 >
                   <span className="truncateCell candidateListNameCell" title={version.title}>
                     <span>{version.title}</span>
-                    <small>{resume.headline || "Resume version"}</small>
+                    <small>{textValue(resume.headline) || "Resume version"}</small>
                   </span>
                   <span className="truncateCell" title={version.target_role || "General"}>
                     {version.target_role || "General"}
@@ -252,4 +255,8 @@ function versionEvidenceSummary(resume: Record<string, unknown>) {
   ]
     .filter(Boolean)
     .join(" · ") || "Open to review resume evidence";
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }

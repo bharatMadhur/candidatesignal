@@ -59,7 +59,7 @@ import {
   profileFreshnessBadgeClass,
   type CandidateReviewSignal,
 } from "../lib/candidate-database";
-import { buildRecruiterEvidenceRows, evidenceTerms } from "../lib/candidate-evidence";
+import { buildRecruiterEvidenceRows, evidenceTerms, type EvidenceMapItem } from "../lib/candidate-evidence";
 import { readableError } from "../lib/errors";
 import { domainLabel, formatDateTime, textValue, toTextList } from "../lib/format";
 import { copyCurrentUrl, type CandidateDetailTab } from "../lib/workspace-route";
@@ -161,7 +161,9 @@ export function CandidateDetail({
   const sourceExt = sourceName.split(".").pop()?.toLowerCase() ?? "";
   const canInlinePreview = ["pdf", "txt", "md", "png", "jpg", "jpeg", "webp"].includes(sourceExt);
   const canHtmlPreview = ["docx", "txt", "md"].includes(sourceExt);
-  const evidenceMap = intelligence?.hr_intelligence?.evidence_map ?? [];
+  const evidenceMap: EvidenceMapItem[] = Array.isArray(intelligence?.hr_intelligence?.evidence_map)
+    ? intelligence.hr_intelligence.evidence_map as EvidenceMapItem[]
+    : [];
   const domainEntries = Object.entries(candidate.derived?.experience_by_domain ?? {});
   const uniqueExperienceYears = numericYears(accounting?.total_years_unique ?? hr?.total_years_experience);
   const domainRows = domainEntries.map(([domain, value]) => {
@@ -781,12 +783,19 @@ export function CandidateDetail({
               <details className="sourceEvidenceDrawer">
                 <summary>Show raw evidence map</summary>
                 <section className="sourceClaimList">
-                  {evidenceMap.slice(0, 12).map((item: any, index: number) => (
-                    <article key={`${item.claim}-${index}`}>
-                      <strong>{item.claim}</strong>
-                      <p>{(item.evidence ?? []).slice(0, 3).join(" ")}</p>
+                  {evidenceMap.slice(0, 12).map((item, index) => {
+                    const evidenceRow = objectValue(item);
+                    const claim = textValue(evidenceRow.claim) || `Evidence row ${index + 1}`;
+                    const evidence = Array.isArray(evidenceRow.evidence)
+                      ? evidenceRow.evidence.map(textValue).filter(Boolean).slice(0, 3).join(" ")
+                      : "";
+                    return (
+                    <article key={`${claim}-${index}`}>
+                      <strong>{claim}</strong>
+                      <p>{evidence}</p>
                     </article>
-                  ))}
+                    );
+                  })}
                 </section>
               </details>
             ) : null}
@@ -1033,16 +1042,34 @@ function candidateInitials(name?: string | null) {
   return (parts[0]?.[0] ?? "C").concat(parts[1]?.[0] ?? "").toUpperCase();
 }
 
-function noteSignalItems(signals: any): Array<{ category: string; label: string; value?: string | null }> {
-  if (Array.isArray(signals?.signals)) return signals.signals;
-  const grouped = signals?.by_category ?? {};
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function noteSignalItems(signals: unknown): Array<{ category: string; label: string; value?: string | null }> {
+  const signalRecord = objectValue(signals);
+  if (Array.isArray(signalRecord.signals)) {
+    return signalRecord.signals
+      .map((item) => {
+        const record = objectValue(item);
+        return { category: textValue(record.category), label: textValue(record.label), value: textValue(record.value) || null };
+      })
+      .filter((item) => item.label);
+  }
+  const grouped = objectValue(signalRecord.by_category);
   return Object.entries(grouped).flatMap(([category, items]) => (
-    Array.isArray(items) ? items.map((item: any) => ({ category, label: String(item.label ?? ""), value: item.value })) : []
+    Array.isArray(items)
+      ? items.map((item) => {
+        const record = objectValue(item);
+        return { category, label: textValue(record.label), value: textValue(record.value) || null };
+      }).filter((item) => item.label)
+      : []
   ));
 }
 
-function noteSignalCount(signals: any) {
-  if (typeof signals?.count === "number") return signals.count;
+function noteSignalCount(signals: unknown) {
+  const signalRecord = objectValue(signals);
+  if (typeof signalRecord.count === "number") return signalRecord.count;
   return noteSignalItems(signals).length;
 }
 

@@ -1,6 +1,8 @@
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api/backend";
 export const COOKIE_SESSION_TOKEN = "__cookie_session__";
 
+export type JsonObject = Record<string, unknown>;
+
 export type Session = {
   token: string;
   expires_at: string;
@@ -55,7 +57,7 @@ export type CandidateResumeVersion = {
   title: string;
   target_role?: string | null;
   status: string;
-  resume_json?: Record<string, any>;
+  resume_json?: JsonObject;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -147,7 +149,7 @@ export type CandidateResumeUpload = {
   next_retry_at?: string | null;
   error_message?: string | null;
   parsed_profile_json?: CandidatePortalProfile["profile"];
-  parsed_resume_json?: Record<string, any>;
+  parsed_resume_json?: JsonObject;
   parse_quality_json?: Record<string, any>;
   needs_review_json?: Array<{ field?: string; label?: string; reason?: string }>;
   created_at?: string | null;
@@ -193,7 +195,7 @@ export type CandidateAiLearningEvent = {
   original_text?: string | null;
   suggested_text?: string | null;
   accepted?: boolean | null;
-  metadata?: Record<string, any>;
+  metadata?: JsonObject;
   created_at?: string | null;
 };
 
@@ -267,7 +269,7 @@ export type CopilotThreadMessage = CopilotMessage & {
   candidates?: CandidateSummary[];
   clarifying_questions?: string[];
   suggested_actions?: string[];
-  metadata?: Record<string, any>;
+  metadata?: JsonObject;
   created_at?: string | null;
 };
 
@@ -295,9 +297,9 @@ export type CopilotResponse = {
     location_requirement?: "preferred" | "required" | "ignored" | string;
     terms?: string[];
   };
-  metadata?: Record<string, any>;
+  metadata?: JsonObject;
   synthesis_status?: string;
-  synthesis_usage?: any;
+  synthesis_usage?: unknown;
   thread?: CopilotThread;
 };
 
@@ -1120,7 +1122,7 @@ export async function createCandidatePortalResumeVersion(
   token: string,
   title: string,
   targetRole?: string,
-  resumeJson?: Record<string, any>,
+  resumeJson?: JsonObject,
 ): Promise<{ version: CandidateResumeVersion }> {
   return request("/candidate/resume-versions", {
     method: "POST",
@@ -1136,7 +1138,7 @@ export async function getCandidatePortalResumeVersion(token: string, versionId: 
 export async function updateCandidatePortalResumeVersion(
   token: string,
   versionId: string,
-  payload: { title?: string; target_role?: string | null; resume_json?: Record<string, any> },
+  payload: { title?: string; target_role?: string | null; resume_json?: JsonObject },
 ): Promise<{ version: CandidateResumeVersion }> {
   return request(`/candidate/resume-versions/${versionId}`, {
     method: "PATCH",
@@ -1286,7 +1288,7 @@ export async function createCandidateAiLearningEvent(
     original_text?: string;
     suggested_text?: string;
     accepted?: boolean;
-    metadata?: Record<string, any>;
+    metadata?: JsonObject;
   },
 ): Promise<{ event: CandidateAiLearningEvent }> {
   return request("/candidate/ai/learning-events", {

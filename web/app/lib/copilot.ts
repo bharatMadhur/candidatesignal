@@ -6,7 +6,7 @@ export type WorkspaceChatMessage = CopilotMessage & {
   candidates?: CandidateSummary[];
   clarifying_questions?: string[];
   suggested_actions?: string[];
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 };
 
 export type CopilotFilters = {

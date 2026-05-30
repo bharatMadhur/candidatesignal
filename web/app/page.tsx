@@ -1680,7 +1680,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     if (result) setCandidatePortalProfile(result);
   }
 
-  async function handleCreateCandidatePortalVersion(title: string, targetRole?: string, resumeJson?: Record<string, any>) {
+  async function handleCreateCandidatePortalVersion(title: string, targetRole?: string, resumeJson?: Record<string, unknown>) {
     const result = await run("Creating resume version", () => createCandidatePortalResumeVersion(token, title, targetRole, resumeJson));
     if (!result) return null;
     setCandidateResumeVersions((items) => [result.version, ...items.filter((item) => item.id !== result.version.id)]);
@@ -1689,7 +1689,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
 
   async function handleUpdateCandidatePortalVersion(
     versionId: string,
-    payload: { title?: string; target_role?: string | null; resume_json?: Record<string, any> },
+    payload: { title?: string; target_role?: string | null; resume_json?: Record<string, unknown> },
   ) {
     const result = await run("Saving resume version", () => updateCandidatePortalResumeVersion(token, versionId, payload));
     if (!result) return null;
@@ -1810,7 +1810,7 @@ export function HomeApp({ initialLoginMode, lockedLoginMode = false, showPublicH
     original_text?: string;
     suggested_text?: string;
     accepted?: boolean;
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
   }) {
     try {
       const result = await createCandidateAiLearningEvent(token, payload);
@@ -2669,8 +2669,8 @@ function CandidatePortalWorkspace({
   retryUpload: (uploadId: string) => Promise<CandidateResumeUpload | null>;
   saveProfile: (profile: CandidatePortalProfile["profile"]) => Promise<void>;
   savePrivacySettings: (settings: CandidatePortalPrivacySettings) => Promise<void>;
-  createVersion: (title: string, targetRole?: string, resumeJson?: Record<string, any>) => Promise<CandidateResumeVersion | null>;
-  updateVersion: (versionId: string, payload: { title?: string; target_role?: string | null; resume_json?: Record<string, any> }) => Promise<CandidateResumeVersion | null>;
+  createVersion: (title: string, targetRole?: string, resumeJson?: Record<string, unknown>) => Promise<CandidateResumeVersion | null>;
+  updateVersion: (versionId: string, payload: { title?: string; target_role?: string | null; resume_json?: Record<string, unknown> }) => Promise<CandidateResumeVersion | null>;
   archiveVersion: (versionId: string) => Promise<CandidateResumeVersion | null>;
   createShare: (versionId: string, label: string, includePii?: boolean) => Promise<CandidateResumeShare | null>;
   revokeShare: (shareId: string) => Promise<void>;
@@ -2704,7 +2704,7 @@ function CandidatePortalWorkspace({
     original_text?: string;
     suggested_text?: string;
     accepted?: boolean;
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
   }) => Promise<CandidateAiLearningEvent | null>;
   logout: () => void;
 }) {
@@ -3048,7 +3048,7 @@ function CandidatePortalWorkspace({
     original_text: string;
     suggested_text: string;
     accepted: boolean;
-    metadata: Record<string, any>;
+    metadata: Record<string, unknown>;
   }> = {}) {
     setLocalAiLearningEvents((items) => [
       { type, detail, created_at: new Date().toISOString() },
