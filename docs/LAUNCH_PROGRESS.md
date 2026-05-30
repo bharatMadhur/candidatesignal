@@ -3,6 +3,13 @@
 Updated: 2026-05-29
 
 ## Done
+- Deployed the launch-hardening build to staging and production from Git commit `54ab42551d4b`.
+- Applied production Cloud SQL backup/PITR/delete-protection posture: automated backups, 8 retained backups, 3-day PITR transaction logs, and deletion protection.
+- Verified production GCS document bucket object versioning is enabled.
+- Created dedicated staging E2E recruiter and candidate accounts so authenticated Playwright tests no longer skip.
+- Ran authenticated Playwright coverage against staging for recruiter login, candidate login, homepage login consolidation, candidate database, upload queue, Copilot, campaigns, notes/version entry points, candidate resume editor, and candidate job-board reachability.
+- Verified staging and production health endpoints report the same deployed build SHA and latest DB migration.
+- Verified staging and production DB hardening posture after deployment, including strict tenant RLS, forced RLS, runtime DB role enforcement, required indexes, candidate summaries, campaign summaries, and vector indexes.
 - Renamed visible company-login language to recruiter-login/recruiter-workspace language while keeping tenant/company backend boundaries intact.
 - Replaced staging HTTP Basic Auth plan with an app-level cookie gate implementation.
 - Added staging gate page and route handler.
@@ -66,19 +73,29 @@ Updated: 2026-05-29
 - Updated workers, maintenance scripts, self-service signup, invite acceptance, platform-admin tenant views, and retention jobs to use explicit tenant or internal DB context.
 
 ## In Progress
-- None for the latest hardening batch.
+- None for the launch-hardening batch.
 
 ## Blocked
-- Authenticated Playwright verification requires `E2E_COMPANY_EMAIL`, `E2E_COMPANY_PASSWORD`, `E2E_CANDIDATE_EMAIL`, and `E2E_CANDIDATE_PASSWORD`.
-- Live staging cookie-gate verification requires deploying the updated Caddy/UI stack.
+- None for the launch-hardening batch.
 
 ## Pending
-- Continue splitting remaining recruiter/campaign surfaces out of `web/app/page.tsx`.
-- Split `web/app/styles.css` into feature-scoped styles after P0 launch checks pass.
+- Continue splitting remaining recruiter/campaign surfaces out of `web/app/page.tsx` as non-blocking maintainability work.
+- Split `web/app/styles.css` into feature-scoped styles as non-blocking maintainability work.
 - Configure `.com` staging only if `staging.candidatesignal.com` is required; canonical staging remains `.ai`.
-- Audit deployment DB ownership after staging/prod rollout to confirm migrations run with owner privileges while app traffic uses the runtime DB role.
+- External webhook delivery remains unconfigured by product decision; operational alerts stay in-app until a webhook destination is provided.
 
 ## Verified
+- Git sync verified: local `HEAD`, `origin/main`, `origin/staging`, and `origin/codex/v1-redesign` all point to `54ab42551d4b`.
+- Staging health verified: build SHA `54ab42551d4b`, environment `staging`, DB ready, 31 migrations applied, latest `20260528_0031_runtime_db_role`.
+- Production health verified: build SHA `54ab42551d4b`, environment `production`, DB ready, 31 migrations applied, latest `20260528_0031_runtime_db_role`.
+- Staging DB hardening check passed with no missing constraints, indexes, migrations, RLS tables, forced RLS tables, strict policies, runtime DB role checks, or vector indexes.
+- Production DB hardening check passed with no missing constraints, indexes, migrations, RLS tables, forced RLS tables, strict policies, runtime DB role checks, or vector indexes.
+- Production runtime DB role verified: `resume_intel_app_runtime` is not superuser, does not bypass RLS, and sees zero candidates without tenant context.
+- Production security posture check passed: GCS object versioning enabled and Cloud SQL has no authorized public networks.
+- Production config check passed; only expected warning is that external alert webhook is not configured.
+- Authenticated staging Playwright passed: 4 tests.
+- Production public smoke passed against `https://app.candidatesignal.ai`.
+- Python compile, `git diff --check`, frontend lint, Next.js production build, and full backend/service suite passed after final launch deploy: `230 passed`.
 - Focused worker/upload/match tests passed.
 - Python compile passed.
 - Frontend lint passed.
