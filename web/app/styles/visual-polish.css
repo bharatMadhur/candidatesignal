@@ -1,0 +1,668 @@
+/* Blue accent and product sharpness polish. Extracted from styles.css to keep global CSS reviewable. */
+
+/* Blue accent polish: controlled signal color only, not a blue redesign. */
+:root {
+  --accent-blue: #2563eb;
+  --accent-blue-dark: #1d4ed8;
+  --accent-blue-soft: #eff6ff;
+  --accent-blue-line: #bfdbfe;
+  --accent-focus: rgba(37, 99, 235, 0.18);
+}
+
+.primary {
+  border-color: var(--accent-blue) !important;
+  background: var(--accent-blue) !important;
+  color: #ffffff !important;
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.12);
+}
+
+.primary:hover:not(:disabled) {
+  border-color: var(--accent-blue-dark) !important;
+  background: var(--accent-blue-dark) !important;
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.16);
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--accent-blue) !important;
+  outline: 3px solid var(--accent-focus) !important;
+  outline-offset: 1px;
+}
+
+.workspaceTopBrand strong,
+.shellTopBar strong {
+  color: #172033;
+}
+
+.workspaceTopNav .topNavLink.active,
+.shellUploadButton.active,
+.settingsSummary.active,
+.topNavLink.active {
+  border-color: var(--accent-blue-line) !important;
+  background: var(--accent-blue-soft) !important;
+  color: var(--accent-blue-dark) !important;
+  box-shadow: inset 0 -2px 0 var(--accent-blue);
+}
+
+.workspaceTopNav .topNavLink:hover,
+.shellUploadButton:hover,
+.settingsSummary:hover {
+  border-color: var(--accent-blue-line) !important;
+  color: var(--accent-blue-dark);
+}
+
+.candidateReportTabs button.active,
+.copilotTabs button.active,
+.campaignWorkflowTabs.cleanTabs button.active,
+.uploadModeTabs button.active,
+.loginModeTabs button.active,
+.candidatePortalNav button.active,
+.candidateEditorModeToggle button.active,
+.candidateDocToolbarGroup button.active,
+.candidateTemplateGrid button.active,
+.candidateHomeVersionList button.active,
+.candidateVersionList button.active,
+.candidateVersionTable .tableRow.active:not(.header) {
+  border-color: var(--accent-blue-line) !important;
+  background: var(--accent-blue-soft) !important;
+  color: var(--accent-blue-dark) !important;
+  box-shadow: inset 0 -2px 0 var(--accent-blue);
+}
+
+.campaignRailList button.active,
+.threadList article.active,
+.filterChip.active,
+.locationPreferenceButtons button.active {
+  border-color: var(--accent-blue-line) !important;
+  background: var(--accent-blue-soft) !important;
+  color: var(--accent-blue-dark) !important;
+  box-shadow: inset 3px 0 0 var(--accent-blue);
+}
+
+.scoreBadge,
+.copilotScorePills span,
+.coverageSummaryHead span,
+.linkedinHeaderBadge.verified,
+.linkedinStatus.verified,
+.linkedinStatus.succeeded,
+.currentLocationChip,
+.stitchHomePill,
+.pricingCompactPlan.active > div > span {
+  border-color: var(--accent-blue-line) !important;
+  background: var(--accent-blue-soft) !important;
+  color: var(--accent-blue-dark) !important;
+}
+
+.coverageCell i,
+.coverageCell i b,
+.fact i b,
+.candidateReadinessMeter i,
+.matchGaugeFill,
+.campaignProgressFill,
+.stitchProgressBar i,
+.domainBar b {
+  background: var(--accent-blue) !important;
+}
+
+.stitchMetricCard:hover,
+.campaignStageCandidate:hover,
+.copilotCompactCard:hover,
+.candidateHomeVersionList button:hover,
+.candidateVersionList button:hover,
+.candidateTemplateGrid button:hover {
+  border-color: var(--accent-blue-line);
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.08);
+}
+
+/* Sharpness pass: compact database toolbar and campaign rail. */
+.sourceSearchCard {
+  grid-template-columns: minmax(260px, 0.38fr) minmax(420px, 1fr);
+  align-items: center;
+  gap: 10px 16px;
+  padding: 12px 14px;
+}
+
+.sourceSearchHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 10px;
+  align-items: center;
+}
+
+.sourceSearchHeader h3 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 20px;
+}
+
+.sourceSearchHeader p {
+  grid-column: 1 / -1;
+  max-width: none;
+  overflow: hidden;
+  color: #647486;
+  font-size: 12px;
+  line-height: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sourceSearchHeader > span {
+  grid-column: 2;
+  grid-row: 1;
+  min-height: 26px;
+  padding: 3px 9px;
+}
+
+.sourceSearchCard .semanticSearch {
+  min-height: 44px;
+  gap: 8px;
+  padding: 7px 8px 7px 12px;
+}
+
+.sourceSearchCard .semanticSearch button {
+  min-height: 34px;
+  padding: 0 14px;
+}
+
+.sourceSearchCard .filterRow {
+  grid-column: 1 / -1;
+  gap: 7px;
+}
+
+.sourceSearchCard .filterChip {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+
+.compactSearchCard {
+  grid-template-columns: minmax(160px, 240px) minmax(420px, 1fr);
+  padding: 10px 12px;
+}
+
+.compactSearchCard .sourceSearchHeader p {
+  display: none;
+}
+
+.compactSearchCard .semanticSearch {
+  min-height: 40px;
+  padding: 6px 7px 6px 11px;
+}
+
+.compactSearchCard .semanticSearch input {
+  font-size: 13px;
+}
+
+.compactSearchCard .filterRow {
+  padding-top: 2px;
+}
+
+.compactSearchCard .filterChip {
+  min-height: 28px;
+  padding: 0 9px;
+}
+
+.campaignCleanRail {
+  padding: 10px;
+}
+
+.campaignRailHeader {
+  align-items: center;
+  border-bottom: 1px solid #edf2f6;
+  padding: 2px 2px 10px;
+}
+
+.campaignRailHeader div {
+  min-width: 0;
+}
+
+.campaignRailHeader strong {
+  font-size: 24px;
+}
+
+.campaignRailHeader em {
+  max-width: 150px;
+  overflow: hidden;
+  color: #647486;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.campaignRailNewButton {
+  min-height: 34px;
+  border-color: var(--accent-blue-line, #bfdbfe);
+  background: var(--accent-blue, #2563eb);
+  box-shadow: 0 5px 14px rgba(37, 99, 235, 0.16);
+  padding: 0 13px;
+}
+
+.campaignRailList {
+  gap: 6px;
+  max-height: calc(100vh - 230px);
+  padding-right: 4px;
+}
+
+.campaignRailList button {
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 54px;
+  border-color: #e5ebf0;
+  border-radius: 11px;
+  padding: 8px 9px;
+}
+
+.campaignRailList button:hover {
+  border-color: var(--accent-blue-line, #bfdbfe);
+  background: #fbfdff;
+}
+
+.campaignRailList button.active {
+  border-color: var(--accent-blue-line, #bfdbfe) !important;
+  background: var(--accent-blue-soft, #eff6ff) !important;
+  box-shadow: inset 3px 0 0 var(--accent-blue, #2563eb), 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+}
+
+.campaignRailInitial {
+  display: inline-flex !important;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dce6ef;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #526679 !important;
+  font-size: 12px !important;
+  font-weight: 900 !important;
+}
+
+.campaignRailList button.active .campaignRailInitial {
+  border-color: var(--accent-blue, #2563eb);
+  background: var(--accent-blue, #2563eb);
+  color: #ffffff !important;
+}
+
+.campaignRailItemCopy {
+  display: grid !important;
+  min-width: 0;
+  gap: 2px;
+}
+
+.campaignRailItemCopy strong {
+  overflow: hidden;
+  color: #172033;
+  font-size: 13px;
+  line-height: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.campaignRailItemCopy em {
+  overflow: hidden;
+  color: #647486;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.campaignRailCount {
+  display: inline-flex !important;
+  min-width: 28px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e1e8ef;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #172033 !important;
+  font-size: 12px !important;
+  font-weight: 900 !important;
+}
+
+.campaignRailList button.active .campaignRailCount {
+  border-color: var(--accent-blue-line, #bfdbfe);
+  background: #ffffff;
+  color: var(--accent-blue-dark, #1d4ed8) !important;
+}
+
+.candidateVersionTable .tableRow {
+  grid-template-columns: 260px 180px minmax(240px, 1fr) 115px 110px 150px;
+  min-width: 1080px;
+  cursor: pointer;
+}
+
+.candidateVersionRowActions {
+  display: flex;
+  gap: 7px;
+  justify-content: flex-end;
+}
+
+.candidateVersionRowActions button {
+  min-height: 30px;
+  padding: 0 10px;
+}
+
+.candidateVersionEditorOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+}
+
+.candidateVersionEditorBackdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.34);
+  backdrop-filter: blur(5px);
+}
+
+.candidateVersionEditorModal {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(1500px, calc(100vw - 44px));
+  height: min(930px, calc(100vh - 44px));
+  overflow: hidden;
+  border: 1px solid #dbe5ee;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 28px 90px rgba(15, 23, 42, 0.26);
+}
+
+.candidateVersionEditorTopbar {
+  display: grid;
+  grid-template-columns: minmax(300px, 1fr) 260px auto;
+  gap: 14px;
+  align-items: center;
+  border-bottom: 1px solid #e8eef4;
+  padding: 14px 16px;
+  background: #ffffff;
+}
+
+.candidateVersionEditorTopbar > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.candidateVersionEditorTopbar input {
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 9px 10px;
+  color: #172033;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+}
+
+.candidateVersionEditorTopbar label {
+  display: grid;
+  gap: 4px;
+  color: #647486;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.candidateVersionEditorTopbar label input {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.candidateVersionEditorTopbar > div:last-child {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.candidateVersionEditorTopbar small {
+  color: #708195;
+  font-size: 12px;
+}
+
+.candidateVersionEditorBody {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  min-height: 0;
+  background: #f8fafc;
+}
+
+.candidateVersionEditorBody > main {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
+.candidateVersionEditorBody > aside {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  min-height: 0;
+  overflow: auto;
+  border-left: 1px solid #e8eef4;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.candidateVersionEditorPreviewCard {
+  overflow: hidden;
+}
+
+.candidateVersionEditorPreviewCard .candidatePortalSectionHead {
+  margin-bottom: 10px;
+}
+
+.candidateVersionEditorPreviewCard .candidateCvPreview {
+  max-height: 430px;
+  overflow: auto;
+  border: 1px solid #e6edf4;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 14px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.candidateVersionEditorPreviewCard .candidateCvPreview h1 {
+  font-size: 22px;
+  line-height: 26px;
+}
+
+.candidateVersionEditorPreviewCard .candidateCvPreview h2 {
+  margin: 14px 0 7px;
+  font-size: 10px;
+}
+
+.candidateVersionEditorPreviewCard .cvHeadline,
+.candidateVersionEditorPreviewCard .cvMeta {
+  margin-bottom: 8px;
+}
+
+.candidateVersionEditorLoading {
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  color: #172033;
+}
+
+.candidateDocumentEditor-overlay {
+  min-height: 100%;
+}
+
+.candidateDocumentEditor-overlay .candidateDocumentToolbar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.candidateDocumentEditor-overlay .candidateSmartBlockBar,
+.candidateDocumentEditor-overlay .candidateEditorHintBar {
+  display: none;
+}
+
+.candidateDocumentEditor-overlay .candidateDocumentPaperEditor {
+  max-width: 930px;
+  margin: 0 auto;
+}
+
+.candidateAiBottomComposer {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  display: grid;
+  gap: 12px;
+  max-width: 930px;
+  margin: 14px auto 0;
+  border: 1px solid #cfddea;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.16);
+  padding: 14px;
+}
+
+.candidateAiBottomComposer.hasSelection {
+  border-color: rgba(37, 99, 235, 0.42);
+  box-shadow: 0 20px 55px rgba(37, 99, 235, 0.18);
+}
+
+.candidateAiComposerHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.candidateAiComposerHeader .eyebrow {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+  color: #2563eb;
+}
+
+.candidateAiComposerHeader strong {
+  display: block;
+  color: #172033;
+  font-size: 18px;
+  line-height: 24px;
+}
+
+.candidateAiComposerHeader p {
+  max-width: 660px;
+  margin: 3px 0 0;
+  color: #5a6b7f;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.candidateAiComposerHint {
+  flex: 0 0 auto;
+  border: 1px solid #dbe5ef;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #5a6b7f;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 6px 10px;
+}
+
+.candidateAiQuickActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.candidateAiQuickActions button {
+  border: 1px solid #d9e4ee;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #263448;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 9px 12px;
+}
+
+.candidateAiQuickActions button:hover:not(:disabled) {
+  border-color: #2563eb;
+  color: #1d4ed8;
+}
+
+.candidateAiQuickActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.candidateAiComposerInputRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  border: 1px solid #d9e4ee;
+  border-radius: 14px;
+  background: #f8fafc;
+  padding: 8px;
+}
+
+.candidateAiBottomComposer textarea {
+  min-height: 54px;
+  max-height: 130px;
+  resize: vertical;
+  border: 0;
+  background: transparent;
+  padding: 10px 12px;
+  color: #172033;
+  font-size: 14px;
+  line-height: 20px;
+  outline: none;
+}
+
+.candidateAiBottomComposer button {
+  align-self: end;
+  min-height: 44px;
+  border-radius: 12px;
+}
+
+@media (max-width: 1180px) {
+  .sourceSearchCard {
+    grid-template-columns: 1fr;
+  }
+
+  .sourceSearchHeader p {
+    white-space: normal;
+  }
+
+  .candidateVersionEditorTopbar,
+  .candidateVersionEditorBody {
+    grid-template-columns: 1fr;
+  }
+
+  .candidateVersionEditorBody > aside {
+    border-left: 0;
+    border-top: 1px solid #e8eef4;
+  }
+
+  .candidateAiChangeReviewGrid {
+    grid-template-columns: 1fr;
+  }
+}

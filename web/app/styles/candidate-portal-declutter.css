@@ -1,0 +1,143 @@
+/* Candidate portal declutter overrides. Extracted from styles.css to keep global CSS reviewable. */
+
+/* Candidate portal declutter pass: keep the candidate side document-first and calm. */
+.candidatePortalShell {
+  background: #ffffff;
+}
+
+.candidatePortalTopbar {
+  background: rgba(255, 255, 255, 0.98);
+}
+
+.candidatePortalNav {
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 28px;
+  background: #ffffff;
+}
+
+.candidatePortalNav button {
+  min-width: 94px;
+  min-height: 36px;
+  border-radius: 10px;
+  letter-spacing: 0.025em;
+}
+
+.candidatePortalNav button.active {
+  border-color: #cfdbe5;
+  background: #eef4f8;
+  color: #172033;
+}
+
+.candidateHomeStudio {
+  max-width: 1420px;
+  grid-template-columns: minmax(0, 1fr) minmax(310px, 360px);
+  padding-top: 26px;
+}
+
+.candidateHomeResumeStage h1 {
+  max-width: 1120px;
+  font-size: clamp(32px, 3.2vw, 48px);
+  white-space: normal;
+}
+
+.candidateHomeStageActions {
+  max-width: 560px;
+  justify-content: flex-start;
+}
+
+.candidateHomeStageActions button {
+  min-height: 44px;
+  border-radius: 10px;
+}
+
+.candidateHomeResumePaper {
+  min-height: 660px;
+  max-height: calc(100vh - 245px);
+  border-radius: 14px;
+  box-shadow: 0 16px 46px rgba(15, 23, 42, 0.07);
+}
+
+.candidateHomeSide {
+  top: 118px;
+}
+
+.candidateHomeCoachCard,
+.candidateHomeSimpleCard {
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.candidateHomeCoachCard {
+  background: #f7fafc;
+}
+
+.candidateEditorModeBar {
+  border-radius: 12px;
+  background: #f8fafb;
+  box-shadow: none;
+}
+
+.candidateEditorModeBar small {
+  color: #66778a;
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.candidateEditorModeToggle {
+  border-radius: 10px;
+}
+
+.candidateEditorModeToggle button {
+  border-radius: 8px;
+}
+
+.candidateDocumentEditor {
+  gap: 12px;
+}
+
+.candidateDocumentToolbar {
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.candidateSmartBlockBar,
+.candidateEditorHintBar {
+  border-radius: 12px;
+  background: #fbfcfd;
+}
+
+.candidateEditorHintBar {
+  opacity: 0.88;
+}
+
+.candidateDocumentPaperEditor {
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+}
+
+.candidateVersionDatabaseGrid {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 330px);
+}
+
+.candidateVersionCreateCard {
+  top: 116px;
+}
+
+@media (max-width: 1180px) {
+  .candidateHomeResumeStage > header,
+  .candidateHomeStudio,
+  .candidateVersionDatabaseGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .candidateHomeStageActions {
+    justify-content: flex-start;
+  }
+
+  .candidateHomeSide,
+  .candidateVersionCreateCard {
+    position: static;
+  }
+}

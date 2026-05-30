@@ -1,0 +1,229 @@
+/* Candidate upload simplification styles. Extracted from styles.css to keep global CSS reviewable. */
+
+/* Candidate upload simplification: one primary action, preview only after selection. */
+.candidateUploadWorkspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: 16px;
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 18px 36px 34px;
+  align-items: start;
+}
+
+.candidateUploadWorkspace.single {
+  grid-template-columns: minmax(0, 980px);
+  justify-content: center;
+}
+
+.candidateUploadPrimary {
+  gap: 16px;
+  padding: 20px;
+}
+
+.candidateUploadPrimaryHead {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.candidateUploadPrimaryHead h2 {
+  margin: 4px 0 4px;
+  color: #172033;
+  font-size: 24px;
+  letter-spacing: -0.04em;
+}
+
+.candidateUploadPrimaryHead p {
+  max-width: 620px;
+  margin: 0;
+  color: #647486;
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.candidateUploadPrimary .candidateFilePicker {
+  min-height: 154px;
+  border-color: #cbd8e2;
+  background: linear-gradient(180deg, #fbfdff 0%, #f7fafc 100%);
+}
+
+.candidateUploadPrimary .candidateFilePicker:hover {
+  border-color: var(--accent-blue, #2563eb);
+  background: #ffffff;
+}
+
+.candidateUploadQuietHint {
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+  border: 1px solid #edf2f6;
+  border-radius: 11px;
+  background: #fbfcfd;
+  padding: 0 13px;
+}
+
+.candidateUploadQuietHint span,
+.candidateUploadSubmitRow span {
+  color: #667789;
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.candidateUploadPreviewBlock {
+  display: grid;
+  gap: 10px;
+}
+
+.candidateUploadPreviewHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.candidateUploadPreviewHead > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.candidateUploadPreviewHead strong {
+  overflow: hidden;
+  color: #172033;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.candidateUploadPrimary .candidatePreParsePreview {
+  padding: 8px;
+  border-radius: 12px;
+}
+
+.candidateUploadPrimary .candidatePreParsePreview header {
+  display: none;
+}
+
+.candidateUploadPrimary .candidatePreParsePreview iframe {
+  height: min(54vh, 520px);
+}
+
+.candidateUploadOptional {
+  border: 1px solid #e1e8ef;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.candidateUploadOptional summary {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  padding: 0 14px;
+  color: #172033;
+  font-size: 13px;
+  font-weight: 900;
+  list-style: none;
+}
+
+.candidateUploadOptional summary::-webkit-details-marker {
+  display: none;
+}
+
+.candidateUploadOptional summary span {
+  color: #7a8998;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.candidateUploadOptional[open] {
+  background: #fbfcfd;
+}
+
+.candidateUploadOptional .candidateFormGrid {
+  padding: 0 14px 14px;
+}
+
+.candidateUploadSubmitRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.candidateUploadSubmitRow .primary {
+  min-height: 42px;
+}
+
+.candidateUploadSideRail {
+  position: sticky;
+  top: 118px;
+  display: grid;
+  gap: 12px;
+}
+
+.candidateUploadHistoryCard {
+  gap: 11px;
+  padding: 14px;
+}
+
+.candidateUploadHistoryCard summary {
+  cursor: pointer;
+  color: #172033;
+  font-size: 13px;
+  font-weight: 900;
+  list-style: none;
+}
+
+.candidateUploadHistoryCard summary::-webkit-details-marker {
+  display: none;
+}
+
+.candidateUploadHistoryCard .candidatePortalSectionHead h2 {
+  font-size: 17px;
+}
+
+.candidateUploadHistoryCard .candidateUploadList {
+  gap: 7px;
+  max-height: 380px;
+  overflow: auto;
+  padding-right: 3px;
+}
+
+.candidateUploadHistoryCard .candidateUploadListItem {
+  gap: 4px;
+  padding: 10px;
+  border-radius: 10px;
+}
+
+.candidateUploadHistoryCard .candidateUploadList strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.candidateUploadHistoryCard .emptyPanel {
+  min-height: 120px;
+  padding: 14px;
+}
+
+@media (max-width: 1180px) {
+  .candidateUploadWorkspace {
+    grid-template-columns: 1fr;
+    padding: 16px;
+  }
+
+  .candidateUploadSideRail {
+    position: static;
+  }
+
+  .candidateUploadPrimaryHead {
+    display: grid;
+  }
+}

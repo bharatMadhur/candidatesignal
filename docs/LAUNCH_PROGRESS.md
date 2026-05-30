@@ -57,6 +57,9 @@ Updated: 2026-05-29
 - Extracted the candidate work/education timeline panel and manual profile correction editor out of the frontend monolith.
 - Extracted requirement intake, requirement match results, and candidate-version review into standalone recruiter workflow components.
 - Extracted the shared collaboration/team-handoff panel into a standalone component.
+- Extracted the campaign workspace surface into `web/app/components/campaigns-view.tsx`.
+- Extracted the recruiter candidate intelligence/detail surface into `web/app/components/candidate-detail.tsx`.
+- Split a large portion of `web/app/styles.css` into feature-scoped stylesheet imports for candidate portal, recruiter workflows, visual polish, and upload flows.
 - Tightened newly extracted frontend helper modules to avoid broad `any` signatures in matching, candidate-portal, evidence, and timeline helpers.
 - Ignored generated local visual-QA artifacts so screenshots and temporary revert patches do not enter git.
 - Removed obsolete candidate-version test coverage for retired `entity-resolution` route aliases after confirming the API only exposes candidate-version routes.
@@ -79,8 +82,8 @@ Updated: 2026-05-29
 - None for the launch-hardening batch.
 
 ## Pending
-- Continue splitting remaining recruiter/campaign surfaces out of `web/app/page.tsx` as non-blocking maintainability work.
-- Split `web/app/styles.css` into feature-scoped styles as non-blocking maintainability work.
+- Continue splitting lower-risk settings/admin/upload surfaces out of `web/app/page.tsx` as non-blocking maintainability work.
+- Continue splitting the remaining legacy blocks in `web/app/styles.css` as non-blocking maintainability work.
 - Configure `.com` staging only if `staging.candidatesignal.com` is required; canonical staging remains `.ai`.
 - External webhook delivery remains unconfigured by product decision; operational alerts stay in-app until a webhook destination is provided.
 
@@ -113,6 +116,10 @@ Updated: 2026-05-29
 - Candidate timeline/correction panel extraction passed frontend lint and production build.
 - Requirement/match-results/candidate-version-review extraction passed frontend lint and production build.
 - Collaboration panel extraction passed frontend lint and production build.
+- Campaign workspace component extraction passed frontend lint and production build.
+- Candidate detail component extraction passed frontend lint and production build.
+- Feature-scoped stylesheet extraction passed `git diff --check`, frontend lint, and Next.js production build.
+- Python compile and full backend/service suite passed after the latest frontend cleanup batch: `230 passed`.
 - Extracted-helper type tightening passed frontend lint and production build.
 - Focused backend worker/upload/matching/prompt-security tests and Python compile passed after the latest frontend cleanup batch.
 - Candidate-version cleanup passed focused tests.

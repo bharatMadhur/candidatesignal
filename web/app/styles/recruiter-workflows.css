@@ -1,0 +1,2408 @@
+/* Recruiter workflow polish and collaboration styles. Extracted from styles.css to keep global CSS reviewable. */
+
+/* Recruiter workflow polish: calm hierarchy, compact lists, and less technical noise. */
+.homeActionBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 18px;
+}
+
+.homeActionBar button {
+  min-height: 38px;
+}
+
+.workspaceTopNav {
+  min-height: 62px;
+  grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
+}
+
+.workspaceTopNav nav {
+  justify-self: center;
+  gap: 4px;
+}
+
+.workspaceTopNav .topNavActions {
+  justify-self: end;
+}
+
+.workspaceTopNav .topNavLink {
+  min-height: 38px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.workspaceTopNav .topNavLink svg {
+  width: 17px;
+  height: 17px;
+}
+
+.shellUploadButton {
+  min-height: 38px;
+  padding: 8px 14px;
+}
+
+.stitchHeader h2,
+.campaignFocusTitle h2,
+.candidateCleanIdentity h2 {
+  letter-spacing: -0.04em;
+}
+
+.stitchMetricGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stitchMetricCard {
+  min-height: 132px;
+  padding: 16px;
+}
+
+.stitchMetricCard strong {
+  font-size: 34px;
+  line-height: 38px;
+}
+
+.stitchCampaignTable article {
+  padding: 14px 16px;
+}
+
+.snapshotAside {
+  position: sticky;
+  top: 82px;
+}
+
+.stitchDropZone {
+  min-height: 210px;
+}
+
+.stitchProgressCard {
+  gap: 12px;
+}
+
+.stitchProgressCard > p {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.stitchQueueTable {
+  background: #fff;
+}
+
+.uploadQueueRow {
+  grid-template-columns: minmax(220px, 1.4fr) minmax(180px, 1fr) minmax(180px, 1fr) minmax(190px, auto);
+}
+
+.uploadReviewQueue {
+  border-color: var(--danger-soft);
+}
+
+.singleUploadFallback,
+.stitchRecentBatches {
+  opacity: 0.92;
+}
+
+.copilotGrid {
+  grid-template-columns: minmax(0, 1fr) 320px;
+  align-items: start;
+}
+
+.copilotGuide {
+  position: sticky;
+  top: 0;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  overflow: auto;
+  padding-bottom: 24px;
+}
+
+.stitchSearchCommand {
+  min-height: 72px;
+  padding: 14px 16px;
+}
+
+.stitchSearchCommand input {
+  font-size: 16px;
+}
+
+.copilotResultList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  align-items: start;
+  max-height: calc(100vh - 300px);
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.copilotCompactCard {
+  min-height: auto;
+  padding: 14px;
+  gap: 10px;
+}
+
+.copilotCompactCard .stitchCandidateTop {
+  gap: 10px;
+}
+
+.copilotCompactCard .stitchCandidateTop > b {
+  font-size: 13px;
+  min-width: 70px;
+}
+
+.copilotScorePills {
+  display: none;
+}
+
+.copilotWhyShown {
+  font-size: 13px;
+  line-height: 19px;
+  margin: 0;
+}
+
+.copilotInlineEvidence {
+  display: grid;
+  gap: 4px;
+  border-left: 3px solid var(--primary-soft);
+  padding: 8px 10px;
+  background: #f7f9fa;
+  color: var(--text);
+}
+
+.copilotInlineEvidence strong {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.copilotInlineEvidence span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.stitchCandidateActions {
+  padding-top: 2px;
+}
+
+.campaignWorkflowTabs {
+  display: flex;
+  gap: 6px;
+  margin: -6px 0 18px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.campaignWorkflowTabs button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 700;
+  padding: 10px 12px;
+  white-space: nowrap;
+}
+
+.campaignWorkflowTabs button.active {
+  border-bottom-color: var(--primary);
+  color: var(--text);
+}
+
+.campaignTabPane {
+  display: grid;
+  gap: 16px;
+}
+
+.campaignScorecardCard,
+.campaignPanelHeader,
+.campaignMatchRow {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  padding: 16px;
+}
+
+.campaignPanelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.campaignPanelHeader h3,
+.campaignScorecardCard h3 {
+  margin: 4px 0;
+}
+
+.campaignMatchesList {
+  gap: 10px;
+}
+
+.campaignMatchRow {
+  display: grid;
+  grid-template-columns: 36px minmax(220px, 1.2fr) 70px minmax(240px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.campaignMatchRow > b {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.campaignMatchRow button:not(.secondary):not(.plain) {
+  display: grid;
+  gap: 3px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.campaignMatchRow p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.campaignMatchRow em {
+  color: var(--primary);
+  font-style: normal;
+  font-weight: 800;
+}
+
+.campaignUploadsPane .campaignBatches {
+  display: grid;
+  gap: 10px;
+}
+
+.campaignBoardShell {
+  grid-template-columns: minmax(0, 1fr) 340px;
+}
+
+.campaignBoard {
+  min-height: 500px;
+}
+
+.campaignCandidatePanel {
+  min-height: auto;
+}
+
+.campaignCleanPage {
+  min-height: calc(100vh - 62px);
+  background: #f6f7f7;
+}
+
+.campaignEmptyStart {
+  display: grid;
+  place-items: center;
+  min-height: calc(100vh - 160px);
+  padding: 40px;
+}
+
+.cleanCampaignComposer {
+  width: min(680px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  padding: 24px;
+}
+
+.cleanCampaignComposer h2 {
+  margin: 6px 0;
+  font-size: 30px;
+  letter-spacing: -0.04em;
+}
+
+.cleanCampaignComposer input,
+.cleanCampaignComposer textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f8faf9;
+  padding: 12px;
+}
+
+.cleanCampaignComposer textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.campaignCleanWorkspace {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+  padding: 22px;
+}
+
+.campaignCleanRail {
+  position: sticky;
+  top: 84px;
+  display: grid;
+  gap: 14px;
+  max-height: calc(100vh - 108px);
+  overflow: hidden;
+  border: 1px solid #dfe7ed;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 8px 28px rgba(20, 31, 36, 0.06);
+  padding: 12px;
+}
+
+.campaignRailHeader,
+.campaignRailCreate,
+.campaignRailCreatePanel,
+.campaignCleanHeader,
+.campaignEditPanel,
+.campaignProgressMini,
+.campaignRequirementImport,
+.campaignScorecardEditor {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 36px rgba(20, 31, 36, 0.04);
+}
+
+.campaignRailHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 0;
+  box-shadow: none;
+  padding: 4px 2px 10px;
+}
+
+.campaignRailHeader div {
+  display: grid;
+  gap: 3px;
+}
+
+.campaignRailHeader strong {
+  color: var(--ink);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.campaignRailNewButton {
+  min-height: 34px;
+  border: 1px solid #d8e2ea;
+  border-radius: 999px;
+  background: #22364a;
+  color: #ffffff;
+  cursor: pointer;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.campaignRailList {
+  display: grid;
+  gap: 8px;
+  max-height: calc(100vh - 254px);
+  overflow-y: auto;
+  padding-right: 3px;
+}
+
+.campaignRailList::-webkit-scrollbar {
+  width: 8px;
+}
+
+.campaignRailList::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: #cbd5df;
+  background-clip: padding-box;
+}
+
+.campaignRailList button {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #ffffff;
+  color: var(--text);
+  cursor: pointer;
+  padding: 12px;
+  text-align: left;
+}
+
+.campaignRailList button.active {
+  border-color: #22364a;
+  background: #eef3f5;
+  box-shadow: inset 4px 0 0 #22364a;
+}
+
+.campaignRailList button.loading {
+  cursor: wait;
+  opacity: 0.82;
+}
+
+.campaignRailList button.loading span::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 8px;
+  border-radius: 999px;
+  background: #22364a;
+  animation: pulseDot 900ms ease-in-out infinite;
+  vertical-align: middle;
+}
+
+.campaignRailList button strong {
+  overflow: hidden;
+  color: #17212b;
+  font-size: 14px;
+  line-height: 19px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.campaignRailList span,
+.campaignRailCreate summary {
+  color: #536677;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.campaignRailCreate,
+.campaignRailCreatePanel {
+  display: grid;
+  gap: 10px;
+  border-color: #dfe7ed;
+  background: #f8faf9;
+  padding: 12px;
+}
+
+.campaignRailCreate summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.campaignRailCreate input,
+.campaignRailCreate textarea,
+.campaignRailCreatePanel input,
+.campaignRailCreatePanel textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.campaignRailCreatePanel textarea {
+  min-height: 74px;
+  resize: vertical;
+}
+
+.campaignCleanMain {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.campaignCleanHeader {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px;
+}
+
+.campaignCleanHeader h2 {
+  margin: 4px 0 6px;
+  font-size: clamp(28px, 3vw, 44px);
+  line-height: 1.06;
+  letter-spacing: -0.05em;
+}
+
+.campaignCleanHeader p {
+  max-width: 780px;
+  margin: 0;
+  color: var(--muted);
+}
+
+.campaignCleanBadges,
+.campaignCleanActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.campaignCleanBadges span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #f8faf9;
+  color: var(--muted);
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.campaignCleanActions {
+  justify-content: flex-end;
+  margin-top: 0;
+}
+
+.campaignCleanActions button {
+  min-height: 38px;
+}
+
+.campaignClosedBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #d8e2ea;
+  border-radius: 10px;
+  background: #f8faf9;
+  color: #22364a;
+  padding: 12px 14px;
+}
+
+.campaignClosedBanner strong {
+  font-size: 14px;
+}
+
+.campaignClosedBanner span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.campaignDeleteConfirmPanel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(220px, 0.55fr) auto;
+  gap: 14px;
+  align-items: end;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 14px;
+}
+
+.campaignDeleteConfirmPanel > div:first-child {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.campaignDeleteConfirmPanel svg {
+  color: var(--warn);
+}
+
+.campaignDeleteConfirmPanel strong,
+.campaignDeleteConfirmPanel span,
+.campaignDeleteConfirmPanel label {
+  display: block;
+}
+
+.campaignDeleteConfirmPanel span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.campaignDeleteConfirmPanel label {
+  display: grid;
+  gap: 6px;
+}
+
+.campaignDeleteConfirmPanel input {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-high);
+  padding: 0 10px;
+}
+
+.campaignDeleteConfirmPanel > div:last-child {
+  display: inline-flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.campaignEditPanel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.campaignEditGrid,
+.campaignScorecardGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.campaignEditGrid label,
+.campaignScorecardGrid label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.campaignEditGrid .wide,
+.campaignScorecardGrid .wide {
+  grid-column: 1 / -1;
+}
+
+.campaignEditGrid input,
+.campaignEditGrid select,
+.campaignEditGrid textarea,
+.campaignScorecardGrid input,
+.campaignScorecardGrid textarea,
+.campaignRequirementImportGrid textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f8faf9;
+  color: var(--text);
+  padding: 10px 12px;
+}
+
+.campaignEditGrid textarea,
+.campaignScorecardGrid textarea,
+.campaignRequirementImportGrid textarea {
+  min-height: 92px;
+  resize: vertical;
+}
+
+.campaignEditActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.campaignProgressMini {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  overflow: hidden;
+}
+
+.campaignProgressMini article {
+  display: grid;
+  gap: 3px;
+  border-right: 1px solid var(--border);
+  padding: 12px 14px;
+}
+
+.campaignProgressMini article:last-child {
+  border-right: 0;
+}
+
+.campaignProgressMini span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.campaignProgressMini strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.campaignProgressMini .done strong {
+  color: var(--success);
+}
+
+.campaignProgressMini .active strong {
+  color: var(--primary);
+}
+
+.cleanTabs {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  padding: 0 10px;
+}
+
+.campaignScorecardWorkspace {
+  display: grid;
+  gap: 14px;
+}
+
+.campaignRequirementImport,
+.campaignScorecardEditor {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+}
+
+.campaignRequirementImportGrid {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) auto minmax(320px, 1.4fr) auto;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.campaignRequirementDrop {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  overflow: hidden;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: #f8faf9;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 10px 12px;
+  font-weight: 800;
+}
+
+.campaignRequirementDrop input,
+.uploadMini input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.campaignScorecardEditor .campaignPanelHeader {
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+}
+
+.campaignScorecardGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.campaignWeightEditor {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
+.campaignWeightEditor h4 {
+  margin: 0 0 4px;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.campaignWeightEditor p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.campaignStrictToggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.campaignStrictToggles label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #f8faf9;
+  color: var(--muted);
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.campaignWeightGrid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(72px, 1fr));
+  gap: 8px;
+}
+
+.campaignWeightGrid label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.campaignWeightGrid input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f8faf9;
+  color: var(--text);
+  padding: 9px 8px;
+}
+
+.fitTypeBadge {
+  display: inline-flex;
+  width: fit-content;
+  margin-right: 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.campaignMatchRow p small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.campaignBoardShell {
+  gap: 14px;
+}
+
+.campaignPipelineBoard {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  padding: 12px;
+}
+
+.campaignPipelineGuardrail {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  padding: 14px 16px;
+}
+
+.campaignPipelineGuardrail strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.campaignPipelineGuardrail p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.campaignPipelineFocus {
+  display: grid;
+  gap: 14px;
+}
+
+.pipelineThresholdButtons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.pipelineThresholdButtons button {
+  min-height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #f8faf9;
+  color: var(--muted);
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.pipelineThresholdButtons button.active {
+  border-color: #22364a;
+  background: #eef3f5;
+  color: #22364a;
+}
+
+.campaignStageStrip {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(84px, 1fr));
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px;
+}
+
+.campaignStageStrip button {
+  display: grid;
+  gap: 5px;
+  min-height: 58px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: #f8faf9;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 8px 9px;
+  text-align: left;
+}
+
+.campaignStageStrip button.active {
+  border-color: #22364a;
+  background: #eef3f5;
+  color: #22364a;
+}
+
+.campaignStageStrip button.empty {
+  opacity: 0.58;
+}
+
+.campaignStageStrip span {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.campaignStageStrip strong {
+  color: var(--ink);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.campaignPipelineWorkspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.campaignStageListPanel,
+.campaignPipelineCandidatePanel {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 36px rgba(20, 31, 36, 0.04);
+}
+
+.campaignStageListPanel {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.campaignStageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+}
+
+.campaignStageHeader h3 {
+  margin: 3px 0;
+  color: var(--ink);
+  font-size: 20px;
+  letter-spacing: -0.03em;
+}
+
+.campaignStageHeader p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.campaignStageCandidateList {
+  display: grid;
+  gap: 8px;
+}
+
+.campaignStageCandidate {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr) minmax(110px, auto);
+  gap: 12px;
+  align-items: start;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+  padding: 12px;
+  text-align: left;
+}
+
+.campaignStageCandidate.active {
+  border-color: #22364a;
+  box-shadow: inset 4px 0 0 #22364a;
+}
+
+.campaignStageScore {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+}
+
+.campaignStageScore strong {
+  color: #22364a;
+  font-size: 22px;
+  letter-spacing: -0.04em;
+}
+
+.campaignStageScore span,
+.campaignStageMeta span,
+.campaignStageMeta b,
+.campaignStageCandidateBody em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.campaignStageCandidateBody {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.campaignStageCandidateBody strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.campaignStageCandidateBody span,
+.campaignStageCandidateBody p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.campaignStageCandidateBody p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  color: #334155;
+}
+
+.campaignStageCandidateBody em {
+  color: #9f2d20;
+}
+
+.campaignStageMeta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.campaignStageMeta span,
+.campaignStageMeta b {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #f8faf9;
+  padding: 5px 7px;
+}
+
+.campaignStageMeta b {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.campaignPipelineCandidatePanel {
+  position: sticky;
+  top: 86px;
+  display: grid;
+  gap: 14px;
+  min-height: 0;
+  max-height: calc(100vh - 106px);
+  overflow: auto;
+  border-left: 1px solid var(--border);
+  padding: 16px;
+}
+
+.campaignPipelineCandidatePanel h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 22px;
+  letter-spacing: -0.04em;
+}
+
+.campaignCandidateWorkflow {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #d8e2ea;
+  border-radius: 12px;
+  background: #f8faf9;
+  padding: 12px;
+}
+
+.campaignCandidateWorkflowHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.campaignCandidateWorkflowHead div {
+  display: grid;
+  gap: 2px;
+}
+
+.campaignCandidateWorkflowHead strong {
+  color: #22364a;
+  font-size: 17px;
+}
+
+.campaignStageProgress {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 0;
+  overflow-x: auto;
+  padding: 4px 0 8px;
+}
+
+.campaignStageProgress button {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  min-width: 52px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0;
+  text-align: center;
+}
+
+.campaignStageProgress button::before {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #d9e2e8;
+}
+
+.campaignStageProgress button:first-child::before {
+  left: 50%;
+}
+
+.campaignStageProgress button:last-child::before {
+  right: 50%;
+}
+
+.campaignStageProgress i {
+  position: relative;
+  z-index: 1;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #cbd5df;
+  border-radius: 999px;
+  background: #fff;
+}
+
+.campaignStageProgress span {
+  max-width: 74px;
+  overflow: hidden;
+  color: inherit;
+  font-size: 10px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.campaignStageProgress button.done::before,
+.campaignStageProgress button.done i {
+  border-color: #355c7d;
+  background: #355c7d;
+}
+
+.campaignStageProgress button.active {
+  color: #22364a;
+}
+
+.campaignStageProgress button.active i {
+  border-color: #22364a;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(53, 92, 125, 0.14);
+}
+
+.campaignStageMoveControls,
+.campaignStageQuickActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.campaignStageQuickActions {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.campaignCandidateNoteBox {
+  display: grid;
+  gap: 7px;
+}
+
+.campaignCandidateNoteBox span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.campaignCandidateNoteBox textarea {
+  width: 100%;
+  min-height: 96px;
+  border: 1px solid #d7e1ea;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  padding: 10px 11px;
+  resize: vertical;
+}
+
+.campaignCandidateHistory {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid #dbe4ea;
+  padding-top: 10px;
+}
+
+.campaignCandidateHistory > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.campaignCandidateHistory > div strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.campaignCandidateHistory > div span,
+.campaignCandidateHistory time,
+.campaignCandidateHistory article > span,
+.campaignCandidateHistory > p {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.campaignCandidateHistory article {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #e3eaf0;
+  border-radius: 9px;
+  background: #fff;
+  padding: 9px;
+}
+
+.campaignCandidateHistory article strong {
+  color: #22364a;
+  font-size: 12px;
+}
+
+.campaignCandidateHistory article p {
+  margin: 0;
+  color: #334155;
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.campaignColumnMore {
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: #f8faf9;
+  color: var(--muted);
+  padding: 9px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 17px;
+}
+
+.loadMoreMatches {
+  justify-self: center;
+  min-width: 220px;
+}
+
+.campaignCandidatePanel,
+.campaignMatchesList,
+.campaignUploadsPane,
+.campaignActivityTimeline {
+  border-radius: 10px;
+}
+
+.candidateReportTabs {
+  position: sticky;
+  top: 64px;
+  z-index: 3;
+  margin-top: 0;
+  background: rgba(255, 255, 255, 0.97);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 1px 0 rgba(226, 232, 238, 0.9);
+}
+
+.candidateCleanLayout {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.candidateReviewWorkspace {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 330px);
+}
+
+.candidateContextRail {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: start;
+  max-height: none;
+  overflow: visible;
+}
+
+.candidateContextRail .coverageSummary {
+  grid-column: auto;
+}
+
+.candidateCleanMainShell {
+  max-width: 1480px;
+  scroll-margin-top: 86px;
+}
+
+.recruiterQuickNotes textarea {
+  min-height: 86px;
+  max-height: 140px;
+}
+
+.piiList.clean,
+.piiGroup,
+.piiGroup div {
+  min-width: 0;
+}
+
+.piiGroup a,
+.piiGroup span:not(.muted) {
+  overflow-wrap: anywhere;
+  text-overflow: initial;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.uploadModeTabs {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+  padding: 4px;
+}
+
+.uploadModeTabs button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  padding: 0 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.uploadModeTabs button.active {
+  background: #22364a;
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(34, 54, 74, 0.16);
+}
+
+.uploadLandingGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.uploadTypePanel {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #fff;
+  padding: 18px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.07);
+}
+
+.uploadTypeHeader {
+  display: grid;
+  gap: 6px;
+}
+
+.uploadTypeHeader h3 {
+  color: var(--ink);
+  font-size: 22px;
+  letter-spacing: -0.03em;
+}
+
+.uploadTypeHeader p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.resumeUploadPanel .stitchDropZone {
+  box-shadow: none;
+}
+
+.refinedUploadDrop {
+  min-height: 240px;
+  border-style: solid;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 249, 0.98)),
+    radial-gradient(circle at top left, rgba(53, 92, 125, 0.08), transparent 34%);
+}
+
+.refinedUploadDrop.compact {
+  min-height: 190px;
+}
+
+.refinedUploadCard {
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+}
+
+.refinedUploadCard.compact {
+  box-shadow: none;
+}
+
+.candidateIntakePanel,
+.campaignRequirementUploadTab {
+  min-height: 620px;
+}
+
+.intakeToggleTabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-low);
+  padding: 5px;
+}
+
+.intakeToggleTabs button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.intakeToggleTabs button.active {
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+}
+
+.intakeModePane,
+.linkedinIntakePane {
+  display: grid;
+  gap: 14px;
+}
+
+.linkedinIntakePane label,
+.linkedinRecruiterNoteBox label {
+  display: grid;
+  gap: 8px;
+}
+
+.linkedinIntakePane label span,
+.linkedinRecruiterNoteBox label span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.linkedinIntakePane input,
+.linkedinIntakePane select,
+.linkedinRecruiterNoteBox textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  padding: 12px 13px;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.linkedinRecruiterNoteBox {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-low);
+  padding: 12px;
+}
+
+.linkedinRecruiterNoteBox textarea {
+  min-height: 124px;
+  resize: vertical;
+}
+
+.campaignRequirementUploadTab {
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.07);
+}
+
+.campaignRequirementUploadTab h3 {
+  margin: 4px 0;
+  color: var(--ink);
+  font-size: 22px;
+  letter-spacing: -0.03em;
+}
+
+.linkedinImportPanel label {
+  display: grid;
+  gap: 8px;
+}
+
+.linkedinImportPanel label span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.linkedinImportPanel input,
+.linkedinImportPanel select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  padding: 12px 13px;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.linkedinImportPanel .primary {
+  justify-content: center;
+}
+
+.linkedinImportStatus {
+  display: grid;
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-low);
+  padding: 12px;
+}
+
+.linkedinImportStatus strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.linkedinImportStatus small {
+  color: var(--muted);
+  line-height: 18px;
+}
+
+.campaignRequirementUploadTab p,
+.campaignRequirementUploadTab label span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.campaignRequirementUploadTab label {
+  display: grid;
+  gap: 7px;
+  font-weight: 800;
+}
+
+.campaignRequirementUploadTab select,
+.campaignRequirementUploadTab textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f8faf9;
+  color: var(--ink);
+  padding: 11px 12px;
+}
+
+.campaignRequirementSplit {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.campaignRequirementDrop.large {
+  min-height: 132px;
+}
+
+.campaignRequirementSplit textarea {
+  min-height: 132px;
+  resize: vertical;
+}
+
+.matchDistributionPanel {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  padding: 16px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+}
+
+.matchDistributionPanel.compact {
+  box-shadow: none;
+}
+
+.matchDistributionPanel h3 {
+  margin: 4px 0;
+  color: var(--ink);
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+
+.matchDistributionPanel p {
+  max-width: 520px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.matchGaugeBuckets {
+  min-width: 420px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.matchGaugeBuckets button {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f8faf9;
+  color: var(--muted);
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.matchGaugeBuckets button.active {
+  border-color: #22364a;
+  background: #eef3f5;
+  color: #22364a;
+}
+
+.matchGaugeBuckets span {
+  position: relative;
+  z-index: 1;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.matchGaugeBuckets strong {
+  position: relative;
+  z-index: 1;
+  color: var(--ink);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.matchGaugeBuckets i {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 4px;
+  border-radius: 999px;
+  background: #355c7d;
+}
+
+@media (max-width: 1180px) {
+  .campaignPipelineWorkspace {
+    grid-template-columns: 1fr;
+  }
+
+  .campaignPipelineCandidatePanel {
+    position: static;
+    max-height: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .appShell,
+  .candidateLayout,
+  .dashboardGrid,
+  .uploadGrid,
+  .uploadLandingGrid,
+  .workspace,
+  .workspace.two,
+  .summarySplit,
+  .evidenceGrid,
+  .factsAiGrid,
+  .structuredClarification,
+  .copilotGrid,
+  .operationsGrid,
+  .operationsAdvancedGrid,
+  .uploadQueueBatchList,
+  .failedUploadList article,
+  .operationsAdvanced .workerStatusPanel,
+  .campaignGrid,
+  .campaignBoardShell,
+  .campaignBoard,
+  .campaignPipelineWorkspace,
+  .campaignStageStrip,
+  .campaignStageCandidate,
+  .candidateCleanLayout,
+  .candidateDecisionGrid,
+  .candidateReportTwoCol,
+  .candidateSkillDomainGrid,
+  .timelineYearAxis,
+  .timelineRow,
+  .versionMetaGrid,
+  .candidateProfileHeader,
+  .candidateHeaderFacts,
+  .candidateReportShell,
+  .candidateSnapshotCards,
+  .homeHero,
+  .homeFeatureGrid,
+  .homeWorkflow,
+  .loginShell,
+  .landingFeatureGrid,
+  .adminMetricGrid,
+  .metricCards {
+    grid-template-columns: 1fr;
+  }
+
+  .workspaceTopNav {
+    min-height: auto;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 12px 16px;
+  }
+
+  .workspaceTopNav nav,
+  .topNavActions {
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+
+  .workspaceTopNav .topNavLink {
+    flex: 0 0 auto;
+  }
+
+  .operationsPage {
+    height: calc(100vh - 120px);
+    padding: 18px;
+  }
+
+  .operationsAdvanced > summary,
+  .queueEventLog > summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .loginShell.mergedHomeLoginShell {
+    gap: 18px;
+    padding: 18px;
+  }
+
+  .mergedHomeHero {
+    padding-top: 8px;
+  }
+
+  .mergedHomeHero h1 {
+    font-size: clamp(36px, 12vw, 52px);
+  }
+
+  .mergedHomeFeatureGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .stitchHomeNav,
+  .stitchHeroActions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .stitchHomeNav nav {
+    gap: 14px;
+    overflow-x: auto;
+    width: 100%;
+  }
+
+  .stitchHomeFeatureGrid,
+  .stitchParserPreview,
+  .stitchPersonaGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .stitchPublicNav,
+  .stitchPublicHero,
+  .stitchSignalGrid,
+  .pricingCompactShell,
+  .pricingCompactPlan,
+  .stitchRoleGrid,
+  .stitchPublicFooter {
+    grid-template-columns: 1fr;
+  }
+
+  .stitchPublicNav {
+    position: static;
+    padding: 16px;
+  }
+
+  .stitchPublicNav nav,
+  .stitchNavActions,
+  .stitchHeroActions,
+  .stitchPublicFooter div {
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+
+  .stitchPublicHero,
+  .stitchSuiteSection,
+  .stitchPricingSection,
+  .stitchSignalPreview,
+  .stitchRoleSection,
+  .stitchFinalCta,
+  .stitchPublicFooter {
+    width: min(100% - 32px, 1200px);
+  }
+
+  .stitchPublicHero {
+    gap: 28px;
+    padding: 44px 0;
+  }
+
+  .stitchHeroCopy h1 {
+    font-size: clamp(40px, 13vw, 58px);
+  }
+
+  .stitchAuthCard {
+    position: static;
+  }
+
+  .stitchSuiteGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .stitchSignalPreview {
+    padding: 24px;
+  }
+
+  .signalArrow {
+    justify-self: center;
+  }
+
+  .mergedLoginPanel {
+    position: static;
+    margin-top: 0;
+  }
+
+  .candidateSubheader {
+    flex-direction: column;
+  }
+
+  .candidateActions,
+  .candidateFacts {
+    flex-wrap: wrap;
+  }
+
+  .candidateReviewWorkspace {
+    grid-template-columns: 1fr;
+  }
+
+  .campaignPipelineGuardrail {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .campaignStageHeader {
+    flex-direction: column;
+  }
+
+  .pipelineThresholdButtons {
+    justify-content: flex-start;
+  }
+
+  .candidateContextRail {
+    position: static;
+  }
+
+  .candidateCleanHeader {
+    flex-direction: column;
+    padding: 16px;
+  }
+
+  .candidateCleanActions {
+    width: 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+
+  .candidateCleanMainShell {
+    padding: 16px;
+  }
+
+  .timelineRow > p,
+  .timelineRow .workstreamList {
+    grid-column: 1;
+  }
+
+  .workEducationTimeline .timelineYearAxis {
+    position: static;
+    top: auto;
+  }
+
+  .cvToolbarCard,
+  .timelineHeader,
+  .notesComposerHeader {
+    flex-direction: column;
+  }
+
+  .cvToolbarActions {
+    justify-content: flex-start;
+  }
+
+  .candidateProfileHeader,
+  .candidateReportShell {
+    padding: 16px;
+  }
+
+  .candidateOptionA .candidateReportMain {
+    padding: 18px;
+  }
+
+  .candidateVersionRail {
+    position: static;
+  }
+
+  .uploadModeTabs {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .uploadModeTabs button {
+    flex: 1;
+  }
+
+  .campaignRequirementSplit,
+  .matchDistributionPanel,
+  .matchGaugeBuckets,
+  .candidateContextRail,
+  .campaignWeightGrid,
+  .campaignStrictToggles,
+  .candidateCorrectionGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .matchDistributionPanel {
+    display: grid;
+  }
+
+  .matchGaugeBuckets {
+    min-width: 0;
+  }
+
+  .candidateCorrectionGrid .wide {
+    grid-column: auto;
+  }
+}
+
+/* Final recruiter polish overrides. This block intentionally sits last so older
+   generated styles do not overpower the simplified product direction. */
+.topNavShell,
+.canvas,
+.snapshotPage,
+.databasePage,
+.copilotPage,
+.uploadPage,
+.campaignCleanPage,
+.candidateReport.candidateCleanReport {
+  background: #ffffff;
+}
+
+.workspaceTopNav {
+  min-height: 62px;
+  border-bottom: 1px solid #e7edf1;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
+}
+
+.workspaceTopNav .topNavLink,
+.shellUploadButton,
+.settingsSummary {
+  border-color: transparent;
+  background: transparent;
+}
+
+.workspaceTopNav .topNavLink.active,
+.shellUploadButton.active,
+.settingsSummary.active {
+  border-color: #d8e2ea;
+  background: #f4f7f8;
+  color: #24384a;
+}
+
+.stitchMetricCard,
+.stitchCampaignTable article,
+.profileSearchPanel,
+.uploadTypePanel,
+.stitchQueueTable,
+.campaignCleanHeader,
+.campaignEditPanel,
+.campaignProgressMini,
+.campaignWorkflowTabs.cleanTabs,
+.campaignStageListPanel,
+.campaignPipelineCandidatePanel,
+.briefCard,
+.candidateReportHeroCard {
+  border-color: #e2e8ee;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.035);
+}
+
+.candidateCleanHeader {
+  position: relative;
+  top: auto;
+  z-index: 1;
+  padding: 16px 28px;
+  background: #ffffff;
+  backdrop-filter: none;
+}
+
+.candidateReportTabs {
+  top: 64px;
+  z-index: 4;
+  background: rgba(255, 255, 255, 0.98);
+}
+
+.candidateReviewWorkspace {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 315px);
+  gap: 16px;
+}
+
+.candidateContextRail {
+  top: 126px;
+  gap: 12px;
+}
+
+.candidateContextRail .briefCard {
+  padding: 13px;
+}
+
+.candidateContextRail .briefCard h3 {
+  font-size: 15px;
+  line-height: 20px;
+}
+
+.recruiterQuickNotes textarea {
+  min-height: 76px;
+  max-height: 112px;
+}
+
+.recentNotesCompact article:nth-child(n + 3) {
+  display: none;
+}
+
+.identityLocationGrid {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.85fr) minmax(0, 1.15fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.identityPiiList {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.timelineYearAxis {
+  position: sticky;
+  top: 118px;
+  z-index: 2;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(12px);
+}
+
+.campaignCleanWorkspace {
+  background: #ffffff;
+  padding: 18px 22px;
+}
+
+.campaignStageStrip {
+  grid-template-columns: repeat(5, minmax(100px, 1fr));
+}
+
+.campaignPipelineWorkspace {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.campaignPipelineCandidatePanel {
+  top: 82px;
+  max-height: calc(100vh - 104px);
+  border-left: 0;
+}
+
+.campaignStageCandidate {
+  grid-template-columns: 70px minmax(0, 1fr);
+}
+
+.campaignStageMeta {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+}
+
+.uploadLandingGrid {
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.78fr);
+}
+
+.candidateNotesWorkspace,
+.campaignActivityWorkspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.72fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.collaborationPanel {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #e2e8ee;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.035);
+  padding: 14px;
+}
+
+.handoffPanel {
+  border-color: #dfe7ef;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcfd 100%);
+}
+
+.collaborationPanel.compact {
+  gap: 12px;
+  padding: 12px;
+}
+
+.collaborationHeader,
+.collaborationListHeader,
+.collaborationControls,
+.collaborationItem,
+.collaborationItemActions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.collaborationHeader h3 {
+  margin: 2px 0 4px;
+  color: #182536;
+  font-size: 18px;
+  letter-spacing: -0.03em;
+}
+
+.collaborationHeader p {
+  max-width: 680px;
+  margin: 0;
+  color: #617083;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.handoffHeaderActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.handoffHeaderActions span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border: 1px solid #dfe7ef;
+  border-radius: 999px;
+  background: #fff;
+  color: #516173;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 9px;
+}
+
+.collaborationGrid,
+.collaborationLists {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.collaborationPanel.compact .collaborationGrid,
+.collaborationPanel.compact .collaborationLists {
+  grid-template-columns: 1fr;
+}
+
+.collaborationComposer,
+.collaborationList {
+  display: grid;
+  gap: 9px;
+  border: 1px solid #e5ebf0;
+  border-radius: 9px;
+  background: #fff;
+  padding: 11px;
+}
+
+.collaborationList {
+  background: #fbfcfd;
+}
+
+.collaborationComposer strong,
+.collaborationListHeader strong {
+  color: #243447;
+  font-size: 13px;
+}
+
+.collaborationComposer input,
+.collaborationComposer textarea,
+.collaborationComposer select,
+.collaborationControls select {
+  width: 100%;
+  border: 1px solid #dbe4ec;
+  border-radius: 8px;
+  background: #fff;
+  color: #182536;
+  font-size: 13px;
+  padding: 9px 10px;
+}
+
+.collaborationComposer textarea {
+  min-height: 74px;
+  resize: vertical;
+}
+
+.collaborationControls {
+  align-items: center;
+}
+
+.collaborationControls select {
+  min-width: 0;
+}
+
+.collaborationItem {
+  align-items: stretch;
+  border: 1px solid #e5ebf0;
+  border-radius: 8px;
+  background: #fff;
+  padding: 9px 10px;
+}
+
+.collaborationItem > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.collaborationItem strong {
+  color: #182536;
+  font-size: 13px;
+}
+
+.collaborationItem p {
+  margin: 0;
+  color: #334155;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.collaborationItem span,
+.collaborationCompleteCount,
+.collaborationListHeader span {
+  color: #66778a;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.collaborationItemActions {
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+@media (max-width: 1280px) {
+  .candidateNotesWorkspace,
+  .campaignActivityWorkspace,
+  .collaborationGrid,
+  .collaborationLists {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1180px) {
+  .candidateCleanHeader,
+  .candidateContextRail,
+  .campaignPipelineCandidatePanel,
+  .campaignCleanRail,
+  .timelineYearAxis {
+    position: static;
+    max-height: none;
+  }
+
+  .candidateReviewWorkspace,
+  .identityLocationGrid,
+  .identityPiiList,
+  .candidateDecisionGrid,
+  .campaignPipelineWorkspace,
+  .uploadLandingGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .candidateDecisionCard,
+  .candidateDecisionCard:nth-child(3),
+  .candidateDecisionCard:nth-child(4),
+  .candidateDecisionCard:nth-child(5) {
+    grid-column: auto;
+  }
+}
