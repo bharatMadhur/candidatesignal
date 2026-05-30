@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Database, ShieldCheck, Users } from "lucide-react";
 
 import type { GovernancePolicy, MailMessage, PiiAccessEvent, TeamMember, TenantInvitation } from "../../lib/api";
-import { domainLabel, formatDateTime } from "../lib/format";
+import { domainLabel, formatDateTime, formatRole } from "../lib/format";
 
 type TeamSettingsProps = {
   members: TeamMember[];
@@ -267,9 +267,4 @@ export function TeamSettings({
       </div>
     </section>
   );
-}
-
-function formatRole(value?: string | null) {
-  if (!value) return "User";
-  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }

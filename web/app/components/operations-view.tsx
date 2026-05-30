@@ -9,6 +9,7 @@ import type {
   WorkerStatus,
 } from "../../lib/api";
 import { domainLabel, formatDateTime } from "../lib/format";
+import { isActiveBatch, isActiveMaintenanceJob } from "../lib/workflow-status";
 import { EmptyPanel, Metric, ProgressBar } from "./primitives";
 
 type OperationsViewProps = {
@@ -35,14 +36,6 @@ type OperationsViewProps = {
 function batchProgress(batch: ParseBatch) {
   if (!batch.total_files) return 0;
   return ((batch.completed_count + batch.failed_count) / batch.total_files) * 100;
-}
-
-function isActiveBatch(batch: ParseBatch) {
-  return ["created", "queued", "running", "processing", "retrying"].includes(batch.status);
-}
-
-function isActiveMaintenanceJob(job: CandidateMaintenanceJob) {
-  return ["queued", "running"].includes(job.status);
 }
 
 export function OperationsView(props: OperationsViewProps) {

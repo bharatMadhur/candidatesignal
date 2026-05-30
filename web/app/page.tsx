@@ -206,8 +206,10 @@ import {
   type WorkspaceChatMessage,
 } from "./lib/copilot";
 import { candidateProfileHasContent, candidateResumeFromProfile } from "./lib/candidate-resume-profile";
-import { domainLabel, humanizeLabel } from "./lib/format";
+import { readableError } from "./lib/errors";
+import { domainLabel, formatRole, humanizeLabel } from "./lib/format";
 import { DOCUMENT_FILE_ACCEPT, DOCUMENT_FORMAT_LABEL, resolveLoginIdentifier } from "./lib/login";
+import { isActiveBatch, isActiveBatchStatus, isActiveMaintenanceJob } from "./lib/workflow-status";
 import { parseWorkspaceRoute, routeHasDeepLink, type CampaignDetailTab, type CandidateDetailTab, type View, type WorkspaceRoute } from "./lib/workspace-route";
 import { isCandidateUser, isPlatformAdmin, isTenantAdmin } from "./lib/user-roles";
 
@@ -3465,36 +3467,4 @@ function autoBatchNameForFiles(files: File[], campaignName?: string | null) {
 
 function delay(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-function isActiveBatch(batch: ParseBatch) {
-  return isActiveBatchStatus(batch.status);
-}
-
-function isActiveBatchStatus(status: string) {
-  return ["created", "queued", "running", "processing", "retrying"].includes(status);
-}
-
-function isActiveMaintenanceJob(job: CandidateMaintenanceJob) {
-  return ["queued", "running"].includes(job.status);
-}
-
-function formatRole(value?: string | null) {
-  if (!value) return "User";
-  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function readableError(error: unknown) {
-  const raw = error instanceof Error ? error.message : String(error || "Action failed");
-  try {
-    const parsed = JSON.parse(raw) as { detail?: unknown; message?: unknown; error?: unknown };
-    const detail = parsed.detail ?? parsed.message ?? parsed.error;
-    if (typeof detail === "string") return detail;
-    if (Array.isArray(detail)) return detail.map((item) => item?.msg ?? JSON.stringify(item)).join("; ");
-  } catch {
-    // Fall through to normalized raw text.
-  }
-  if (raw === "Failed to fetch") return "Cannot reach the backend. Check that the API is running on 127.0.0.1:8010.";
-  if (raw.includes("Login did not return a session")) return "Login succeeded but the session could not be restored. Refresh the page and try again.";
-  return raw;
 }

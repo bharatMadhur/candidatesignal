@@ -6,6 +6,11 @@ export function humanizeLabel(value: string) {
   return value.split("_").map((item) => item.charAt(0).toUpperCase() + item.slice(1)).join(" ");
 }
 
+export function formatRole(value?: string | null) {
+  if (!value) return "User";
+  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 export function formatDateTime(value?: string | null) {
   if (!value) return "Not recorded";
   const date = new Date(value);
